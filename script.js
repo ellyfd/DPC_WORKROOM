@@ -246,8 +246,7 @@ function renderSections() {
     return;
   }
 
-  const showHeader = state.filter === "all" && !state.query;
-  area.innerHTML = groups.map((g) => sectionHTML(g, showHeader)).join("");
+  area.innerHTML = groups.map((g) => sectionHTML(g, true)).join("");
   wireSections();
 }
 
