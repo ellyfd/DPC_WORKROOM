@@ -33,9 +33,9 @@ async function init() {
     renderGrid();
   });
 
-  $("#open-add").addEventListener("click", () => openDrawer());
+  $("#open-add").addEventListener("click", () => openPopover());
 
-  initDrawer();
+  initPopover();
   initModal();
   restoreDraft();
 }
@@ -125,7 +125,7 @@ function renderGrid() {
   $$("#tools-grid .card").forEach((card) => {
     card.addEventListener("click", (e) => {
       if (e.target.closest(".card-edit")) {
-        openDrawer(card.dataset.id);
+        openPopover(card.dataset.id, false, e.target.closest(".card-edit"));
         return;
       }
       const id = card.dataset.id;
@@ -174,7 +174,7 @@ function cardHTML(t, i, isLocal) {
 function openTool(t) {
   if (!t.url || t.url === "#") {
     const yes = confirm(`「${t.name}」尚未設定連結。要現在編輯嗎?`);
-    if (yes) openDrawer(t.id, /*forceLocal*/ true);
+    if (yes) openPopover(t.id, /*forceLocal*/ true);
     return;
   }
   if (t.type === "iframe") {
@@ -187,14 +187,14 @@ function openTool(t) {
   }
 }
 
-/* ----- drawer (add / edit) ----- */
-function initDrawer() {
-  const drawer = $("#drawer");
-  drawer.querySelectorAll("[data-close]").forEach((el) =>
-    el.addEventListener("click", closeDrawer)
+/* ----- popover (add / edit) ----- */
+function initPopover() {
+  const popover = $("#popover");
+  popover.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", closePopover)
   );
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !drawer.hidden) closeDrawer();
+    if (e.key === "Escape" && !popover.hidden) closePopover();
   });
 
   $("#save-tool").addEventListener("click", saveTool);
@@ -205,13 +205,17 @@ function initDrawer() {
     const data = formData();
     localStorage.setItem(LS_DRAFT_KEY, JSON.stringify(data));
   });
+
+  window.addEventListener("resize", () => {
+    if (!popover.hidden && state.anchorEl) positionPopover(state.anchorEl);
+  });
 }
 
-function openDrawer(id = null, forceLocal = false) {
+function openPopover(id = null, forceLocal = false, anchorEl = null) {
   state.editingId = id;
   const form = $("#add-form");
   form.reset();
-  $("#drawer-title").textContent = id ? "編輯工具" : "新增工具";
+  $("#popover-title").textContent = id ? "編輯工具" : "新增工具";
   $("#delete-tool").hidden = !id;
 
   if (id) {
@@ -231,12 +235,39 @@ function openDrawer(id = null, forceLocal = false) {
     restoreDraft();
   }
 
-  $("#drawer").hidden = false;
+  const anchor = anchorEl || $("#open-add");
+  state.anchorEl = anchor;
+  $("#popover").hidden = false;
+  positionPopover(anchor);
+  setTimeout(() => form.elements.name.focus(), 50);
 }
 
-function closeDrawer() {
-  $("#drawer").hidden = true;
+function positionPopover(anchor) {
+  const panel = $(".popover-panel");
+  const arrow = $(".popover-arrow");
+  const r = anchor.getBoundingClientRect();
+  const panelWidth = 380;
+  const gap = 10;
+
+  const top = r.bottom + gap;
+  let right = window.innerWidth - r.right;
+  if (right + panelWidth > window.innerWidth - 12) {
+    right = 12;
+  }
+  panel.style.top = `${top}px`;
+  panel.style.right = `${right}px`;
+  panel.style.left = "auto";
+
+  const anchorCenter = r.left + r.width / 2;
+  const panelRight = window.innerWidth - right;
+  const arrowFromRight = Math.max(12, Math.min(panelWidth - 24, panelRight - anchorCenter - 6));
+  arrow.style.right = `${arrowFromRight}px`;
+}
+
+function closePopover() {
+  $("#popover").hidden = true;
   state.editingId = null;
+  state.anchorEl = null;
 }
 
 function formData() {
@@ -297,7 +328,7 @@ function saveTool() {
 
   saveLocalTools();
   localStorage.removeItem(LS_DRAFT_KEY);
-  closeDrawer();
+  closePopover();
   renderFilters();
   renderGrid();
   renderStats();
@@ -308,7 +339,7 @@ function deleteTool() {
   if (!confirm("確定要刪除這個工具?")) return;
   state.localTools = state.localTools.filter((t) => t.id !== state.editingId);
   saveLocalTools();
-  closeDrawer();
+  closePopover();
   renderFilters();
   renderGrid();
   renderStats();

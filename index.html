@@ -45,12 +45,14 @@
 
     <div class="filter-bar" id="filters"></div>
 
-    <main class="tools-grid" id="tools-grid"></main>
-
-    <div class="empty" id="empty" hidden>
-      <div class="empty-art">∅</div>
-      <p>找不到符合的工具</p>
-    </div>
+    <main class="main-area">
+      <div class="tools-grid" id="tools-grid"></div>
+      <div class="empty" id="empty" hidden>
+        <div class="empty-art">∅</div>
+        <p class="empty-title">還沒有任何工具</p>
+        <p class="muted small">點右上角「新增工具」開始建立你的第一個入口</p>
+      </div>
+    </main>
 
     <footer class="footbar">
       <div class="muted">
@@ -60,20 +62,21 @@
     </footer>
   </div>
 
-  <!-- Add / Edit tool drawer -->
-  <div class="drawer" id="drawer" hidden>
-    <div class="drawer-backdrop" data-close></div>
-    <aside class="drawer-panel">
-      <div class="drawer-head">
+  <!-- Add / Edit tool popover -->
+  <div class="popover" id="popover" hidden>
+    <div class="popover-backdrop" data-close></div>
+    <div class="popover-panel" role="dialog" aria-modal="true" aria-labelledby="popover-title">
+      <div class="popover-arrow"></div>
+      <div class="popover-head">
         <div>
-          <div class="drawer-title" id="drawer-title">新增工具</div>
-          <div class="muted small">所有欄位都會自動保存草稿,送出後存到本機。</div>
+          <div class="popover-title" id="popover-title">新增工具</div>
+          <div class="muted small">欄位自動保存草稿,送出存到本機</div>
         </div>
         <button class="icon-btn" data-close aria-label="關閉">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </div>
-      <form id="add-form" class="drawer-form" onsubmit="return false;">
+      <form id="add-form" class="popover-form" onsubmit="return false;">
         <input type="hidden" name="id" />
         <div class="row">
           <label>
@@ -124,7 +127,7 @@
           </div>
         </div>
       </form>
-    </aside>
+    </div>
   </div>
 
   <!-- Iframe modal -->
