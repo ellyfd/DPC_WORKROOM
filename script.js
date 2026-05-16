@@ -614,6 +614,7 @@ function cardHTML(t, cv) {
     : "";
   const bits = [];
   if (t.creator) bits.push(`製作:${t.creator}`);
+  const isPage = isPageTool(t);
   if (tType === "file" && Array.isArray(t.files) && t.files.length) {
     const latest = t.files[0];
     if (latest?.uploadedAt) bits.push(`最新:${formatDate(latest.uploadedAt)}`);
@@ -625,7 +626,7 @@ function cardHTML(t, cv) {
   const tip = bits.length ? `${t.name}\n${bits.join(" · ")}` : t.name;
 
   return `
-    <article class="card" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
+    <article class="card${isPage ? " is-page" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
       <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" title="${escapeAttr(tip)}">
         <div class="card-top">
           <div class="card-icon">
@@ -633,6 +634,7 @@ function cardHTML(t, cv) {
             ${iconImg}
           </div>
           <span class="type-badge ${tType}">${type.icon}</span>
+          ${isPage ? `<span class="page-badge" title="HTML 頁面">PAGE</span>` : ""}
         </div>
         <h3 class="card-title">${escapeHTML(t.name)}</h3>
       </button>
@@ -1305,6 +1307,21 @@ function downloadFile(fileObj) {
   document.body.removeChild(a);
 }
 
+function isHtmlFile(f) {
+  if (!f) return false;
+  const name = (f.name || "").toLowerCase();
+  return name.endsWith(".html") || name.endsWith(".htm");
+}
+
+function isPageTool(t) {
+  return t?.type === "file" && Array.isArray(t.files) && isHtmlFile(t.files[0]);
+}
+
+function pageUrl(toolId, versionIdx = 0) {
+  const base = `/p/${encodeURIComponent(toolId)}`;
+  return versionIdx > 0 ? `${base}?v=${versionIdx}` : base;
+}
+
 /* ===== tile icon menu (change-image from the tile, no popover needed) ===== */
 let _iconMenuTargetId = null;
 
@@ -1416,6 +1433,10 @@ function initTileFileMenu() {
         closeTileFileMenu();
       } else if (action === "upload") {
         input.click();
+      } else if (action === "page") {
+        const toolId = id;
+        closeTileFileMenu();
+        window.open(pageUrl(toolId), "_blank", "noopener");
       } else if (action === "history") {
         const toolId = id;
         closeTileFileMenu();
@@ -1454,6 +1475,8 @@ function openTileFileMenu(toolId, anchor) {
   const latest = tool?.files?.[0];
   const dlLabel = document.getElementById("tile-file-menu-download");
   if (dlLabel) dlLabel.textContent = latest ? `下載 ${latest.name}` : "下載最新版";
+  const pageItem = document.getElementById("tile-file-menu-page");
+  if (pageItem) pageItem.hidden = !isPageTool(tool);
   _fileMenuTargetId = toolId;
   menu.hidden = false;
   positionFloatingMenu(menu, anchor);

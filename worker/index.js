@@ -29,6 +29,9 @@ export default {
         const key = decodeURIComponent(url.pathname.slice("/files/".length));
         return await downloadFile(env, key);
       }
+      if (url.pathname.startsWith("/p/")) {
+        return await servePage(env, url);
+      }
     } catch (err) {
       return jsonError(err?.message || String(err), 500);
     }
@@ -126,6 +129,63 @@ async function uploadFile(request, env) {
     .run();
 
   return json({ key, name: filename, size: buf.byteLength, uploadedAt, uploadedBy });
+}
+
+async function servePage(env, url) {
+  // /p/<tool-id>            → serve latest HTML inline
+  // /p/<tool-id>/?v=<idx>   → serve files[idx] (0 = latest, 1 = previous, ...)
+  // /p/<tool-id>/<anything> → 404 (single-file pages only)
+  const rest = url.pathname.slice("/p/".length).replace(/\/$/, "");
+  if (!rest) return new Response("Not found", { status: 404 });
+  const segments = rest.split("/");
+  if (segments.length > 1) {
+    return new Response("Sub-assets are not supported for single-file pages.", { status: 404 });
+  }
+  const toolId = decodeURIComponent(segments[0] || "");
+  if (!toolId) return new Response("Not found", { status: 404 });
+
+  const row = await env.DB.prepare("SELECT v FROM kv WHERE k = ?").bind("state").first();
+  if (!row) return new Response("Not found", { status: 404 });
+  let state;
+  try { state = JSON.parse(row.v); } catch { return new Response("Not found", { status: 404 }); }
+  const tool = (state.tools || []).find((t) => t && t.id === toolId);
+  if (!tool || !Array.isArray(tool.files) || !tool.files.length) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  const versionParam = url.searchParams.get("v");
+  let idx = 0;
+  if (versionParam != null) {
+    const n = parseInt(versionParam, 10);
+    if (!Number.isFinite(n) || n < 0 || n >= tool.files.length) {
+      return new Response("Version not found", { status: 404 });
+    }
+    idx = n;
+  }
+  const file = tool.files[idx];
+  if (!file || !file.key) return new Response("Not found", { status: 404 });
+  if (!isHtmlFile(file)) {
+    return new Response("Not an HTML page", { status: 415 });
+  }
+
+  const obj = await env.FILES.get(file.key);
+  if (!obj) return new Response("Not found", { status: 404 });
+
+  const headers = new Headers();
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  // Don't cache aggressively — uploading a new version should be visible immediately.
+  headers.set("Cache-Control", "no-cache, must-revalidate");
+  headers.set("X-Tool-Id", toolId);
+  headers.set("X-Page-Version", String(idx));
+  return new Response(obj.body, { headers });
+}
+
+function isHtmlFile(f) {
+  if (!f) return false;
+  const name = (f.name || "").toLowerCase();
+  if (name.endsWith(".html") || name.endsWith(".htm")) return true;
+  const mime = (f.mime || "").toLowerCase();
+  return mime.startsWith("text/html");
 }
 
 async function downloadFile(env, key) {
