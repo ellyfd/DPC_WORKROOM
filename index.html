@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DPC Tools Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-soft"></div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo-mark">
+          <svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 8 L16 4 L28 8 L28 24 L16 28 L4 24 Z" />
+            <path d="M4 8 L16 12 L28 8" />
+            <path d="M16 12 L16 28" />
+          </svg>
+        </span>
+        <div class="brand-text">
+          <div class="brand-title">DPC <span class="accent">Hub</span></div>
+          <div class="brand-sub">所有 DPC 工具,一站直達</div>
+        </div>
+      </div>
+
+      <div class="topbar-tools">
+        <div class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          <input id="search" type="text" placeholder="搜尋工具、製作人、tag…" />
+        </div>
+        <button class="btn btn-primary" id="open-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          新增工具
+        </button>
+      </div>
+    </header>
+
+    <div class="filter-bar" id="filters"></div>
+
+    <main class="main-area">
+      <div class="tools-grid" id="tools-grid"></div>
+      <div class="empty" id="empty" hidden>
+        <div class="empty-art">∅</div>
+        <p class="empty-title">還沒有任何工具</p>
+        <p class="muted small">點右上角「新增工具」開始建立你的第一個入口</p>
+      </div>
+    </main>
+
+    <footer class="footbar">
+      <div class="muted">
+        <span id="stat-total">0</span> 工具 · <span id="stat-creators">0</span> 製作人 · <span id="stat-categories">0</span> 分類
+      </div>
+      <div class="muted">本機新增的工具自動儲存於此瀏覽器 (localStorage)</div>
+    </footer>
+  </div>
+
+  <!-- Add / Edit tool popover -->
+  <div class="popover" id="popover" hidden>
+    <div class="popover-backdrop" data-close></div>
+    <div class="popover-panel" role="dialog" aria-modal="true" aria-labelledby="popover-title">
+      <div class="popover-arrow"></div>
+      <div class="popover-head">
+        <div>
+          <div class="popover-title" id="popover-title">新增工具</div>
+          <div class="muted small">欄位自動保存草稿,送出存到本機</div>
+        </div>
+        <button class="icon-btn" data-close aria-label="關閉">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <form id="add-form" class="popover-form" onsubmit="return false;">
+        <input type="hidden" name="id" />
+        <div class="row">
+          <label>
+            <span>工具名稱 *</span>
+            <input name="name" placeholder="例如:布料查詢 PAGE" required />
+          </label>
+          <label>
+            <span>製作人 *</span>
+            <input name="creator" placeholder="例如:Elly" required />
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            <span>版本</span>
+            <input name="version" placeholder="1.0.0" value="1.0.0" />
+          </label>
+          <label>
+            <span>分類</span>
+            <input name="category" placeholder="例如:布料 / CLO" list="cat-list" />
+            <datalist id="cat-list"></datalist>
+          </label>
+        </div>
+        <label>
+          <span>連結類型</span>
+          <select name="type">
+            <option value="url">外部網址 (URL)</option>
+            <option value="python">Python script / repo</option>
+            <option value="iframe">可內嵌 (iframe)</option>
+          </select>
+        </label>
+        <label>
+          <span>URL *</span>
+          <input name="url" placeholder="https://..." required />
+        </label>
+        <label>
+          <span>描述</span>
+          <textarea name="description" rows="2" placeholder="一句話介紹這個工具"></textarea>
+        </label>
+        <label>
+          <span>Tags (逗號分隔)</span>
+          <input name="tags" placeholder="例如:布料, 查詢, 自動化" />
+        </label>
+        <div class="form-actions">
+          <button type="button" class="btn btn-ghost" id="delete-tool" hidden>刪除</button>
+          <div class="form-actions-right">
+            <button type="button" class="btn btn-ghost" data-close>取消</button>
+            <button type="button" class="btn btn-primary" id="save-tool">儲存</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Iframe modal -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="modal-title">工具</div>
+          <div class="modal-sub muted small" id="modal-sub"></div>
+        </div>
+        <button class="icon-btn" data-close aria-label="關閉">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <iframe id="modal-frame" src="about:blank" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
