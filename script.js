@@ -1216,15 +1216,61 @@ function renderCategorySelect(keepValue) {
   else sel.value = "";
 }
 
-/* ===== icon picker ===== */
+/* ===== icon picker (single dropdown) ===== */
 function initIconPicker() {
-  const upload = document.getElementById("icon-upload-btn");
-  const urlBtn = document.getElementById("icon-url-btn");
-  const clear = document.getElementById("icon-clear-btn");
+  const trigger = document.getElementById("icon-menu-btn");
+  const menu = document.getElementById("icon-menu");
   const file = document.getElementById("icon-file");
-  if (!upload || !urlBtn || !clear || !file) return;
+  if (!trigger || !menu || !file) return;
 
-  upload.addEventListener("click", () => file.click());
+  const closeMenu = () => {
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+  };
+  const openMenu = () => {
+    menu.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+  };
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.hidden) openMenu();
+    else closeMenu();
+  });
+
+  menu.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-icon-action]");
+    if (!btn) return;
+    e.stopPropagation();
+    const action = btn.dataset.iconAction;
+    closeMenu();
+    if (action === "upload") {
+      file.click();
+    } else if (action === "url") {
+      const current = $("#add-form").elements.icon.value || "";
+      openMiniPopover({
+        title: "圖片網址",
+        placeholder: "https://...",
+        defaultValue: current.startsWith("data:") ? "" : current,
+        hint: "貼上任何圖片的網址,儲存後會顯示為工具圖示",
+        type: "url",
+        onConfirm: (val) => setIcon(val || ""),
+      });
+    } else if (action === "clear") {
+      setIcon("");
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (menu.hidden) return;
+    if (e.target.closest("#icon-menu")) return;
+    if (e.target.closest("#icon-menu-btn")) return;
+    closeMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) closeMenu();
+  });
+
   file.addEventListener("change", async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -1237,20 +1283,6 @@ function initIconPicker() {
     }
     e.target.value = "";
   });
-
-  urlBtn.addEventListener("click", () => {
-    const current = $("#add-form").elements.icon.value || "";
-    openMiniPopover({
-      title: "圖片網址",
-      placeholder: "https://...",
-      defaultValue: current.startsWith("data:") ? "" : current,
-      hint: "貼上任何圖片的網址,儲存後會顯示為工具圖示",
-      type: "url",
-      onConfirm: (val) => setIcon(val || ""),
-    });
-  });
-
-  clear.addEventListener("click", () => setIcon(""));
 }
 
 function setIcon(value) {
@@ -1264,25 +1296,31 @@ function updateIconPreview() {
   const preview = document.getElementById("icon-preview");
   const img = document.getElementById("icon-preview-img");
   const letter = document.getElementById("icon-preview-letter");
-  const clearBtn = document.getElementById("icon-clear-btn");
+  const clearBtn = document.getElementById("icon-menu-clear");
+  const sep = document.getElementById("icon-menu-sep");
   const icon = f.icon.value;
   const name = f.name.value;
 
   letter.textContent = initial(name);
 
+  const showClear = (visible) => {
+    if (clearBtn) clearBtn.hidden = !visible;
+    if (sep) sep.hidden = !visible;
+  };
+
   if (icon) {
     img.onerror = () => {
       img.hidden = true;
       img.removeAttribute("src");
-      clearBtn.hidden = true;
+      showClear(false);
     };
     img.src = icon;
     img.hidden = false;
-    clearBtn.hidden = false;
+    showClear(true);
   } else {
     img.hidden = true;
     img.removeAttribute("src");
-    clearBtn.hidden = true;
+    showClear(false);
   }
 
   const cat = state.categories.find((c) => c.name === f.category.value);
@@ -1369,7 +1407,6 @@ function openToolPopover(id = null, anchor = null) {
       if (t.creator) ensureCreator(t.creator);
       renderCreatorSelect(t.creator || "");
       renderCategorySelect(t.category || "");
-      form.elements.version.value = t.version || "1.0.0";
       const tType = (t.type === "file" || t.type === "link") ? t.type : "link";
       setType(tType);
       form.elements.url.value = t.url === "#" ? "" : (t.url || "");
@@ -1388,7 +1425,6 @@ function openToolPopover(id = null, anchor = null) {
     renderCategorySelect(state.prefillCategory || "");
     renderBrandSelect("");
     form.elements.icon.value = "";
-    form.elements.version.value = "1.0.0";
     if (form.elements.asIframe) form.elements.asIframe.checked = false;
     setType("link");
     restoreDraft();
@@ -1424,7 +1460,6 @@ function formData() {
     id: f.id.value || "",
     name: f.name.value.trim(),
     creator: (f.creator.value || "").trim(),
-    version: f.version.value.trim() || "1.0.0",
     category: (f.category.value || "").trim(),
     type: f.type.value,
     url: f.url.value.trim(),
@@ -1445,7 +1480,6 @@ function restoreDraft() {
     const opts = Array.from(f.creator.options || []);
     if (opts.some((o) => o.value === d.creator)) f.creator.value = d.creator;
   }
-  if (d.version) f.version.value = d.version;
   if (d.category) {
     const opts = Array.from(f.category.options || []);
     if (opts.some((o) => o.value === d.category)) f.category.value = d.category;
@@ -1496,7 +1530,7 @@ function saveTool() {
     name: d.name,
     description: d.description,
     creator: d.creator,
-    version: d.version,
+    version: existing?.version || "1.0.0",
     category: d.category,
     type: d.type,
     url: d.type === "link" ? d.url : "",
