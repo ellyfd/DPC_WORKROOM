@@ -168,29 +168,47 @@ function renderStats() {
 function renderFilters() {
   const bar = $("#filters");
   bar.innerHTML = "";
-  if (!state.categories.length && !allTools().length) return;
 
   const tools = allTools();
+  if (!state.categories.length && !tools.length) return;
+
   const countOf = (name) =>
     name === "all" ? tools.length : tools.filter((t) => t.category === name).length;
 
-  bar.appendChild(makeChip("全部工具", "all", null, countOf("all")));
+  bar.appendChild(makeTab("全部", "all", null, countOf("all"), false));
   state.categories.forEach((c) =>
-    bar.appendChild(makeChip(c.name, c.name, c.color, countOf(c.name)))
+    bar.appendChild(makeTab(c.name, c.name, c.color, countOf(c.name), true))
   );
 
-  function makeChip(label, key, cv, count) {
+  const addBtn = document.createElement("button");
+  addBtn.className = "tab-add";
+  addBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+    新增分類
+  `;
+  addBtn.addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
+  bar.appendChild(addBtn);
+
+  function makeTab(label, key, cv, count, editable) {
     const el = document.createElement("button");
-    el.className = "chip" + (state.filter === key ? " active" : "");
+    const isActive = state.filter === key;
+    el.className = "tab" + (isActive ? " active" : "");
     if (typeof cv === "number") el.dataset.cv = String(cv);
-    const dot = typeof cv === "number" ? `<span class="chip-dot"></span>` : "";
-    el.innerHTML = `${dot}<span class="chip-name">${escapeHTML(label)}</span><span class="chip-count">${count}</span>`;
-    el.addEventListener("click", () => {
+    const dot = typeof cv === "number" ? `<span class="tab-dot"></span>` : "";
+    const editIcon = isActive && editable ? `
+      <span class="tab-edit" data-edit-cat-tab="${escapeAttr(key)}" title="編輯分類">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+      </span>` : "";
+    el.innerHTML = `${dot}<span class="tab-name">${escapeHTML(label)}</span><span class="tab-count">${count}</span>${editIcon}`;
+    el.addEventListener("click", (ev) => {
+      if (ev.target.closest("[data-edit-cat-tab]")) {
+        ev.stopPropagation();
+        openCatPopover(key, ev.target.closest("[data-edit-cat-tab]"));
+        return;
+      }
       state.filter = key;
-      $$("#filters .chip").forEach((c) => c.classList.remove("active"));
-      el.classList.add("active");
+      renderFilters();
       renderSections();
-      renderHeadContext();
     });
     return el;
   }
@@ -224,90 +242,78 @@ function renderSections() {
   }
 
   if (!groups.length) {
-    area.innerHTML = `<div class="section"><div class="section-empty">沒有符合條件的工具</div></div>`;
+    area.innerHTML = `<div class="section"><div class="section-body"><div class="section-grid"><div class="section-empty">沒有符合條件的工具</div></div></div></div>`;
     return;
   }
 
-  area.innerHTML = groups.map(sectionHTML).join("");
+  const showHeader = state.filter === "all" && !state.query;
+  area.innerHTML = groups.map((g) => sectionHTML(g, showHeader)).join("");
   wireSections();
 }
 
-function sectionHTML(g) {
+function sectionHTML(g, showHeader = true) {
   const cv = g.color;
   const isSystem = g.system;
-  const collapsed = !!state.collapsed[g.name];
-  const cards = g.tools.map((t, i) => cardHTML(t, i, cv)).join("");
+  const cards = g.tools.map((t) => cardHTML(t, cv)).join("");
   const addCard = !isSystem ? `
-    <button class="card-add" data-add-cat="${escapeAttr(g.name)}">
-      <span class="card-add-plus"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg></span>
-      新增到「${escapeHTML(g.name)}」
-    </button>
-  ` : "";
+    <button class="card-add" data-add-cat="${escapeAttr(g.name)}" title="新增到「${escapeAttr(g.name)}」">
+      <span class="card-add-plus">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+      </span>
+      <span>新增工具</span>
+    </button>` : "";
 
-  const actions = isSystem ? "" : `
-    <button class="section-action" title="新增工具" data-add-cat="${escapeAttr(g.name)}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-    </button>
-    <button class="section-action" title="編輯分類" data-edit-cat="${escapeAttr(g.name)}">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-    </button>
-    <button class="section-action danger" title="刪除分類" data-del-cat="${escapeAttr(g.name)}">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-    </button>
+  const header = !showHeader ? "" : `
+    <div class="section-head">
+      <div class="section-title-row">
+        <span class="section-color-dot"></span>
+        <span class="section-title">${escapeHTML(g.name)}</span>
+        <span class="section-count">${g.tools.length}</span>
+      </div>
+      ${isSystem ? "" : `
+        <div class="section-actions">
+          <button class="section-action" title="編輯分類" data-edit-cat="${escapeAttr(g.name)}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+          </button>
+          <button class="section-action danger" title="刪除分類" data-del-cat="${escapeAttr(g.name)}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div>
+      `}
+    </div>
   `;
 
-  const grid = g.tools.length
-    ? `<div class="section-grid">${cards}${addCard}</div>`
-    : `<div class="section-grid">
-         <div class="section-empty">這個分類還沒有工具${isSystem ? "" : ",按 + 新增"}</div>
-         ${addCard}
-       </div>`;
+  const grid = `<div class="section-grid">${cards}${addCard}</div>`;
 
   return `
-    <section class="section${collapsed ? " collapsed" : ""}" data-cv="${cv}" data-cat="${escapeAttr(g.name)}">
-      <div class="section-head" data-toggle-cat="${escapeAttr(g.name)}">
-        <div class="section-title-row">
-          <span class="section-chevron">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-          </span>
-          <span class="section-color-dot"></span>
-          <span class="section-title">${escapeHTML(g.name)}</span>
-          <span class="section-count">${g.tools.length}</span>
-        </div>
-        <div class="section-actions">${actions}</div>
-      </div>
+    <section class="section" data-cv="${cv}" data-cat="${escapeAttr(g.name)}">
+      ${header}
       <div class="section-body">${grid}</div>
     </section>
   `;
 }
 
-function cardHTML(t, i, cv) {
+function cardHTML(t, cv) {
   const type = TYPE_META[t.type] || TYPE_META.url;
-  const tags = (t.tags || []).slice(0, 3)
-    .map((tg) => `<span class="tag">${escapeHTML(tg)}</span>`).join("");
   const iconImg = t.icon
     ? `<img src="${escapeAttr(t.icon)}" alt="" onerror="this.remove()" />`
     : "";
+  const tipParts = [t.creator ? `製作:${t.creator}` : "", t.version ? `v${t.version}` : "", t.description].filter(Boolean);
+  const tip = tipParts.length ? `${t.name}\n${tipParts.join(" · ")}` : t.name;
 
   return `
-    <article class="card" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
+    <article class="card" data-cv="${cv}" data-id="${escapeAttr(t.id)}" title="${escapeAttr(tip)}">
       <button class="card-edit" title="編輯">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
       </button>
       <div class="card-top">
-        <div class="card-icon"><span class="ic-letter">${escapeHTML(initial(t.name))}</span>${iconImg}</div>
-        <span class="type-badge ${t.type || "url"}">${type.icon}${type.label}</span>
+        <div class="card-icon">
+          <span class="ic-letter">${escapeHTML(initial(t.name))}</span>
+          ${iconImg}
+        </div>
+        <span class="type-badge ${t.type || "url"}">${type.icon}</span>
       </div>
       <h3 class="card-title">${escapeHTML(t.name)}</h3>
-      <p class="card-desc">${escapeHTML(t.description || "—")}</p>
-      <div class="card-tags">${tags}</div>
-      <div class="card-foot">
-        <span class="creator">
-          <span class="avatar">${escapeHTML(initial(t.creator))}</span>
-          <span>${escapeHTML(t.creator || "Unknown")}</span>
-        </span>
-        <span class="version-badge">v${escapeHTML(t.version || "0.0.0")}</span>
-      </div>
     </article>
   `;
 }

@@ -10,14 +10,16 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div class="bg-soft"></div>
+
   <div class="app">
-    <!-- Top bar -->
+    <!-- Header -->
     <header class="topbar">
       <div class="brand">
         <span class="logo">D</span>
         <div class="brand-text">
           <div class="brand-name">DPC Hub</div>
-          <div class="brand-sub">工具中心</div>
+          <div class="brand-sub">所有 DPC 工具,一站直達</div>
         </div>
       </div>
 
@@ -27,13 +29,10 @@
           <path d="m20 20-3.5-3.5" />
         </svg>
         <input id="search" type="text" placeholder="搜尋工具、製作人、tag…" />
+        <kbd class="kbd">/</kbd>
       </div>
 
       <div class="topbar-actions">
-        <button class="btn btn-secondary" id="open-add-cat">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
-          新增分類
-        </button>
         <button class="btn btn-primary" id="open-add">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
           新增工具
@@ -41,53 +40,20 @@
       </div>
     </header>
 
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-block">
-        <h3 class="sidebar-title">分類</h3>
-        <div class="filter-bar" id="filters"></div>
-      </div>
+    <!-- Category tab bar -->
+    <nav class="tabs" id="filters" aria-label="分類"></nav>
 
-      <div class="sidebar-block sidebar-stats">
-        <h3 class="sidebar-title">概覽</h3>
-        <div class="stat-row">
-          <span class="stat-label">工具總數</span>
-          <span class="stat-num" id="stat-total">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">製作人</span>
-          <span class="stat-num" id="stat-creators">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">分類</span>
-          <span class="stat-num" id="stat-categories">0</span>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main -->
-    <main class="main">
-      <div class="page-head">
-        <div>
-          <h1 class="page-title" id="head-context">所有工具</h1>
-          <p class="page-sub muted">點工具卡片開啟,hover 卡片右上角編輯</p>
-        </div>
-        <div class="page-actions">
-          <button class="link-btn" id="expand-all">全部展開</button>
-          <span class="sep">·</span>
-          <button class="link-btn" id="collapse-all">全部摺疊</button>
-        </div>
-      </div>
-
-      <div class="sections-area" id="sections-area"></div>
+    <!-- Launchpad grid area -->
+    <main class="launchpad">
+      <div id="sections-area"></div>
 
       <div class="empty" id="empty" hidden>
         <div class="empty-art">
-          <svg viewBox="0 0 64 64" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="8" y="14" width="22" height="22" rx="3"/>
-            <rect x="34" y="14" width="22" height="22" rx="3"/>
-            <rect x="8" y="40" width="22" height="14" rx="3"/>
-            <rect x="34" y="40" width="22" height="14" rx="3" stroke-dasharray="3 3"/>
+          <svg viewBox="0 0 64 64" width="68" height="68" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="8" y="14" width="22" height="22" rx="5"/>
+            <rect x="34" y="14" width="22" height="22" rx="5"/>
+            <rect x="8" y="40" width="22" height="16" rx="5"/>
+            <rect x="34" y="40" width="22" height="16" rx="5" stroke-dasharray="3 3"/>
           </svg>
         </div>
         <h2 class="empty-title">還沒有任何工具</h2>
@@ -98,6 +64,16 @@
         </button>
       </div>
     </main>
+  </div>
+
+  <!-- Hidden static IDs used by JS but not visible -->
+  <div hidden>
+    <span id="stat-total">0</span>
+    <span id="stat-creators">0</span>
+    <span id="stat-categories">0</span>
+    <span id="head-context"></span>
+    <button id="expand-all"></button>
+    <button id="collapse-all"></button>
   </div>
 
   <!-- Add / Edit tool popover -->
@@ -220,6 +196,9 @@
       </form>
     </div>
   </div>
+
+  <!-- Hidden button so JS can attach handler for "+ 分類" -->
+  <button id="open-add-cat" hidden></button>
 
   <!-- Iframe modal -->
   <div class="modal" id="modal" hidden>
