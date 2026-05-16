@@ -95,7 +95,25 @@
 
       <form id="add-form" class="popover-form" onsubmit="return false;">
         <input type="hidden" name="id" />
+        <input type="hidden" name="type" value="url" />
 
+        <!-- 1. Type selector — the first thing you pick -->
+        <div class="type-selector" id="type-selector">
+          <button type="button" class="type-opt" data-type="url" aria-pressed="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+            <span>網址 / GitHub</span>
+          </button>
+          <button type="button" class="type-opt" data-type="python">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13l2 2 4-4"/></svg>
+            <span>Python 檔案</span>
+          </button>
+          <button type="button" class="type-opt" data-type="iframe">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+            <span>內嵌頁面</span>
+          </button>
+        </div>
+
+        <!-- 2. Auto-fill (relevant for URL/iframe; helpful for Python repos too) -->
         <div class="auto-fill">
           <div class="auto-fill-label">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 4V2M15 14v-2M8 9l-2-2M21 14l-2-2M5 9H3M22 8h-2M17 15.5l3.5 3.5M12 12l9 9M12 22a10 10 0 1 1 10-10"/></svg>
@@ -110,7 +128,7 @@
 
         <div class="form-divider"><span>或自己填</span></div>
 
-        <!-- Icon picker -->
+        <!-- 3. Icon picker -->
         <div class="icon-picker">
           <div class="icon-preview" id="icon-preview">
             <span class="icon-preview-letter" id="icon-preview-letter">?</span>
@@ -133,6 +151,41 @@
           </div>
         </div>
 
+        <!-- 4. Type-specific input: file upload (Python only) -->
+        <div class="file-block" data-show-for-type="python" hidden>
+          <div class="file-drop" id="file-drop">
+            <svg class="file-drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <div class="file-drop-text">點選或拖拉 .py 檔到這裡</div>
+            <div class="file-drop-hint">最大 500KB</div>
+            <input type="file" id="file-input" accept=".py,text/x-python,application/x-python-code" hidden />
+          </div>
+          <div class="file-info" id="file-info" hidden>
+            <div class="file-info-icon">PY</div>
+            <div class="file-info-meta">
+              <div class="file-info-name" id="file-info-name">filename.py</div>
+              <div class="file-info-size" id="file-info-size">— KB · v1.0.0</div>
+            </div>
+            <div class="file-info-actions">
+              <button type="button" class="btn-mini" id="file-replace-btn">更換</button>
+              <button type="button" class="btn-mini btn-mini-ghost" id="file-remove-btn">移除</button>
+            </div>
+          </div>
+          <div class="file-version-hint" id="file-version-hint" hidden>
+            🆕 已選新檔案 — 記得在下方改版本號(例如 1.0.0 → 1.0.1)
+          </div>
+        </div>
+
+        <!-- 5. Type-specific input: URL field (URL/iframe; optional for Python) -->
+        <label data-show-for-type="url,iframe,python">
+          <span id="url-label">URL *</span>
+          <input name="url" placeholder="https://..." />
+        </label>
+
+        <!-- 6. Common fields -->
         <div class="row">
           <label>
             <span>工具名稱 *</span>
@@ -159,20 +212,16 @@
             <input name="version" placeholder="1.0.0" value="1.0.0" />
           </label>
         </div>
-        <div class="row">
-          <label>
-            <span>連結類型</span>
-            <select name="type">
-              <option value="url">外部網址 (URL)</option>
-              <option value="python">Python script / repo</option>
-              <option value="iframe">可內嵌 (iframe)</option>
-            </select>
-          </label>
-          <label>
-            <span>URL *</span>
-            <input name="url" placeholder="https://..." required />
-          </label>
-        </div>
+
+        <!-- 7. Brand field (Python only) -->
+        <label data-show-for-type="python" hidden>
+          <span>品牌 / 客制</span>
+          <select name="brand" id="brand-select">
+            <option value="">— 沒有指定 —</option>
+            <option value="__new__">＋ 新增品牌…</option>
+          </select>
+        </label>
+
         <label>
           <span>描述</span>
           <textarea name="description" rows="2" placeholder="一句話介紹這個工具"></textarea>
