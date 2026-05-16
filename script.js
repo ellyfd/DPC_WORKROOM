@@ -106,7 +106,6 @@ async function init() {
   initFileUpload();
   initBackupPopover();
   initTileIconMenu();
-  initModal();
   initShortcuts();
 }
 
@@ -272,24 +271,22 @@ function ensureCategoriesFromTools() {
 }
 
 /* ===== schema migration =====
-   Old: type ∈ {"url", "iframe", "python"}; python tools used `file` (singular)
-   New: type ∈ {"link", "file"} with asIframe boolean for link, files[] array for file
+   Old: type ∈ {"url", "iframe", "python"}; python tools used `file` (singular);
+   link tools carried an `asIframe` boolean.
+   New: type ∈ {"link", "file"}; files[] array for file tools; all link
+   tools open in a new tab (no embedded iframe view).
 */
 function migrateToolsSchema() {
   let changed = false;
   for (const t of state.localTools) {
-    if (t.type === "url") {
+    if (t.type === "url" || t.type === "iframe") {
       t.type = "link";
-      t.asIframe = false;
-      changed = true;
-    } else if (t.type === "iframe") {
-      t.type = "link";
-      t.asIframe = true;
       changed = true;
     } else if (t.type === "python") {
       t.type = "file";
       changed = true;
     }
+    if ("asIframe" in t) { delete t.asIframe; changed = true; }
     if (t.type === "file") {
       if (!Array.isArray(t.files)) {
         t.files = [];
@@ -402,6 +399,7 @@ function renderBrandSelect(keepValue) {
   `;
   if (want && all.includes(want)) sel.value = want;
   else sel.value = "";
+  updateSelectDeleteBtn?.("brand");
 }
 
 function ensureCreatorsFromTools() {
@@ -442,6 +440,7 @@ function renderCreatorSelect(keepValue) {
   `;
   if (want && all.includes(want)) sel.value = want;
   else sel.value = "";
+  updateSelectDeleteBtn?.("creator");
 }
 
 function ensureCategory(name, color) {
@@ -756,14 +755,7 @@ function openTool(t) {
     }
     return;
   }
-  if (t.type === "link" && t.asIframe) {
-    $("#modal-title").textContent = t.name;
-    $("#modal-sub").textContent = `${t.creator} · v${t.version}`;
-    $("#modal-frame").src = t.url;
-    $("#modal").hidden = false;
-  } else {
-    window.open(t.url, "_blank", "noopener");
-  }
+  window.open(t.url, "_blank", "noopener");
 }
 
 /* ===== mini popover (reusable single-input prompt) ===== */
@@ -822,6 +814,7 @@ function initCreatorPicker() {
   sel.addEventListener("change", (e) => {
     if (e.target.value === "__new__") {
       e.target.value = "";
+      updateSelectDeleteBtn("creator");
       openMiniPopover({
         title: "新增製作人",
         placeholder: "輸入名稱",
@@ -831,7 +824,13 @@ function initCreatorPicker() {
           renderCreatorSelect(val);
         },
       });
+      return;
     }
+    updateSelectDeleteBtn("creator");
+  });
+  document.getElementById("creator-delete")?.addEventListener("click", () => {
+    const v = sel.value;
+    if (v && v !== "__new__") deleteCreator(v);
   });
 }
 
@@ -842,6 +841,7 @@ function initBrandPicker() {
   sel.addEventListener("change", (e) => {
     if (e.target.value === "__new__") {
       e.target.value = "";
+      updateSelectDeleteBtn("brand");
       openMiniPopover({
         title: "新增品牌 / 客制",
         placeholder: "輸入品牌或客制名稱",
@@ -851,8 +851,61 @@ function initBrandPicker() {
           renderBrandSelect(val);
         },
       });
+      return;
     }
+    updateSelectDeleteBtn("brand");
   });
+  document.getElementById("brand-delete")?.addEventListener("click", () => {
+    const v = sel.value;
+    if (v && v !== "__new__") deleteBrand(v);
+  });
+}
+
+/* Shared: toggle the small ✕ next to a select based on its current value */
+function updateSelectDeleteBtn(kind) {
+  const sel = document.getElementById(`${kind}-select`);
+  const btn = document.getElementById(`${kind}-delete`);
+  if (!sel || !btn) return;
+  const v = sel.value;
+  btn.hidden = !v || v === "__new__";
+}
+
+function deleteCreator(name) {
+  if (!name) return;
+  const using = allTools().filter((t) => t.creator === name);
+  const msg = using.length
+    ? `「${name}」目前是 ${using.length} 個工具的製作人,刪了之後這些工具會變成「沒製作人」(必填,要重新指定)。確定刪除?`
+    : `確定刪除製作人「${name}」?`;
+  if (!confirm(msg)) return;
+  state.creators = state.creators.filter((c) => c !== name);
+  state.localTools = state.localTools.map((t) =>
+    t.creator === name ? { ...t, creator: "" } : t
+  );
+  saveCreators();
+  saveTools();
+  renderCreatorSelect("");
+  updateSelectDeleteBtn("creator");
+  render();
+  toast("已刪除製作人");
+}
+
+function deleteBrand(name) {
+  if (!name) return;
+  const using = allTools().filter((t) => t.brand === name);
+  const msg = using.length
+    ? `「${name}」目前綁在 ${using.length} 個工具上,刪了之後這些工具的品牌會清空。確定刪除?`
+    : `確定刪除品牌「${name}」?`;
+  if (!confirm(msg)) return;
+  state.brands = state.brands.filter((b) => b !== name);
+  state.localTools = state.localTools.map((t) =>
+    t.brand === name ? { ...t, brand: "" } : t
+  );
+  saveBrands();
+  saveTools();
+  renderBrandSelect("");
+  updateSelectDeleteBtn("brand");
+  render();
+  toast("已刪除品牌");
 }
 
 /* ===== type selector ===== */
@@ -1316,6 +1369,7 @@ function initCategoryPicker() {
   sel.addEventListener("change", (e) => {
     if (e.target.value === "__new__") {
       e.target.value = "";
+      updateSelectDeleteBtn("category");
       openMiniPopover({
         title: "新增分類",
         placeholder: "例如:生活 / CLO / 查詢",
@@ -1325,7 +1379,13 @@ function initCategoryPicker() {
           renderCategorySelect(val);
         },
       });
+      return;
     }
+    updateSelectDeleteBtn("category");
+  });
+  document.getElementById("category-delete")?.addEventListener("click", () => {
+    const v = sel.value;
+    if (v && v !== "__new__") deleteCategory(v);
   });
 }
 
@@ -1340,6 +1400,7 @@ function renderCategorySelect(keepValue) {
   `;
   if (want && state.categories.some((c) => c.name === want)) sel.value = want;
   else sel.value = "";
+  updateSelectDeleteBtn?.("category");
 }
 
 /* ===== icon picker (single dropdown) ===== */
@@ -1536,7 +1597,6 @@ function openToolPopover(id = null, anchor = null) {
       const tType = (t.type === "file" || t.type === "link") ? t.type : "link";
       setType(tType);
       form.elements.url.value = t.url === "#" ? "" : (t.url || "");
-      if (form.elements.asIframe) form.elements.asIframe.checked = !!t.asIframe;
       form.elements.description.value = t.description || "";
       form.elements.tags.value = (t.tags || []).join(", ");
       form.elements.icon.value = t.icon || "";
@@ -1551,7 +1611,6 @@ function openToolPopover(id = null, anchor = null) {
     renderCategorySelect(state.prefillCategory || "");
     renderBrandSelect("");
     form.elements.icon.value = "";
-    if (form.elements.asIframe) form.elements.asIframe.checked = false;
     setType("link");
     restoreDraft();
     if (state.prefillCategory) {
@@ -1589,7 +1648,6 @@ function formData() {
     category: (f.category.value || "").trim(),
     type: f.type.value,
     url: f.url.value.trim(),
-    asIframe: f.asIframe ? !!f.asIframe.checked : false,
     description: f.description.value.trim(),
     tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
     icon: f.icon.value.trim(),
@@ -1616,7 +1674,6 @@ function restoreDraft() {
     else if (t === "python") t = "file";
     if (t === "link" || t === "file") setType(t);
   }
-  if (typeof d.asIframe === "boolean" && f.asIframe) f.asIframe.checked = d.asIframe;
   if (d.url) f.url.value = d.url;
   if (d.description) f.description.value = d.description;
   if (d.tags?.length) f.tags.value = d.tags.join(", ");
@@ -1660,7 +1717,6 @@ function saveTool() {
     category: d.category,
     type: d.type,
     url: d.type === "link" ? d.url : "",
-    asIframe: d.type === "link" ? !!d.asIframe : false,
     tags: d.tags,
     icon: d.icon || "",
     brand: d.type === "file" ? d.brand : "",
@@ -2003,21 +2059,6 @@ function positionPopover(popEl, anchor) {
   const arrowFromLeft = Math.max(12, Math.min(panelWidth - 24, anchorCenterX - left - 6));
   arrow.style.left = `${arrowFromLeft}px`;
   arrow.style.right = "auto";
-}
-
-/* ===== iframe modal ===== */
-function initModal() {
-  const modal = $("#modal");
-  modal.querySelectorAll("[data-close]").forEach((el) =>
-    el.addEventListener("click", closeModal)
-  );
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !modal.hidden) closeModal();
-  });
-  function closeModal() {
-    modal.hidden = true;
-    $("#modal-frame").src = "about:blank";
-  }
 }
 
 /* ===== toast ===== */

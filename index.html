@@ -176,15 +176,6 @@
           <div class="url-hint muted small" id="auto-hint" hidden></div>
         </label>
 
-        <!-- 4c. Iframe toggle (link type) -->
-        <label class="checkbox-row" data-show-for-type="link">
-          <input type="checkbox" name="asIframe" />
-          <span class="checkbox-text">
-            <span class="checkbox-title">在內嵌視窗(iframe)中打開</span>
-            <span class="checkbox-sub">不勾的話會另開分頁</span>
-          </span>
-        </label>
-
         <!-- 6. Common fields -->
         <div class="row">
           <label>
@@ -193,26 +184,35 @@
           </label>
           <label>
             <span>製作人 *</span>
-            <select name="creator" id="creator-select" required>
-              <option value="" disabled selected>— 選擇製作人 —</option>
-              <option value="__new__">＋ 新增製作人…</option>
-            </select>
+            <div class="select-row">
+              <select name="creator" id="creator-select" required>
+                <option value="" disabled selected>— 選擇製作人 —</option>
+                <option value="__new__">＋ 新增製作人…</option>
+              </select>
+              <button type="button" class="btn-mini select-delete" id="creator-delete" hidden title="刪除目前選的製作人">×</button>
+            </div>
           </label>
         </div>
         <div class="row">
           <label>
             <span>分類</span>
-            <select name="category" id="category-select">
-              <option value="">— 沒有分類 —</option>
-              <option value="__new__">＋ 新增分類…</option>
-            </select>
+            <div class="select-row">
+              <select name="category" id="category-select">
+                <option value="">— 沒有分類 —</option>
+                <option value="__new__">＋ 新增分類…</option>
+              </select>
+              <button type="button" class="btn-mini select-delete" id="category-delete" hidden title="刪除目前選的分類">×</button>
+            </div>
           </label>
           <label data-show-for-type="file" hidden>
             <span>品牌 / 客制</span>
-            <select name="brand" id="brand-select">
-              <option value="">— 沒有指定 —</option>
-              <option value="__new__">＋ 新增品牌…</option>
-            </select>
+            <div class="select-row">
+              <select name="brand" id="brand-select">
+                <option value="">— 沒有指定 —</option>
+                <option value="__new__">＋ 新增品牌…</option>
+              </select>
+              <button type="button" class="btn-mini select-delete" id="brand-delete" hidden title="刪除目前選的品牌">×</button>
+            </div>
           </label>
         </div>
 
@@ -267,23 +267,6 @@
           </div>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- Iframe modal -->
-  <div class="modal" id="modal" hidden>
-    <div class="modal-backdrop" data-close></div>
-    <div class="modal-panel">
-      <div class="modal-head">
-        <div>
-          <div class="modal-title" id="modal-title">工具</div>
-          <div class="modal-sub muted small" id="modal-sub"></div>
-        </div>
-        <button class="icon-btn" data-close aria-label="關閉">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
-      </div>
-      <iframe id="modal-frame" src="about:blank" loading="lazy"></iframe>
     </div>
   </div>
 

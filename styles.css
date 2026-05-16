@@ -607,6 +607,26 @@ h1, h2, h3 { margin: 0; }
   font-weight: 600;
   color: var(--text-dim);
 }
+.popover-form [hidden] { display: none !important; }
+.select-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.select-row select { flex: 1; min-width: 0; }
+.select-row .select-delete {
+  flex-shrink: 0;
+  width: 38px;
+  padding: 0;
+  color: var(--text-mute);
+  font-size: 16px;
+  line-height: 1;
+}
+.select-row .select-delete:hover {
+  color: var(--danger);
+  border-color: #fecaca;
+  background: var(--danger-soft);
+}
 .popover-form input, .popover-form textarea, .popover-form select {
   background: var(--surface);
   border: 1px solid var(--border);
