@@ -683,6 +683,134 @@ h1, h2, h3 { margin: 0; }
 .btn-mini-ghost:hover { color: var(--danger); border-color: #fecaca; background: var(--danger-soft); }
 
 /* ============================================================
+   Type selector (segmented control — first step in form)
+   ============================================================ */
+.type-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.type-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 6px;
+  border: 0;
+  background: transparent;
+  border-radius: 9px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  text-align: center;
+}
+.type-opt svg { width: 20px; height: 20px; }
+.type-opt:hover { color: var(--text); background: rgba(255, 255, 255, 0.55); }
+.type-opt[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
+}
+
+/* ============================================================
+   File upload (Python script .py)
+   ============================================================ */
+.file-block { display: flex; flex-direction: column; gap: 8px; }
+.file-block[hidden] { display: none; }
+
+.file-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 22px 16px;
+  background: var(--surface);
+  border: 2px dashed var(--border-2);
+  border-radius: var(--radius);
+  color: var(--text-mute);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.file-drop:hover,
+.file-drop.dragover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.file-drop-icon { color: currentColor; }
+.file-drop-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: inherit;
+}
+.file-drop-hint {
+  font-size: 12px;
+  color: var(--text-mute);
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.file-info[hidden] { display: none; }
+.file-info-icon {
+  width: 38px; height: 38px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #fbbf24, #f97316);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.file-info-meta { flex: 1; min-width: 0; }
+.file-info-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-info-size {
+  font-size: 12px;
+  color: var(--text-mute);
+  margin-top: 1px;
+}
+.file-info-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.file-info-actions .btn-mini { height: 32px; padding: 0 10px; font-size: 12.5px; }
+
+.file-version-hint {
+  font-size: 12.5px;
+  color: var(--warn, #b45309);
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.file-version-hint[hidden] { display: none; }
+
+/* ============================================================
    Mini popover (centered prompt — adds creator / category / icon URL)
    ============================================================ */
 .mini-popover {

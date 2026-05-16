@@ -1,15 +1,18 @@
 const LS_TOOLS_KEY = "dpcHub.tools.v1";
 const LS_CATS_KEY = "dpcHub.categories.v1";
 const LS_CREATORS_KEY = "dpcHub.creators.v1";
+const LS_BRANDS_KEY = "dpcHub.brands.v1";
 const LS_DRAFT_KEY = "dpcHub.draft.v1";
 const LS_COLLAPSE_KEY = "dpcHub.collapsed.v1";
 const NUM_COLORS = 7;
+const MAX_PY_BYTES = 500_000;   // 500KB cap for stored Python files
 
 const state = {
   seedTools: [],
   localTools: [],
   categories: [],
   creators: [],
+  brands: [],
   filter: "all",
   query: "",
   editingId: null,
@@ -17,6 +20,10 @@ const state = {
   prefillCategory: null,
   anchorEl: null,
   collapsed: {},
+  // file currently attached to the open popover ({ name, size, content, isNew })
+  editingFile: null,
+  // version that was loaded when the popover opened (so we can detect bumps)
+  editingOriginalVersion: "",
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -35,9 +42,11 @@ async function init() {
   state.localTools = loadJSON(LS_TOOLS_KEY, []);
   state.categories = loadJSON(LS_CATS_KEY, []);
   state.creators = loadJSON(LS_CREATORS_KEY, []);
+  state.brands = loadJSON(LS_BRANDS_KEY, []);
   state.collapsed = loadJSON(LS_COLLAPSE_KEY, {});
   ensureCategoriesFromTools();
   ensureCreatorsFromTools();
+  ensureBrandsFromTools();
 
   render();
 
@@ -56,7 +65,10 @@ async function init() {
   initMiniPopover();
   initCreatorPicker();
   initCategoryPicker();
+  initBrandPicker();
   initIconPicker();
+  initTypeSelector();
+  initFileUpload();
   initModal();
   initShortcuts();
 }
@@ -112,6 +124,46 @@ function ensureCategoriesFromTools() {
     }
   }
   if (changed) saveCats();
+}
+
+function ensureBrandsFromTools() {
+  const used = uniq(allTools().map((t) => t.brand).filter(Boolean));
+  let changed = false;
+  for (const name of used) {
+    if (!state.brands.includes(name)) {
+      state.brands.push(name);
+      changed = true;
+    }
+  }
+  if (changed) saveJSON(LS_BRANDS_KEY, state.brands);
+}
+
+function ensureBrand(name) {
+  if (!name) return;
+  if (!state.brands.includes(name)) {
+    state.brands.push(name);
+    saveJSON(LS_BRANDS_KEY, state.brands);
+  }
+}
+
+function listAllBrands() {
+  const fromTools = uniq(allTools().map((t) => t.brand).filter(Boolean));
+  return uniq([...state.brands, ...fromTools])
+    .sort((a, b) => a.localeCompare(b, "zh-Hant"));
+}
+
+function renderBrandSelect(keepValue) {
+  const sel = document.getElementById("brand-select");
+  if (!sel) return;
+  const all = listAllBrands();
+  const want = keepValue != null ? keepValue : sel.value;
+  sel.innerHTML = `
+    <option value="">— 沒有指定 —</option>
+    ${all.map((b) => `<option value="${escapeAttr(b)}">${escapeHTML(b)}</option>`).join("")}
+    <option value="__new__">＋ 新增品牌…</option>
+  `;
+  if (want && all.includes(want)) sel.value = want;
+  else sel.value = "";
 }
 
 function ensureCreatorsFromTools() {
@@ -423,8 +475,14 @@ function initial(name) {
 }
 
 function openTool(t) {
+  // Python tools prefer the attached .py file (download); fall back to URL.
+  if (t.type === "python" && t.file?.content) {
+    downloadPyFile(t);
+    toast(`下載 ${t.file.name}`);
+    return;
+  }
   if (!t.url || t.url === "#") {
-    if (confirm(`「${t.name}」尚未設定連結。要現在編輯嗎?`)) {
+    if (confirm(`「${t.name}」尚未設定連結或檔案。要現在編輯嗎?`)) {
       openToolPopover(t.id);
     }
     return;
@@ -506,6 +564,191 @@ function initCreatorPicker() {
       });
     }
   });
+}
+
+/* ===== brand picker ===== */
+function initBrandPicker() {
+  const sel = document.getElementById("brand-select");
+  if (!sel) return;
+  sel.addEventListener("change", (e) => {
+    if (e.target.value === "__new__") {
+      e.target.value = "";
+      openMiniPopover({
+        title: "新增品牌 / 客制",
+        placeholder: "輸入品牌或客制名稱",
+        onConfirm: (val) => {
+          if (!val) return;
+          ensureBrand(val);
+          renderBrandSelect(val);
+        },
+      });
+    }
+  });
+}
+
+/* ===== type selector ===== */
+function initTypeSelector() {
+  const sel = document.getElementById("type-selector");
+  if (!sel) return;
+  sel.addEventListener("click", (e) => {
+    const btn = e.target.closest(".type-opt");
+    if (!btn) return;
+    setType(btn.dataset.type);
+  });
+}
+
+function setType(type) {
+  const f = $("#add-form").elements;
+  f.type.value = type;
+  document.querySelectorAll("#type-selector .type-opt").forEach((b) => {
+    b.setAttribute("aria-pressed", b.dataset.type === type ? "true" : "false");
+  });
+  applyTypeMode(type);
+}
+
+function applyTypeMode(type) {
+  // Toggle elements whose data-show-for-type lists this type
+  document.querySelectorAll("[data-show-for-type]").forEach((el) => {
+    const types = el.dataset.showForType.split(",").map((s) => s.trim());
+    el.hidden = !types.includes(type);
+  });
+
+  // URL label: required for url/iframe, optional for python
+  const urlLabelText = document.getElementById("url-label");
+  const urlInput = document.querySelector("#add-form input[name='url']");
+  if (urlLabelText && urlInput) {
+    if (type === "python") {
+      urlLabelText.textContent = "URL(選填)";
+      urlInput.placeholder = "若是 GitHub repo,可貼上連結";
+    } else {
+      urlLabelText.textContent = "URL *";
+      urlInput.placeholder = "https://...";
+    }
+  }
+
+  if (type === "python") {
+    renderBrandSelect(document.getElementById("brand-select")?.value || "");
+    renderFileInfo();
+  }
+}
+
+/* ===== file upload (Python) ===== */
+function initFileUpload() {
+  const drop = document.getElementById("file-drop");
+  const input = document.getElementById("file-input");
+  const replace = document.getElementById("file-replace-btn");
+  const remove = document.getElementById("file-remove-btn");
+  if (!drop || !input) return;
+
+  drop.addEventListener("click", () => input.click());
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("dragover"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("dragover");
+    const file = e.dataTransfer?.files?.[0];
+    if (file) handleFile(file);
+  });
+  input.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    e.target.value = "";
+  });
+  replace?.addEventListener("click", () => input.click());
+  remove?.addEventListener("click", () => {
+    state.editingFile = null;
+    renderFileInfo();
+  });
+}
+
+async function handleFile(file) {
+  if (file.size > MAX_PY_BYTES) {
+    toast(`檔案太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_PY_BYTES)})`);
+    return;
+  }
+  try {
+    const content = await readFileAsText(file);
+    state.editingFile = {
+      name: file.name,
+      size: file.size,
+      content,
+      uploadedAt: new Date().toISOString().slice(0, 10),
+      isNew: true,
+    };
+    renderFileInfo();
+    autoFillFromFilename(file.name);
+  } catch {
+    toast("檔案讀取失敗");
+  }
+}
+
+function autoFillFromFilename(filename) {
+  // Suggest tool name from the .py filename if name is still empty.
+  const f = $("#add-form").elements;
+  if (f.name.value) return;
+  const base = filename.replace(/\.py$/i, "").replace(/[-_]+/g, " ").trim();
+  if (base) {
+    const pretty = base.replace(/\b\w/g, (c) => c.toUpperCase());
+    f.name.value = pretty;
+    updateIconPreview();
+  }
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsText(file);
+  });
+}
+
+function renderFileInfo() {
+  const drop = document.getElementById("file-drop");
+  const info = document.getElementById("file-info");
+  const nameEl = document.getElementById("file-info-name");
+  const sizeEl = document.getElementById("file-info-size");
+  const hint = document.getElementById("file-version-hint");
+  if (!drop || !info) return;
+
+  const file = state.editingFile;
+  if (!file) {
+    drop.hidden = false;
+    info.hidden = true;
+    if (hint) hint.hidden = true;
+    return;
+  }
+  drop.hidden = true;
+  info.hidden = false;
+  if (nameEl) nameEl.textContent = file.name;
+  if (sizeEl) {
+    const ver = $("#add-form").elements.version?.value || "—";
+    sizeEl.textContent = `${formatBytes(file.size)} · v${ver}${file.uploadedAt ? " · 上傳 " + file.uploadedAt : ""}`;
+  }
+  if (hint) {
+    // Show the version-bump nudge only when we just attached a new file in an
+    // edit session — i.e. when there's an editingId and isNew is true.
+    hint.hidden = !(state.editingId && file.isNew);
+  }
+}
+
+function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function downloadPyFile(record) {
+  if (!record.file?.content) return;
+  const blob = new Blob([record.file.content], { type: "text/x-python" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = record.file.name || `${record.id}.py`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 /* ===== category picker ===== */
@@ -663,6 +906,7 @@ function initToolPopover() {
     if (e.target.name === "name" || e.target.name === "category") {
       updateIconPreview();
     }
+    if (e.target.name === "version") renderFileInfo();
     if (state.editingId) return;
     saveJSON(LS_DRAFT_KEY, formData());
   });
@@ -684,6 +928,9 @@ function openToolPopover(id = null, anchor = null) {
   $("#popover-sub").textContent = id ? "修改後按儲存" : "貼上連結自動讀取,或手動填寫";
   $("#delete-tool").hidden = !id;
 
+  state.editingFile = null;
+  state.editingOriginalVersion = "";
+
   if (id) {
     const t = allTools().find((x) => x.id === id);
     if (t) {
@@ -693,22 +940,32 @@ function openToolPopover(id = null, anchor = null) {
       renderCreatorSelect(t.creator || "");
       renderCategorySelect(t.category || "");
       form.elements.version.value = t.version || "1.0.0";
-      form.elements.type.value = t.type || "url";
+      state.editingOriginalVersion = form.elements.version.value;
+      setType(t.type || "url");
       form.elements.url.value = t.url === "#" ? "" : (t.url || "");
       form.elements.description.value = t.description || "";
       form.elements.tags.value = (t.tags || []).join(", ");
       form.elements.icon.value = t.icon || "";
+      if (t.brand) ensureBrand(t.brand);
+      renderBrandSelect(t.brand || "");
+      if (t.file?.content) {
+        state.editingFile = { ...t.file, isNew: false };
+      }
     }
   } else {
     renderCreatorSelect("");
     renderCategorySelect(state.prefillCategory || "");
+    renderBrandSelect("");
     form.elements.icon.value = "";
+    form.elements.version.value = "1.0.0";
+    setType("url");
     restoreDraft();
     if (state.prefillCategory) {
       renderCategorySelect(state.prefillCategory);
       state.prefillCategory = null;
     }
   }
+  renderFileInfo();
   updateIconPreview();
 
   const anchorEl = anchor || $("#open-add");
@@ -742,6 +999,7 @@ function formData() {
     description: f.description.value.trim(),
     tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
     icon: f.icon.value.trim(),
+    brand: (f.brand?.value || "").trim(),
   };
 }
 
@@ -768,9 +1026,20 @@ function restoreDraft() {
 
 function saveTool() {
   const d = formData();
-  if (!d.name || !d.creator || !d.url) {
-    toast("請填寫工具名稱、製作人與 URL");
+  if (!d.name || !d.creator) {
+    toast("請填寫工具名稱與製作人");
     return;
+  }
+  if (d.type === "python") {
+    if (!state.editingFile && !d.url) {
+      toast("Python 工具請上傳檔案,或填一個連結");
+      return;
+    }
+  } else {
+    if (!d.url) {
+      toast("請填 URL");
+      return;
+    }
   }
 
   // Determine final id. For edits, always reuse the tool being edited so the
@@ -793,8 +1062,22 @@ function saveTool() {
     url: d.url,
     tags: d.tags,
     icon: d.icon || "",
+    brand: d.type === "python" ? d.brand : "",
+    file: d.type === "python" && state.editingFile
+      ? {
+          name: state.editingFile.name,
+          size: state.editingFile.size,
+          content: state.editingFile.content,
+          uploadedAt: state.editingFile.uploadedAt,
+        }
+      : null,
     updated: new Date().toISOString().slice(0, 10),
   };
+
+  // Warn if user replaced the file but didn't bump the version. Save anyway.
+  if (state.editingFile?.isNew && state.editingId && d.version === state.editingOriginalVersion) {
+    toast("提示:上傳了新檔案但版本沒改");
+  }
 
   const idx = state.localTools.findIndex((t) => t.id === id);
   if (idx >= 0) state.localTools[idx] = record;
@@ -803,8 +1086,11 @@ function saveTool() {
   if (d.category) ensureCategory(d.category);
   ensureCreator(d.creator);
 
+  if (d.brand) ensureBrand(d.brand);
   saveTools();
   localStorage.removeItem(LS_DRAFT_KEY);
+  state.editingFile = null;
+  state.editingOriginalVersion = "";
   closeToolPopover();
   render();
   toast(isNew ? "已新增" : "已更新");
