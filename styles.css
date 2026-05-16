@@ -611,6 +611,51 @@ h1, h2, h3 { margin: 0; }
 .form-actions .btn { height: 38px; padding: 0 16px; font-size: 14px; }
 
 /* ============================================================
+   Creator picker (select + inline "new creator" panel)
+   ============================================================ */
+.creator-row { display: flex; }
+.creator-row select { flex: 1; min-width: 0; }
+.creator-row select:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.creator-new {
+  display: flex; gap: 6px;
+  margin-top: 6px;
+}
+.creator-new input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.btn-mini {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.btn-mini:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-2); }
+.btn-mini-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-mini-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+
+/* ============================================================
    Color picker
    ============================================================ */
 .color-picker { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -708,27 +753,119 @@ h1, h2, h3 { margin: 0; }
 [data-cv="7"] { --c1: #94a3b8; --c2: #64748b; }
 
 /* ============================================================
-   Responsive
+   Responsive — designed for phone-first usage
    ============================================================ */
-@media (max-width: 820px) {
-  .page { padding: 24px 18px 40px; gap: 28px; }
-  .hero { grid-template-columns: 1fr; gap: 12px; }
-  .search { max-width: none; justify-self: stretch; }
-  .btn-primary { width: 100%; }
-  .section-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
-  .card-icon, .card-add-plus { width: 76px; height: 76px; font-size: 32px; border-radius: 18px; }
-}
-@media (max-width: 480px) {
-  .section-grid { grid-template-columns: repeat(4, 1fr); }
-  .card-icon, .card-add-plus { width: 64px; height: 64px; font-size: 28px; border-radius: 16px; }
-  .card-title { font-size: 12.5px; }
-  .section-title { font-size: 18px; }
-  .section-actions { opacity: 1; }
-  .popover-form .row { grid-template-columns: 1fr; }
-  .popover-panel {
-    left: 12px !important;
-    right: 12px !important;
-    width: auto !important;
-    top: 60px !important;
+
+/* tablet / narrow desktop */
+@media (max-width: 880px) {
+  .page { padding: 28px 22px 48px; gap: 28px; }
+  .hero {
+    grid-template-columns: auto 1fr auto;
+    gap: 14px;
   }
+  .section-grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); }
+  .card-icon, .card-add-plus { width: 84px; height: 84px; font-size: 36px; border-radius: 20px; }
+}
+
+/* phones — stacked compact layout */
+@media (max-width: 640px) {
+  body { font-size: 15px; }
+  .page { padding: 16px 14px 40px; gap: 22px; }
+
+  /* Hero collapses to 2 rows: brand + (search wrapped with button) */
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "brand brand"
+      "search add";
+    gap: 12px;
+    align-items: center;
+  }
+  .brand { grid-area: brand; }
+  .search { grid-area: search; max-width: none; height: 44px; }
+  .hero .btn-primary {
+    grid-area: add;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 12px;
+    gap: 0;
+  }
+  .hero .btn-primary .btn-text { display: none; }
+  .hero .btn-primary svg { width: 18px; height: 18px; }
+
+  .brand-sub { font-size: 12.5px; }
+
+  /* Sections: smaller titles, action buttons always visible (no hover on touch) */
+  .section-title { font-size: 19px; }
+  .section-actions { opacity: 1; }
+  .section-action { width: 36px; height: 36px; }
+
+  /* Icon grid: 4 columns on phones */
+  .section-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px 6px;
+  }
+  .card { padding: 6px 4px 10px; gap: 8px; border-radius: 14px; }
+  .card:hover { transform: none; background: transparent; border-color: transparent; box-shadow: none; }
+  .card:active { background: var(--surface); }
+  .card-icon, .card-add-plus {
+    width: 64px; height: 64px;
+    font-size: 28px;
+    border-radius: 16px;
+  }
+  .card-title { font-size: 12.5px; max-width: 80px; }
+  .card-add { padding: 6px 4px 10px; }
+  .card-edit {
+    opacity: 1;
+    width: 26px; height: 26px;
+    top: -2px; right: 50%;
+    transform: translateX(36px);
+  }
+  .type-badge { width: 20px; height: 20px; right: -4px; bottom: -4px; }
+  .type-badge svg { width: 11px; height: 11px; }
+
+  /* Page footer pill */
+  .page-foot { padding-top: 4px; }
+  .ghost-pill { height: 40px; padding: 0 18px; font-size: 14.5px; }
+
+  /* Popovers go full-screen-ish */
+  .popover-backdrop { background: rgba(15, 23, 42, 0.35); }
+  .popover-panel {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    top: 8px !important;
+    max-height: calc(100vh - 16px);
+    border-radius: 16px;
+  }
+  .popover-panel-sm { width: auto !important; }
+  .popover-form .row { grid-template-columns: 1fr; gap: 10px; }
+  .popover-form { padding: 14px 16px 18px; gap: 12px; }
+  .popover-head { padding: 16px 16px 12px; }
+
+  /* Inputs slightly bigger touch targets */
+  .popover-form input,
+  .popover-form select,
+  .popover-form textarea { font-size: 15px; padding: 11px 12px; }
+  .creator-new input { font-size: 15px; padding: 11px 12px; }
+  .btn-mini { height: 42px; padding: 0 14px; font-size: 14px; }
+  .form-actions .btn { height: 42px; font-size: 14px; padding: 0 18px; }
+
+  /* Modal fits the screen */
+  .modal { padding: 8px; }
+  .modal-panel { height: calc(100vh - 16px); max-height: none; border-radius: 14px; }
+  .modal-head { padding: 12px 14px; }
+
+  /* Empty state takes less vertical room */
+  .empty { padding: 60px 16px; }
+  .empty-title { font-size: 22px; }
+}
+
+/* very small phones — 3 cols */
+@media (max-width: 380px) {
+  .section-grid { grid-template-columns: repeat(3, 1fr); }
+  .card-icon, .card-add-plus { width: 68px; height: 68px; font-size: 30px; }
+  .card-title { max-width: 90px; font-size: 13px; }
 }
