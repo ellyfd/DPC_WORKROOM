@@ -31,9 +31,9 @@
         <input id="search" type="text" placeholder="搜尋工具…" />
       </div>
 
-      <button class="btn btn-primary" id="open-add">
+      <button class="btn btn-primary" id="open-add" aria-label="新增工具">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M12 5v14M5 12h14"/></svg>
-        新增工具
+        <span class="btn-text">新增工具</span>
       </button>
     </header>
 
@@ -117,7 +117,17 @@
           </label>
           <label>
             <span>製作人 *</span>
-            <input name="creator" placeholder="例如:Elly" required />
+            <div class="creator-row">
+              <select name="creator" id="creator-select" required>
+                <option value="" disabled selected>— 選擇製作人 —</option>
+                <option value="__new__">＋ 新增製作人…</option>
+              </select>
+            </div>
+            <div class="creator-new" id="creator-new" hidden>
+              <input type="text" id="creator-new-input" placeholder="新製作人名稱" />
+              <button type="button" class="btn-mini btn-mini-primary" id="creator-new-confirm">加入</button>
+              <button type="button" class="btn-mini" id="creator-new-cancel">取消</button>
+            </div>
           </label>
         </div>
         <div class="row">

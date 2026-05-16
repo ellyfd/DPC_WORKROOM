@@ -1,5 +1,6 @@
 const LS_TOOLS_KEY = "dpcHub.tools.v1";
 const LS_CATS_KEY = "dpcHub.categories.v1";
+const LS_CREATORS_KEY = "dpcHub.creators.v1";
 const LS_DRAFT_KEY = "dpcHub.draft.v1";
 const LS_COLLAPSE_KEY = "dpcHub.collapsed.v1";
 const NUM_COLORS = 7;
@@ -8,6 +9,7 @@ const state = {
   seedTools: [],
   localTools: [],
   categories: [],
+  creators: [],
   filter: "all",
   query: "",
   editingId: null,
@@ -32,8 +34,10 @@ async function init() {
   }
   state.localTools = loadJSON(LS_TOOLS_KEY, []);
   state.categories = loadJSON(LS_CATS_KEY, []);
+  state.creators = loadJSON(LS_CREATORS_KEY, []);
   state.collapsed = loadJSON(LS_COLLAPSE_KEY, {});
   ensureCategoriesFromTools();
+  ensureCreatorsFromTools();
 
   render();
 
@@ -49,6 +53,7 @@ async function init() {
 
   initToolPopover();
   initCatPopover();
+  initCreatorPicker();
   initModal();
   initShortcuts();
 }
@@ -104,6 +109,46 @@ function ensureCategoriesFromTools() {
     }
   }
   if (changed) saveCats();
+}
+
+function ensureCreatorsFromTools() {
+  const used = uniq(allTools().map((t) => t.creator).filter(Boolean));
+  let changed = false;
+  for (const name of used) {
+    if (!state.creators.includes(name)) {
+      state.creators.push(name);
+      changed = true;
+    }
+  }
+  if (changed) saveJSON(LS_CREATORS_KEY, state.creators);
+}
+
+function ensureCreator(name) {
+  if (!name) return;
+  if (!state.creators.includes(name)) {
+    state.creators.push(name);
+    saveJSON(LS_CREATORS_KEY, state.creators);
+  }
+}
+
+function listAllCreators() {
+  const fromTools = uniq(allTools().map((t) => t.creator).filter(Boolean));
+  return uniq([...state.creators, ...fromTools])
+    .sort((a, b) => a.localeCompare(b, "zh-Hant"));
+}
+
+function renderCreatorSelect(keepValue) {
+  const sel = document.getElementById("creator-select");
+  if (!sel) return;
+  const all = listAllCreators();
+  const want = keepValue != null ? keepValue : sel.value;
+  sel.innerHTML = `
+    <option value="" disabled${want ? "" : " selected"}>— 選擇製作人 —</option>
+    ${all.map((c) => `<option value="${escapeAttr(c)}">${escapeHTML(c)}</option>`).join("")}
+    <option value="__new__">＋ 新增製作人…</option>
+  `;
+  if (want && all.includes(want)) sel.value = want;
+  else sel.value = "";
 }
 
 function ensureCategory(name, color) {
@@ -389,6 +434,48 @@ function openTool(t) {
   }
 }
 
+/* ===== creator picker ===== */
+function initCreatorPicker() {
+  const sel = document.getElementById("creator-select");
+  const box = document.getElementById("creator-new");
+  const input = document.getElementById("creator-new-input");
+  const confirm = document.getElementById("creator-new-confirm");
+  const cancel = document.getElementById("creator-new-cancel");
+  if (!sel || !box || !input || !confirm || !cancel) return;
+
+  sel.addEventListener("change", (e) => {
+    if (e.target.value === "__new__") {
+      e.target.value = "";
+      showNew();
+    }
+  });
+  confirm.addEventListener("click", commitNew);
+  cancel.addEventListener("click", hideNew);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commitNew(); }
+    else if (e.key === "Escape") { e.preventDefault(); hideNew(); }
+  });
+
+  function showNew() {
+    box.hidden = false;
+    sel.disabled = true;
+    input.value = "";
+    setTimeout(() => input.focus(), 30);
+  }
+  function hideNew() {
+    box.hidden = true;
+    sel.disabled = false;
+    input.value = "";
+  }
+  function commitNew() {
+    const name = input.value.trim();
+    if (!name) { toast("請輸入製作人名稱"); input.focus(); return; }
+    ensureCreator(name);
+    renderCreatorSelect(name);
+    hideNew();
+  }
+}
+
 /* ===== tool popover ===== */
 function initToolPopover() {
   const pop = $("#popover");
@@ -426,12 +513,21 @@ function openToolPopover(id = null, anchor = null) {
   $("#popover-sub").textContent = id ? "修改後按儲存" : "貼上連結自動讀取,或手動填寫";
   $("#delete-tool").hidden = !id;
 
+  // Always close the inline "new creator" panel and rebuild the dropdown
+  // so editing a tool with an unknown creator (e.g. legacy data) still
+  // shows it as an option.
+  const cnBox = document.getElementById("creator-new");
+  const cSel = document.getElementById("creator-select");
+  if (cnBox) cnBox.hidden = true;
+  if (cSel) cSel.disabled = false;
+
   if (id) {
     const t = allTools().find((x) => x.id === id);
     if (t) {
       form.elements.id.value = t.id;
       form.elements.name.value = t.name || "";
-      form.elements.creator.value = t.creator || "";
+      if (t.creator) ensureCreator(t.creator);
+      renderCreatorSelect(t.creator || "");
       form.elements.version.value = t.version || "1.0.0";
       form.elements.category.value = t.category || "";
       form.elements.type.value = t.type || "url";
@@ -440,6 +536,7 @@ function openToolPopover(id = null, anchor = null) {
       form.elements.tags.value = (t.tags || []).join(", ");
     }
   } else {
+    renderCreatorSelect("");
     restoreDraft();
     if (state.prefillCategory) {
       form.elements.category.value = state.prefillCategory;
@@ -485,7 +582,11 @@ function restoreDraft() {
   if (!d) return;
   const f = $("#add-form").elements;
   if (d.name) f.name.value = d.name;
-  if (d.creator) f.creator.value = d.creator;
+  if (d.creator) {
+    // Only restore if it's a real option (avoid leaking stale drafts)
+    const opts = Array.from(f.creator.options || []);
+    if (opts.some((o) => o.value === d.creator)) f.creator.value = d.creator;
+  }
   if (d.version) f.version.value = d.version;
   if (d.category) f.category.value = d.category;
   if (d.type) f.type.value = d.type;
@@ -500,9 +601,15 @@ function saveTool() {
     toast("請填寫工具名稱、製作人與 URL");
     return;
   }
-  const id = d.id || slugify(d.name);
 
-  const existing = state.localTools.find((t) => t.id === id);
+  // Determine final id. For edits, always reuse the tool being edited so the
+  // record updates in place. For new tools, generate a fresh unique slug —
+  // ignore d.id (which auto-fetch may have written) so we never silently
+  // overwrite an existing tool that happens to share a slug.
+  const isNew = !state.editingId;
+  const id = isNew ? uniqueSlug(d.name) : state.editingId;
+  const existing = isNew ? null : state.localTools.find((t) => t.id === id);
+
   const record = {
     ...(existing || {}),
     id,
@@ -516,13 +623,17 @@ function saveTool() {
     tags: d.tags,
     updated: new Date().toISOString().slice(0, 10),
   };
-  if (pendingIcon[id]) {
-    record.icon = pendingIcon[id];
-    delete pendingIcon[id];
-  }
-  if (pendingIcon[d.id]) {
-    record.icon = pendingIcon[d.id];
-    delete pendingIcon[d.id];
+
+  // Pull icon stashed by auto-fetch — try the new id first, then whatever
+  // slug the form was carrying (auto-fetch keys by slugify(name) which may
+  // differ from the uniquified id).
+  const iconKeys = [id, d.id].filter(Boolean);
+  for (const k of iconKeys) {
+    if (pendingIcon[k]) {
+      record.icon = pendingIcon[k];
+      delete pendingIcon[k];
+      break;
+    }
   }
 
   const idx = state.localTools.findIndex((t) => t.id === id);
@@ -530,12 +641,22 @@ function saveTool() {
   else state.localTools.push(record);
 
   if (d.category) ensureCategory(d.category);
+  ensureCreator(d.creator);
 
   saveTools();
   localStorage.removeItem(LS_DRAFT_KEY);
   closeToolPopover();
   render();
-  toast(idx >= 0 ? "已更新" : "已新增");
+  toast(isNew ? "已新增" : "已更新");
+}
+
+function uniqueSlug(name) {
+  const base = slugify(name);
+  const taken = new Set(allTools().map((t) => t.id));
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
 }
 
 function deleteTool() {
@@ -574,11 +695,10 @@ async function autoFetch() {
       try {
         info = await fetchGitHubRepo(gh.owner, gh.repo);
       } catch (ghErr) {
-        // GitHub API failed — fall back to generic URL fill so the user still
-        // gets a name / icon and only needs to fill in the rest manually.
+        // GitHub API failed — fall back so the user still gets name + owner
+        // and only needs to fill in the rest manually.
         info = parseGenericURL(url) || {
-          name: gh.repo, creator: gh.owner, url, type: "url", tags: [],
-          icon: `https://www.google.com/s2/favicons?sz=64&domain=github.com`,
+          name: gh.repo, creator: gh.owner, url, type: "url", tags: [], icon: "",
         };
         info.name = info.name || gh.repo;
         info.creator = info.creator || gh.owner;
@@ -633,7 +753,7 @@ async function fetchGitHubRepo(owner, repo) {
     url: data.html_url,
     type: lang === "python" ? "python" : "url",
     tags: data.topics || [],
-    icon: data.owner?.avatar_url ? `${data.owner.avatar_url}&s=80` : "",
+    icon: data.owner?.avatar_url ? `${data.owner.avatar_url}&s=200` : "",
   };
 }
 
@@ -644,6 +764,8 @@ function parseGenericURL(url) {
     const name = host.split(".")[0]
       .replace(/[-_]/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());
+    // Skip the favicon — at 92px it scales up blurry. The gradient + initial
+    // letter looks cleaner and is more readable.
     return {
       name,
       description: "",
@@ -651,7 +773,7 @@ function parseGenericURL(url) {
       url: u.href,
       type: "url",
       tags: [],
-      icon: `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`,
+      icon: "",
     };
   } catch {
     return null;
@@ -718,7 +840,10 @@ function enrichWithSuggestions(info, gh) {
 function applyAutoFill(info) {
   const f = $("#add-form").elements;
   if (info.name) f.name.value = info.name;
-  if (info.creator) f.creator.value = info.creator;
+  if (info.creator) {
+    ensureCreator(info.creator);
+    renderCreatorSelect(info.creator);
+  }
   if (info.description) f.description.value = info.description;
   if (info.url) f.url.value = info.url;
   if (info.type) f.type.value = info.type;
