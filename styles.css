@@ -425,15 +425,20 @@ h1, h2, h3 { margin: 0; }
 .card-tags,
 .card-foot { display: none; }
 
-/* Action row below the tile name — always present (not just on hover) */
+/* Action row below the tile name — hidden by default, fade in on hover (slot reserved) */
 .card-actions {
   display: flex;
   gap: 4px;
   margin-top: 2px;
-  opacity: 0.55;
-  transition: opacity 0.15s;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, visibility 0.15s;
 }
-.card:hover .card-actions { opacity: 1; }
+.card:hover .card-actions,
+.card:focus-within .card-actions {
+  opacity: 1;
+  visibility: visible;
+}
 .card-act {
   width: 26px; height: 26px;
   border-radius: 7px;

@@ -1795,7 +1795,7 @@ function initToolPopover() {
   });
 
   window.addEventListener("resize", () => {
-    if (!pop.hidden && state.anchorEl) positionPopover(pop, state.anchorEl);
+    if (!pop.hidden) positionPopover(pop, state.anchorEl);
   });
 }
 
@@ -2244,45 +2244,21 @@ function deleteCategory(name, fromPopover = false) {
 }
 
 /* ===== positioning ===== */
-function positionPopover(popEl, anchor) {
+function positionPopover(popEl, _anchor) {
+  // Center the popover on the viewport so action buttons are always reachable.
   const panel = popEl.querySelector(".popover-panel");
-  const arrow = popEl.querySelector(".popover-arrow");
-  const r = anchor.getBoundingClientRect();
   const panelWidth = panel.offsetWidth || (panel.classList.contains("popover-panel-sm") ? 360 : 460);
   const panelHeight = panel.offsetHeight || 500;
-  const gap = 10;
   const margin = 12;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  const anchorCenterX = r.left + r.width / 2;
-  // Anchor on the left half → open to the right; right half → open to the left.
-  const anchorOnLeft = anchorCenterX < vw / 2;
-
-  let top = r.bottom + gap;
-  if (top + panelHeight > vh - margin && r.top > panelHeight + margin) {
-    top = Math.max(margin, r.top - panelHeight - gap);
-  }
-  top = Math.max(margin, Math.min(top, vh - panelHeight - margin));
-
-  let left;
-  if (anchorOnLeft) {
-    left = r.left;
-    if (left + panelWidth > vw - margin) left = vw - panelWidth - margin;
-    if (left < margin) left = margin;
-  } else {
-    left = r.right - panelWidth;
-    if (left < margin) left = margin;
-    if (left + panelWidth > vw - margin) left = vw - panelWidth - margin;
-  }
+  const top = Math.max(margin, Math.round((vh - panelHeight) / 2));
+  const left = Math.max(margin, Math.round((vw - panelWidth) / 2));
 
   panel.style.top = `${top}px`;
   panel.style.left = `${left}px`;
   panel.style.right = "auto";
-
-  const arrowFromLeft = Math.max(12, Math.min(panelWidth - 24, anchorCenterX - left - 6));
-  arrow.style.left = `${arrowFromLeft}px`;
-  arrow.style.right = "auto";
 }
 
 /* ===== toast ===== */
