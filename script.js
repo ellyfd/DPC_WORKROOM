@@ -105,6 +105,7 @@ async function init() {
   initFileUpload();
   initTileIconMenu();
   initTileFileMenu();
+  initHistoryPopover();
   initShortcuts();
 }
 
@@ -370,7 +371,7 @@ function renderBrandSelect(keepValue) {
   `;
   if (want && all.includes(want)) sel.value = want;
   else sel.value = "";
-  updateSelectDeleteBtn?.("brand");
+  syncCustomSelectLabel?.("brand");
 }
 
 function ensureCreatorsFromTools() {
@@ -411,7 +412,7 @@ function renderCreatorSelect(keepValue) {
   `;
   if (want && all.includes(want)) sel.value = want;
   else sel.value = "";
-  updateSelectDeleteBtn?.("creator");
+  syncCustomSelectLabel?.("creator");
 }
 
 function ensureCategory(name, color) {
@@ -802,67 +803,236 @@ function commitMini() {
   fn(val);
 }
 
-/* ===== creator picker ===== */
+/* ===== creator / brand pickers (custom dropdown with per-row rename/delete) ===== */
 function initCreatorPicker() {
-  const sel = document.getElementById("creator-select");
-  if (!sel) return;
-  sel.addEventListener("change", (e) => {
-    if (e.target.value === "__new__") {
-      e.target.value = "";
-      updateSelectDeleteBtn("creator");
-      openMiniPopover({
-        title: "新增製作人",
-        placeholder: "輸入名稱",
-        onConfirm: (val) => {
-          if (!val) return;
-          ensureCreator(val);
-          renderCreatorSelect(val);
-        },
-      });
-      return;
-    }
-    updateSelectDeleteBtn("creator");
-  });
-  document.getElementById("creator-delete")?.addEventListener("click", () => {
-    const v = sel.value;
-    if (v && v !== "__new__") deleteCreator(v);
+  initCustomSelect({
+    kind: "creator",
+    listFn: listAllCreators,
+    ensureFn: ensureCreator,
+    deleteFn: deleteCreator,
+    renameFn: renameCreator,
+    rerenderFn: renderCreatorSelect,
+    emptyLabel: "— 選擇製作人 —",
+    addLabel: "＋ 新增製作人…",
+    addTitle: "新增製作人",
+    addPlaceholder: "輸入名稱",
+    allowEmpty: false,
   });
 }
 
-/* ===== brand picker ===== */
 function initBrandPicker() {
-  const sel = document.getElementById("brand-select");
-  if (!sel) return;
-  sel.addEventListener("change", (e) => {
-    if (e.target.value === "__new__") {
-      e.target.value = "";
-      updateSelectDeleteBtn("brand");
-      openMiniPopover({
-        title: "新增品牌 / 客制",
-        placeholder: "輸入品牌或客制名稱",
-        onConfirm: (val) => {
-          if (!val) return;
-          ensureBrand(val);
-          renderBrandSelect(val);
-        },
-      });
-      return;
-    }
-    updateSelectDeleteBtn("brand");
-  });
-  document.getElementById("brand-delete")?.addEventListener("click", () => {
-    const v = sel.value;
-    if (v && v !== "__new__") deleteBrand(v);
+  initCustomSelect({
+    kind: "brand",
+    listFn: listAllBrands,
+    ensureFn: ensureBrand,
+    deleteFn: deleteBrand,
+    renameFn: renameBrand,
+    rerenderFn: renderBrandSelect,
+    emptyLabel: "— 沒有指定 —",
+    addLabel: "＋ 新增品牌…",
+    addTitle: "新增品牌 / 客制",
+    addPlaceholder: "輸入品牌或客制名稱",
+    allowEmpty: true,
   });
 }
 
-/* Shared: toggle the small ✕ next to a select based on its current value */
-function updateSelectDeleteBtn(kind) {
-  const sel = document.getElementById(`${kind}-select`);
-  const btn = document.getElementById(`${kind}-delete`);
-  if (!sel || !btn) return;
-  const v = sel.value;
-  btn.hidden = !v || v === "__new__";
+const _customSelects = {};
+
+function initCustomSelect(opts) {
+  const selectEl = document.getElementById(`${opts.kind}-select`);
+  const wrapper = document.querySelector(`[data-custom-select="${opts.kind}"]`);
+  if (!selectEl || !wrapper) return;
+
+  let custom = wrapper.querySelector(".custom-select");
+  if (!custom) {
+    custom = document.createElement("div");
+    custom.className = "custom-select";
+    custom.innerHTML = `
+      <button type="button" class="custom-select-trigger">
+        <span class="custom-select-label is-placeholder">${escapeHTML(opts.emptyLabel)}</span>
+        <svg class="custom-select-caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="custom-select-menu" hidden></div>
+    `;
+    wrapper.appendChild(custom);
+  }
+
+  const trigger = custom.querySelector(".custom-select-trigger");
+  const label = custom.querySelector(".custom-select-label");
+  const menu = custom.querySelector(".custom-select-menu");
+
+  function syncLabel() {
+    const v = selectEl.value;
+    if (v) {
+      label.textContent = v;
+      label.classList.remove("is-placeholder");
+    } else {
+      label.textContent = opts.emptyLabel;
+      label.classList.add("is-placeholder");
+    }
+  }
+
+  function renderMenu() {
+    const items = opts.listFn();
+    const v = selectEl.value;
+    const checkSvg = `<svg class="custom-select-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L20 7"/></svg>`;
+    const renameSvg = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+    const trashSvg = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>`;
+
+    const emptyRow = opts.allowEmpty
+      ? `<div class="custom-select-row${!v ? " is-active" : ""}">
+          <button type="button" class="custom-select-pick" data-act="pick" data-val="">
+            <span class="custom-select-pick-label muted">${escapeHTML(opts.emptyLabel)}</span>
+            ${!v ? checkSvg : ""}
+          </button>
+        </div>`
+      : "";
+
+    const itemRows = items.map((name) => `
+      <div class="custom-select-row${name === v ? " is-active" : ""}">
+        <button type="button" class="custom-select-pick" data-act="pick" data-val="${escapeAttr(name)}">
+          <span class="custom-select-pick-label">${escapeHTML(name)}</span>
+          ${name === v ? checkSvg : ""}
+        </button>
+        <div class="custom-select-row-actions">
+          <button type="button" class="custom-select-action" data-act="rename" data-val="${escapeAttr(name)}" title="改名" aria-label="改名">${renameSvg}</button>
+          <button type="button" class="custom-select-action danger" data-act="delete" data-val="${escapeAttr(name)}" title="刪除" aria-label="刪除">${trashSvg}</button>
+        </div>
+      </div>
+    `).join("");
+
+    menu.innerHTML = `
+      ${emptyRow}
+      ${itemRows}
+      ${items.length ? `<div class="custom-select-sep"></div>` : ""}
+      <button type="button" class="custom-select-add" data-act="new">${escapeHTML(opts.addLabel)}</button>
+    `;
+  }
+
+  function open() {
+    renderMenu();
+    menu.hidden = false;
+    custom.classList.add("is-open");
+  }
+  function close() {
+    menu.hidden = true;
+    custom.classList.remove("is-open");
+  }
+  function toggle() { menu.hidden ? open() : close(); }
+
+  trigger.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggle(); };
+
+  menu.onclick = (e) => {
+    const btn = e.target.closest("[data-act]");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const act = btn.dataset.act;
+    const val = btn.dataset.val || "";
+    if (act === "pick") {
+      selectEl.value = val;
+      syncLabel();
+      close();
+    } else if (act === "new") {
+      close();
+      openMiniPopover({
+        title: opts.addTitle,
+        placeholder: opts.addPlaceholder,
+        onConfirm: (v) => {
+          const name = (v || "").trim();
+          if (!name) return;
+          opts.ensureFn(name);
+          opts.rerenderFn(name);
+          syncLabel();
+        },
+      });
+    } else if (act === "rename") {
+      close();
+      openMiniPopover({
+        title: `改名:${val}`,
+        placeholder: "輸入新名稱",
+        defaultValue: val,
+        onConfirm: (v) => {
+          const next = (v || "").trim();
+          if (!next || next === val) return;
+          opts.renameFn(val, next);
+        },
+      });
+    } else if (act === "delete") {
+      close();
+      opts.deleteFn(val);
+    }
+  };
+
+  if (!_customSelects[opts.kind]) {
+    document.addEventListener("click", (e) => {
+      const c = _customSelects[opts.kind]?.custom;
+      if (!c || c.classList.contains("is-open") === false) return;
+      if (e.target.closest(`[data-custom-select="${opts.kind}"]`)) return;
+      _customSelects[opts.kind].close();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && _customSelects[opts.kind]?.custom.classList.contains("is-open")) {
+        _customSelects[opts.kind].close();
+      }
+    });
+  }
+
+  _customSelects[opts.kind] = { custom, open, close, syncLabel, renderMenu };
+  syncLabel();
+}
+
+function syncCustomSelectLabel(kind) {
+  _customSelects[kind]?.syncLabel();
+}
+
+function renameCreator(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+  const all = listAllCreators();
+  if (all.includes(newName)) {
+    toast(`「${newName}」已存在`);
+    return;
+  }
+  state.creators = state.creators.map((c) => c === oldName ? newName : c);
+  state.localTools = state.localTools.map((t) => {
+    const next = { ...t };
+    if (t.creator === oldName) next.creator = newName;
+    if (Array.isArray(t.files)) {
+      next.files = t.files.map((f) =>
+        f.uploadedBy === oldName ? { ...f, uploadedBy: newName } : f
+      );
+    }
+    return next;
+  });
+  if (state.me === oldName) {
+    state.me = newName;
+    localStorage.setItem(LS_ME_KEY, newName);
+  }
+  saveCreators();
+  saveTools();
+  renderCreatorSelect(newName);
+  syncCustomSelectLabel("creator");
+  render();
+  toast(`已改名為「${newName}」`);
+}
+
+function renameBrand(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+  const all = listAllBrands();
+  if (all.includes(newName)) {
+    toast(`「${newName}」已存在`);
+    return;
+  }
+  state.brands = state.brands.map((b) => b === oldName ? newName : b);
+  state.localTools = state.localTools.map((t) =>
+    t.brand === oldName ? { ...t, brand: newName } : t
+  );
+  saveBrands();
+  saveTools();
+  renderBrandSelect(newName);
+  syncCustomSelectLabel("brand");
+  render();
+  toast(`已改名為「${newName}」`);
 }
 
 function deleteCreator(name) {
@@ -879,7 +1049,7 @@ function deleteCreator(name) {
   saveCreators();
   saveTools();
   renderCreatorSelect("");
-  updateSelectDeleteBtn("creator");
+  syncCustomSelectLabel?.("creator");
   render();
   toast("已刪除製作人");
 }
@@ -898,7 +1068,7 @@ function deleteBrand(name) {
   saveBrands();
   saveTools();
   renderBrandSelect("");
-  updateSelectDeleteBtn("brand");
+  syncCustomSelectLabel?.("brand");
   render();
   toast("已刪除品牌");
 }
@@ -1246,6 +1416,10 @@ function initTileFileMenu() {
         closeTileFileMenu();
       } else if (action === "upload") {
         input.click();
+      } else if (action === "history") {
+        const toolId = id;
+        closeTileFileMenu();
+        openHistoryPopover(toolId);
       }
     });
   });
@@ -1305,6 +1479,77 @@ function closeTileFileMenu() {
   const menu = document.getElementById("tile-file-menu");
   if (menu) menu.hidden = true;
   _fileMenuTargetId = null;
+}
+
+/* ===== version history popover ===== */
+function initHistoryPopover() {
+  const pop = document.getElementById("history-popover");
+  if (!pop) return;
+  pop.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", closeHistoryPopover)
+  );
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !pop.hidden) closeHistoryPopover();
+  });
+}
+
+function openHistoryPopover(toolId) {
+  const pop = document.getElementById("history-popover");
+  const list = document.getElementById("history-list");
+  const title = document.getElementById("history-popover-title");
+  const sub = document.getElementById("history-popover-sub");
+  if (!pop || !list) return;
+  const tool = allTools().find((t) => t.id === toolId);
+  if (!tool) {
+    toast("找不到這個工具");
+    return;
+  }
+  const files = Array.isArray(tool.files) ? tool.files : [];
+  title.textContent = `${tool.name} — 版本歷史`;
+  sub.textContent = files.length
+    ? `共 ${files.length} 個版本 · 點任一版本可下載`
+    : "還沒有任何版本";
+
+  if (!files.length) {
+    list.innerHTML = `<div class="history-empty muted">還沒有上傳檔案</div>`;
+  } else {
+    list.innerHTML = files.map((f, i) => {
+      const isLatest = i === 0;
+      const ver = files.length - i;
+      const dlSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
+      return `
+        <button type="button" class="history-row${isLatest ? " is-latest" : ""}" data-version="${i}">
+          <div class="history-row-ver">v${ver}</div>
+          <div class="history-row-meta">
+            <div class="history-row-name">${escapeHTML(f.name || "(未命名)")}</div>
+            <div class="history-row-info">
+              <span>${escapeHTML(formatDate(f.uploadedAt))}</span>
+              ${f.uploadedBy ? `<span>·</span><span>${escapeHTML(f.uploadedBy)}</span>` : ""}
+              <span>·</span>
+              <span>${escapeHTML(formatBytes(f.size || 0))}</span>
+              ${isLatest ? `<span class="history-row-latest-badge">目前版本</span>` : ""}
+            </div>
+          </div>
+          <div class="history-row-action" aria-hidden="true">${dlSvg}</div>
+        </button>
+      `;
+    }).join("");
+    list.querySelectorAll("[data-version]").forEach((row) => {
+      row.addEventListener("click", () => {
+        const i = parseInt(row.dataset.version, 10);
+        const f = files[i];
+        if (!f) return;
+        downloadFile(f);
+        toast(`下載 ${f.name}`);
+      });
+    });
+  }
+  pop.hidden = false;
+}
+
+function closeHistoryPopover() {
+  const pop = document.getElementById("history-popover");
+  if (pop) pop.hidden = true;
 }
 
 function positionFloatingMenu(menu, anchor) {
@@ -1432,14 +1677,13 @@ function pickCreatorAsMe() {
   });
 }
 
-/* ===== category picker ===== */
+/* ===== category picker (native select; manage via the category chip / popover) ===== */
 function initCategoryPicker() {
   const sel = document.getElementById("category-select");
   if (!sel) return;
   sel.addEventListener("change", (e) => {
     if (e.target.value === "__new__") {
       e.target.value = "";
-      updateSelectDeleteBtn("category");
       openMiniPopover({
         title: "新增分類",
         placeholder: "例如:生活 / CLO / 查詢",
@@ -1449,13 +1693,7 @@ function initCategoryPicker() {
           renderCategorySelect(val);
         },
       });
-      return;
     }
-    updateSelectDeleteBtn("category");
-  });
-  document.getElementById("category-delete")?.addEventListener("click", () => {
-    const v = sel.value;
-    if (v && v !== "__new__") deleteCategory(v);
   });
 }
 
@@ -1470,7 +1708,6 @@ function renderCategorySelect(keepValue) {
   `;
   if (want && state.categories.some((c) => c.name === want)) sel.value = want;
   else sel.value = "";
-  updateSelectDeleteBtn?.("category");
 }
 
 /* Icon editing happens from the tile (initTileIconMenu), not in the form.
