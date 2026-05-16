@@ -12,9 +12,9 @@
 <body>
   <div class="bg-soft"></div>
 
-  <div class="app">
+  <div class="page">
     <!-- Header -->
-    <header class="topbar">
+    <header class="hero">
       <div class="brand">
         <span class="logo">D</span>
         <div class="brand-text">
@@ -28,45 +28,46 @@
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.5-3.5" />
         </svg>
-        <input id="search" type="text" placeholder="搜尋工具、製作人、tag…" />
-        <kbd class="kbd">/</kbd>
+        <input id="search" type="text" placeholder="搜尋工具…" />
       </div>
 
-      <div class="topbar-actions">
-        <button class="btn btn-primary" id="open-add">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-          新增工具
-        </button>
-      </div>
+      <button class="btn btn-primary" id="open-add">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M12 5v14M5 12h14"/></svg>
+        新增工具
+      </button>
     </header>
 
-    <!-- Category tab bar -->
-    <nav class="tabs" id="filters" aria-label="分類"></nav>
+    <!-- Tool board -->
+    <main class="board" id="sections-area"></main>
 
-    <!-- Launchpad grid area -->
-    <main class="launchpad">
-      <div id="sections-area"></div>
+    <!-- Page footer -->
+    <div class="page-foot">
+      <button class="ghost-pill" id="open-add-cat">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        新增分類
+      </button>
+    </div>
 
-      <div class="empty" id="empty" hidden>
-        <div class="empty-art">
-          <svg viewBox="0 0 64 64" width="68" height="68" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="8" y="14" width="22" height="22" rx="5"/>
-            <rect x="34" y="14" width="22" height="22" rx="5"/>
-            <rect x="8" y="40" width="22" height="16" rx="5"/>
-            <rect x="34" y="40" width="22" height="16" rx="5" stroke-dasharray="3 3"/>
-          </svg>
-        </div>
-        <h2 class="empty-title">還沒有任何工具</h2>
-        <p class="empty-sub muted">點右上角「新增工具」開始建立你的第一個入口</p>
-        <button class="btn btn-primary" id="empty-cta">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-          新增第一個工具
-        </button>
+    <!-- Empty state -->
+    <div class="empty" id="empty" hidden>
+      <div class="empty-art">
+        <svg viewBox="0 0 64 64" width="76" height="76" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="8" y="14" width="22" height="22" rx="5"/>
+          <rect x="34" y="14" width="22" height="22" rx="5"/>
+          <rect x="8" y="40" width="22" height="16" rx="5"/>
+          <rect x="34" y="40" width="22" height="16" rx="5" stroke-dasharray="3 3"/>
+        </svg>
       </div>
-    </main>
+      <h2 class="empty-title">還沒有任何工具</h2>
+      <p class="empty-sub">把第一個工具加進來,開始用 DPC Hub</p>
+      <button class="btn btn-primary btn-lg" id="empty-cta">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        新增第一個工具
+      </button>
+    </div>
   </div>
 
-  <!-- Hidden static IDs used by JS but not visible -->
+  <!-- Hidden IDs the JS still references (no UI) -->
   <div hidden>
     <span id="stat-total">0</span>
     <span id="stat-creators">0</span>
@@ -74,6 +75,7 @@
     <span id="head-context"></span>
     <button id="expand-all"></button>
     <button id="collapse-all"></button>
+    <nav id="filters"></nav>
   </div>
 
   <!-- Add / Edit tool popover -->
@@ -196,9 +198,6 @@
       </form>
     </div>
   </div>
-
-  <!-- Hidden button so JS can attach handler for "+ 分類" -->
-  <button id="open-add-cat" hidden></button>
 
   <!-- Iframe modal -->
   <div class="modal" id="modal" hidden>

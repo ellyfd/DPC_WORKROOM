@@ -246,8 +246,7 @@ function renderSections() {
     return;
   }
 
-  const showHeader = state.filter === "all" && !state.query;
-  area.innerHTML = groups.map((g) => sectionHTML(g, showHeader)).join("");
+  area.innerHTML = groups.map((g) => sectionHTML(g, true)).join("");
   wireSections();
 }
 
@@ -567,17 +566,41 @@ async function autoFetch() {
   $("#auto-hint").textContent = "讀取中…";
 
   try {
-    let info = null;
     const gh = parseGitHub(url);
-    if (gh) info = await fetchGitHubRepo(gh.owner, gh.repo);
-    else info = parseGenericURL(url);
+    let info = null;
+    let fallbackNote = "";
+
+    if (gh) {
+      try {
+        info = await fetchGitHubRepo(gh.owner, gh.repo);
+      } catch (ghErr) {
+        // GitHub API failed — fall back to generic URL fill so the user still
+        // gets a name / icon and only needs to fill in the rest manually.
+        info = parseGenericURL(url) || {
+          name: gh.repo, creator: gh.owner, url, type: "url", tags: [],
+          icon: `https://www.google.com/s2/favicons?sz=64&domain=github.com`,
+        };
+        info.name = info.name || gh.repo;
+        info.creator = info.creator || gh.owner;
+        fallbackNote = ghErr?.message || "GitHub 讀取失敗";
+      }
+    } else {
+      info = parseGenericURL(url);
+    }
 
     if (!info) throw new Error("找不到資訊");
+    enrichWithSuggestions(info, gh);
     applyAutoFill(info);
-    box.classList.add("success");
-    $("#auto-hint").textContent = gh
-      ? `✓ 已讀取 GitHub repo:${gh.owner}/${gh.repo}`
-      : "✓ 已從網址讀取網域,請補上名稱與描述";
+
+    if (fallbackNote) {
+      box.classList.add("error");
+      $("#auto-hint").textContent = `${fallbackNote}。已先用 repo 名稱與 owner 填好,請手動補上描述與正確 URL。`;
+    } else {
+      box.classList.add("success");
+      $("#auto-hint").textContent = gh
+        ? `✓ 已讀取 GitHub repo:${gh.owner}/${gh.repo}`
+        : "✓ 已從網址讀取網域,請補上名稱與描述";
+    }
   } catch (err) {
     box.classList.add("error");
     $("#auto-hint").textContent = "讀取失敗:" + (err?.message || "未知錯誤") + "。請手動填寫。";
@@ -594,6 +617,12 @@ function parseGitHub(url) {
 
 async function fetchGitHubRepo(owner, repo) {
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+  if (res.status === 404) {
+    throw new Error("這個 repo 可能是私人或不存在(GitHub 對未登入請求回 404)");
+  }
+  if (res.status === 403) {
+    throw new Error("GitHub API 達到流量上限,稍後再試");
+  }
   if (!res.ok) throw new Error("GitHub API " + res.status);
   const data = await res.json();
   const lang = (data.language || "").toLowerCase();
@@ -627,6 +656,63 @@ function parseGenericURL(url) {
   } catch {
     return null;
   }
+}
+
+const STOP_WORDS = new Set([
+  "the","of","and","for","with","www","com","org","io","app","page",
+  "js","ts","py","html","css","json","txt","md",
+]);
+
+function enrichWithSuggestions(info, gh) {
+  if (!info) return info;
+
+  // --- Tags: pull words out of name + creator if API didn't give topics ---
+  if (!info.tags || !info.tags.length) {
+    const source = `${info.name || ""} ${info.creator || ""}`;
+    const seen = new Set();
+    const tags = [];
+    source.split(/[\s\-_./]+/).forEach((raw) => {
+      const tok = raw.trim().toLowerCase();
+      if (!tok || tok.length < 2 || tok.length > 18) return;
+      if (/^\d+$/.test(tok)) return;            // skip pure numbers (e.g. 0119)
+      if (STOP_WORDS.has(tok)) return;
+      if (seen.has(tok)) return;
+      seen.add(tok);
+      tags.push(tok);
+    });
+    if (info.type === "python") tags.push("python");
+    if (gh) tags.push("github");
+    if (tags.length) info.tags = Array.from(new Set(tags)).slice(0, 5);
+  }
+
+  // --- Description: short sentence built from what we know ---
+  if (!info.description) {
+    const type = info.type || "url";
+    const creator = info.creator || "";
+    const name = info.name || "";
+    let host = "";
+    try { host = info.url ? new URL(info.url).hostname.replace(/^www\./, "") : ""; } catch {}
+
+    if (gh) {
+      info.description = creator
+        ? `${creator} 製作的 ${name}(GitHub repo)`
+        : `${name}(GitHub repo)`;
+    } else if (type === "python") {
+      info.description = creator
+        ? `${creator} 的 ${name},Python 工具`
+        : `${name},Python 工具`;
+    } else if (type === "iframe") {
+      info.description = `${name},可內嵌的頁面`;
+    } else if (host) {
+      info.description = creator
+        ? `${creator} 在 ${host} 上的工具`
+        : `${host} 上的工具`;
+    } else {
+      info.description = name;
+    }
+  }
+
+  return info;
 }
 
 function applyAutoFill(info) {
