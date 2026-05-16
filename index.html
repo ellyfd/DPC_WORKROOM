@@ -10,119 +10,164 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="bg-hex"></div>
+  <!-- Outer scene -->
+  <div class="bg-iso"></div>
   <div class="bg-glow"></div>
-  <div class="bg-scan"></div>
+  <div class="bg-vignette"></div>
 
-  <div class="app">
-    <!-- TOP HUD --------------------------------------------- -->
-    <header class="hud-top">
-      <div class="hud-brand">
-        <span class="logo-mark">
-          <svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4">
-            <path d="M4 8 L16 4 L28 8 L28 24 L16 28 L4 24 Z" />
-            <path d="M4 8 L16 12 L28 8" />
-            <path d="M16 12 L16 28" />
-          </svg>
-        </span>
-        <div class="brand-text">
-          <div class="brand-title">DPC<span class="accent">// HUB</span></div>
-          <div class="brand-sub">
-            <span class="dot live"></span>
-            workstation · online
+  <!-- ISO decorations -->
+  <svg class="iso-deco iso-deco-tl" viewBox="0 0 120 120" aria-hidden="true">
+    <g stroke="currentColor" fill="none" stroke-width="1.5">
+      <path d="M60 20 L100 40 L60 60 L20 40 Z" />
+      <path d="M20 40 L20 80 L60 100 L60 60" />
+      <path d="M100 40 L100 80 L60 100" />
+    </g>
+  </svg>
+  <svg class="iso-deco iso-deco-br" viewBox="0 0 160 160" aria-hidden="true">
+    <g stroke="currentColor" fill="none" stroke-width="1.5">
+      <path d="M80 24 L132 52 L80 80 L28 52 Z" />
+      <path d="M28 52 L28 104 L80 132 L80 80" />
+      <path d="M132 52 L132 104 L80 132" />
+      <path d="M28 78 L80 106 L132 78" stroke-dasharray="3 3" opacity="0.5"/>
+    </g>
+  </svg>
+  <svg class="iso-deco iso-deco-tr" viewBox="0 0 100 100" aria-hidden="true">
+    <g stroke="currentColor" fill="none" stroke-width="1.4">
+      <path d="M50 18 L82 34 L50 50 L18 34 Z" />
+      <path d="M18 34 L18 66 L50 82 L50 50" />
+      <path d="M82 34 L82 66 L50 82" />
+    </g>
+  </svg>
+  <svg class="iso-deco iso-deco-bl" viewBox="0 0 110 110" aria-hidden="true">
+    <g stroke="currentColor" fill="none" stroke-width="1.4">
+      <path d="M55 20 L88 38 L55 56 L22 38 Z" />
+      <path d="M22 38 L22 72 L55 90 L55 56" />
+      <path d="M88 38 L88 72 L55 90" />
+    </g>
+  </svg>
+
+  <!-- CABINET (centered game frame) -->
+  <div class="cabinet">
+    <div class="cabinet-bezel">
+      <span class="screw screw-tl"></span>
+      <span class="screw screw-tr"></span>
+      <span class="screw screw-bl"></span>
+      <span class="screw screw-br"></span>
+      <div class="bezel-label">
+        <span class="bezel-led"></span>
+        <span class="bezel-text">DPC // HUB · MK-II</span>
+        <span class="bezel-tag">SYS · ONLINE</span>
+      </div>
+      <div class="bezel-grille">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <div class="app">
+      <!-- TOP HUD ------------------------------------------- -->
+      <header class="hud-top">
+        <div class="hud-brand">
+          <span class="logo-mark">
+            <svg viewBox="0 0 32 32" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4">
+              <path d="M4 8 L16 4 L28 8 L28 24 L16 28 L4 24 Z" />
+              <path d="M4 8 L16 12 L28 8" />
+              <path d="M16 12 L16 28" />
+            </svg>
+          </span>
+          <div class="brand-text">
+            <div class="brand-title">DPC<span class="accent">// HUB</span></div>
+            <div class="brand-sub">
+              <span class="dot live"></span>
+              workstation · online
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="hud-meters">
-        <div class="meter" data-mt="0">
-          <div class="meter-lbl">TOOLS</div>
-          <div class="meter-val" id="stat-total">0</div>
-          <div class="meter-bar"><span></span></div>
+        <div class="hud-meters">
+          <div class="meter" data-mt="0">
+            <div class="meter-lbl">TOOLS</div>
+            <div class="meter-val" id="stat-total">0</div>
+            <div class="meter-bar"><span></span></div>
+          </div>
+          <div class="meter" data-mt="1">
+            <div class="meter-lbl">CREATORS</div>
+            <div class="meter-val" id="stat-creators">0</div>
+            <div class="meter-bar"><span></span></div>
+          </div>
+          <div class="meter" data-mt="2">
+            <div class="meter-lbl">GROUPS</div>
+            <div class="meter-val" id="stat-categories">0</div>
+            <div class="meter-bar"><span></span></div>
+          </div>
         </div>
-        <div class="meter" data-mt="1">
-          <div class="meter-lbl">CREATORS</div>
-          <div class="meter-val" id="stat-creators">0</div>
-          <div class="meter-bar"><span></span></div>
-        </div>
-        <div class="meter" data-mt="2">
-          <div class="meter-lbl">GROUPS</div>
-          <div class="meter-val" id="stat-categories">0</div>
-          <div class="meter-bar"><span></span></div>
-        </div>
-      </div>
 
-      <div class="hud-tools">
-        <div class="search">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-          <input id="search" type="text" placeholder="搜尋 tool / creator / tag…" />
-          <kbd class="kbd">/</kbd>
+        <div class="hud-tools">
+          <div class="search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <input id="search" type="text" placeholder="搜尋…" />
+            <kbd class="kbd">/</kbd>
+          </div>
+          <button class="btn btn-ghost" id="open-add-cat" title="新增分類">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
+            分類
+          </button>
+          <button class="btn btn-primary" id="open-add">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            NEW
+          </button>
         </div>
-        <button class="btn btn-ghost" id="open-add-cat" title="新增分類">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
-          分類
-        </button>
-        <button class="btn btn-primary" id="open-add">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-          NEW TOOL
-        </button>
-      </div>
-    </header>
+      </header>
 
-    <!-- LEFT NAV -------------------------------------------- -->
-    <aside class="hud-side">
-      <div class="hud-side-head">
-        <span class="pip"></span>
-        <span>FILTER · CATEGORIES</span>
-      </div>
-      <div class="filter-bar" id="filters"></div>
-
-      <div class="hud-side-foot">
+      <!-- LEFT NAV ----------------------------------------- -->
+      <aside class="hud-side">
         <div class="hud-side-head">
-          <span class="pip warn"></span>
-          <span>SHORTCUTS</span>
+          <span class="pip"></span>
+          <span>CATEGORIES</span>
         </div>
-        <div class="kbd-row"><kbd class="kbd">/</kbd><span>搜尋</span></div>
-        <div class="kbd-row"><kbd class="kbd">ESC</kbd><span>關閉視窗</span></div>
-        <div class="kbd-row"><kbd class="kbd">N</kbd><span>新增工具</span></div>
-      </div>
-    </aside>
+        <div class="filter-bar" id="filters"></div>
 
-    <!-- WORKSPACE ------------------------------------------- -->
-    <main class="workspace">
-      <div class="workspace-bar">
-        <div class="wb-left">
-          <span class="wb-tag">SECTOR</span>
-          <span class="wb-context" id="head-context">ALL TOOLS</span>
+        <div class="hud-side-foot">
+          <div class="kbd-row"><kbd class="kbd">/</kbd><span>搜尋</span></div>
+          <div class="kbd-row"><kbd class="kbd">N</kbd><span>新增</span></div>
+          <div class="kbd-row"><kbd class="kbd">ESC</kbd><span>關閉</span></div>
         </div>
-        <div class="wb-right">
-          <button class="ghost-link" id="expand-all">▼ 全部展開</button>
-          <button class="ghost-link" id="collapse-all">▲ 全部摺疊</button>
-        </div>
-      </div>
+      </aside>
 
-      <div class="sections-area" id="sections-area"></div>
-
-      <div class="empty" id="empty" hidden>
-        <div class="empty-art">
-          <svg viewBox="0 0 64 64" width="72" height="72" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="6" y="14" width="22" height="22" rx="1"/>
-            <rect x="36" y="14" width="22" height="22" rx="1"/>
-            <rect x="6" y="42" width="22" height="16" rx="1"/>
-            <rect x="36" y="42" width="22" height="16" rx="1" stroke-dasharray="3 3"/>
-          </svg>
+      <!-- WORKSPACE ---------------------------------------- -->
+      <main class="workspace">
+        <div class="workspace-bar">
+          <div class="wb-left">
+            <span class="wb-tag">SECTOR</span>
+            <span class="wb-context" id="head-context">ALL TOOLS</span>
+          </div>
+          <div class="wb-right">
+            <button class="ghost-link" id="expand-all">▼ 全展開</button>
+            <button class="ghost-link" id="collapse-all">▲ 全摺疊</button>
+          </div>
         </div>
-        <p class="empty-title">工作站還是空的</p>
-        <p class="muted small">把第一個工具加進來,開始建你的 hub</p>
-        <button class="btn btn-primary" id="empty-cta" style="margin-top:14px">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-          新增第一個工具
-        </button>
-      </div>
-    </main>
+
+        <div class="sections-area" id="sections-area"></div>
+
+        <div class="empty" id="empty" hidden>
+          <div class="empty-art">
+            <svg viewBox="0 0 64 64" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M32 6 L54 19 L32 32 L10 19 Z" />
+              <path d="M10 19 L10 45 L32 58 L32 32" />
+              <path d="M54 19 L54 45 L32 58" />
+            </svg>
+          </div>
+          <p class="empty-title">EMPTY · INSERT TOOL</p>
+          <p class="muted small">把第一個工具加進來,開始建你的 hub</p>
+          <button class="btn btn-primary" id="empty-cta" style="margin-top:14px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            新增第一個工具
+          </button>
+        </div>
+      </main>
+    </div>
   </div>
 
   <!-- Add / Edit tool popover -->
