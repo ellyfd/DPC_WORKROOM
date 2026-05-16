@@ -110,6 +110,29 @@
 
         <div class="form-divider"><span>或自己填</span></div>
 
+        <!-- Icon picker -->
+        <div class="icon-picker">
+          <div class="icon-preview" id="icon-preview">
+            <span class="icon-preview-letter" id="icon-preview-letter">?</span>
+            <img id="icon-preview-img" alt="" hidden />
+          </div>
+          <div class="icon-actions">
+            <button type="button" class="btn-mini" id="icon-upload-btn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              上傳
+            </button>
+            <button type="button" class="btn-mini" id="icon-url-btn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              網址
+            </button>
+            <button type="button" class="btn-mini btn-mini-ghost" id="icon-clear-btn" hidden>
+              預設
+            </button>
+            <input type="file" id="icon-file" accept="image/*" hidden />
+            <input type="hidden" name="icon" />
+          </div>
+        </div>
+
         <div class="row">
           <label>
             <span>工具名稱 *</span>
@@ -117,24 +140,19 @@
           </label>
           <label>
             <span>製作人 *</span>
-            <div class="creator-row">
-              <select name="creator" id="creator-select" required>
-                <option value="" disabled selected>— 選擇製作人 —</option>
-                <option value="__new__">＋ 新增製作人…</option>
-              </select>
-            </div>
-            <div class="creator-new" id="creator-new" hidden>
-              <input type="text" id="creator-new-input" placeholder="新製作人名稱" />
-              <button type="button" class="btn-mini btn-mini-primary" id="creator-new-confirm">加入</button>
-              <button type="button" class="btn-mini" id="creator-new-cancel">取消</button>
-            </div>
+            <select name="creator" id="creator-select" required>
+              <option value="" disabled selected>— 選擇製作人 —</option>
+              <option value="__new__">＋ 新增製作人…</option>
+            </select>
           </label>
         </div>
         <div class="row">
           <label>
             <span>分類</span>
-            <input name="category" placeholder="例如:生活 / CLO" list="cat-list" />
-            <datalist id="cat-list"></datalist>
+            <select name="category" id="category-select">
+              <option value="">— 沒有分類 —</option>
+              <option value="__new__">＋ 新增分類…</option>
+            </select>
           </label>
           <label>
             <span>版本</span>
@@ -223,6 +241,27 @@
         </button>
       </div>
       <iframe id="modal-frame" src="about:blank" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <!-- Mini popover (for adding new creator / category / setting icon URL) -->
+  <div class="mini-popover" id="mini-popover" hidden>
+    <div class="mini-popover-backdrop" data-close></div>
+    <div class="mini-popover-panel" role="dialog" aria-modal="true">
+      <div class="mini-popover-head">
+        <div class="mini-popover-title" id="mini-popover-title">新增</div>
+        <button class="icon-btn" data-close aria-label="關閉">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="mini-popover-body">
+        <input id="mini-popover-input" type="text" />
+        <div class="mini-popover-hint muted small" id="mini-popover-hint" hidden></div>
+      </div>
+      <div class="mini-popover-actions">
+        <button type="button" class="btn btn-secondary" data-close>取消</button>
+        <button type="button" class="btn btn-primary" id="mini-popover-confirm">確定</button>
+      </div>
     </div>
   </div>
 

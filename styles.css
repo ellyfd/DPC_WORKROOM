@@ -611,26 +611,47 @@ h1, h2, h3 { margin: 0; }
 .form-actions .btn { height: 38px; padding: 0 16px; font-size: 14px; }
 
 /* ============================================================
-   Creator picker (select + inline "new creator" panel)
+   Icon picker (preview + 上傳 / 網址 / 預設)
    ============================================================ */
-.creator-row { display: flex; }
-.creator-row select { flex: 1; min-width: 0; }
-.creator-row select:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.creator-new {
-  display: flex; gap: 6px;
-  margin-top: 6px;
+.icon-picker {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
-.creator-new input {
-  flex: 1;
-  background: var(--surface);
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-weight: 500;
-  outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft);
+.icon-preview {
+  position: relative;
+  width: 58px; height: 58px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--c1, #60a5fa), var(--c2, #6366f1));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 6px 16px -6px rgba(15, 23, 42, 0.25);
+}
+.icon-preview::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.22), transparent 50%);
+  pointer-events: none;
+}
+.icon-preview-letter { position: relative; z-index: 1; }
+.icon-preview img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover;
+  z-index: 2;
+  background: #fff;
+}
+.icon-actions {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  flex: 1; min-width: 0;
 }
 
 .btn-mini {
@@ -654,6 +675,76 @@ h1, h2, h3 { margin: 0; }
   border-color: var(--accent);
 }
 .btn-mini-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+.btn-mini-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-mute);
+}
+.btn-mini-ghost:hover { color: var(--danger); border-color: #fecaca; background: var(--danger-soft); }
+
+/* ============================================================
+   Mini popover (centered prompt — adds creator / category / icon URL)
+   ============================================================ */
+.mini-popover {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.mini-popover[hidden] { display: none; }
+.mini-popover-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.mini-popover-panel {
+  position: relative;
+  width: 380px;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: pop-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center;
+}
+.mini-popover-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.mini-popover-title {
+  font-weight: 700;
+  font-size: 15.5px;
+  letter-spacing: -0.01em;
+}
+.mini-popover-body {
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.mini-popover-body input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.mini-popover-body input::placeholder { color: var(--text-mute); font-weight: 400; }
+.mini-popover-body input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.mini-popover-hint { font-size: 12.5px; }
+.mini-popover-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 4px 16px 16px;
+}
+.mini-popover-actions .btn { height: 38px; padding: 0 16px; font-size: 13.5px; }
 
 /* ============================================================
    Color picker
@@ -845,13 +936,17 @@ h1, h2, h3 { margin: 0; }
   .popover-form { padding: 14px 16px 18px; gap: 12px; }
   .popover-head { padding: 16px 16px 12px; }
 
-  /* Inputs slightly bigger touch targets */
+  /* Inputs: 16px prevents iOS Safari auto-zoom on focus */
   .popover-form input,
   .popover-form select,
-  .popover-form textarea { font-size: 15px; padding: 11px 12px; }
-  .creator-new input { font-size: 15px; padding: 11px 12px; }
+  .popover-form textarea { font-size: 16px; padding: 11px 12px; }
+  .mini-popover-body input { font-size: 16px; padding: 12px 12px; }
   .btn-mini { height: 42px; padding: 0 14px; font-size: 14px; }
   .form-actions .btn { height: 42px; font-size: 14px; padding: 0 18px; }
+
+  /* Icon picker tightens up */
+  .icon-picker { padding: 10px 12px; gap: 12px; }
+  .icon-preview { width: 52px; height: 52px; font-size: 22px; border-radius: 14px; }
 
   /* Modal fits the screen */
   .modal { padding: 8px; }

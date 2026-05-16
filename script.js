@@ -53,7 +53,10 @@ async function init() {
 
   initToolPopover();
   initCatPopover();
+  initMiniPopover();
   initCreatorPicker();
+  initCategoryPicker();
+  initIconPicker();
   initModal();
   initShortcuts();
 }
@@ -206,7 +209,9 @@ function renderStats() {
   $("#stat-creators").textContent = uniq(list.map((t) => t.creator)).length;
   $("#stat-categories").textContent = state.categories.length;
 
-  $("#cat-list").innerHTML = state.categories
+  // datalist is no longer used (category is a select); keep this guarded
+  const catList = document.getElementById("cat-list");
+  if (catList) catList.innerHTML = state.categories
     .map((c) => `<option value="${escapeAttr(c.name)}"></option>`).join("");
 }
 
@@ -434,46 +439,206 @@ function openTool(t) {
   }
 }
 
+/* ===== mini popover (reusable single-input prompt) ===== */
+let miniPopoverHandler = null;
+
+function initMiniPopover() {
+  const pop = document.getElementById("mini-popover");
+  if (!pop) return;
+  pop.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", closeMiniPopover)
+  );
+  const input = document.getElementById("mini-popover-input");
+  const confirm = document.getElementById("mini-popover-confirm");
+  confirm.addEventListener("click", () => commitMini());
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commitMini(); }
+    else if (e.key === "Escape") { e.preventDefault(); closeMiniPopover(); }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !pop.hidden) closeMiniPopover();
+  });
+}
+
+function openMiniPopover({ title, placeholder = "", defaultValue = "", hint = "", type = "text", onConfirm }) {
+  document.getElementById("mini-popover-title").textContent = title;
+  const input = document.getElementById("mini-popover-input");
+  input.type = type;
+  input.placeholder = placeholder;
+  input.value = defaultValue || "";
+  const hintEl = document.getElementById("mini-popover-hint");
+  hintEl.textContent = hint || "";
+  hintEl.hidden = !hint;
+  miniPopoverHandler = onConfirm;
+  document.getElementById("mini-popover").hidden = false;
+  setTimeout(() => { input.focus(); input.select(); }, 30);
+}
+
+function closeMiniPopover() {
+  document.getElementById("mini-popover").hidden = true;
+  miniPopoverHandler = null;
+  document.getElementById("mini-popover-input").value = "";
+}
+
+function commitMini() {
+  const val = document.getElementById("mini-popover-input").value.trim();
+  if (!miniPopoverHandler) { closeMiniPopover(); return; }
+  const fn = miniPopoverHandler;
+  closeMiniPopover();
+  fn(val);
+}
+
 /* ===== creator picker ===== */
 function initCreatorPicker() {
   const sel = document.getElementById("creator-select");
-  const box = document.getElementById("creator-new");
-  const input = document.getElementById("creator-new-input");
-  const confirm = document.getElementById("creator-new-confirm");
-  const cancel = document.getElementById("creator-new-cancel");
-  if (!sel || !box || !input || !confirm || !cancel) return;
-
+  if (!sel) return;
   sel.addEventListener("change", (e) => {
     if (e.target.value === "__new__") {
       e.target.value = "";
-      showNew();
+      openMiniPopover({
+        title: "新增製作人",
+        placeholder: "輸入名稱",
+        onConfirm: (val) => {
+          if (!val) return;
+          ensureCreator(val);
+          renderCreatorSelect(val);
+        },
+      });
     }
   });
-  confirm.addEventListener("click", commitNew);
-  cancel.addEventListener("click", hideNew);
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); commitNew(); }
-    else if (e.key === "Escape") { e.preventDefault(); hideNew(); }
+}
+
+/* ===== category picker ===== */
+function initCategoryPicker() {
+  const sel = document.getElementById("category-select");
+  if (!sel) return;
+  sel.addEventListener("change", (e) => {
+    if (e.target.value === "__new__") {
+      e.target.value = "";
+      openMiniPopover({
+        title: "新增分類",
+        placeholder: "例如:生活 / CLO / 查詢",
+        onConfirm: (val) => {
+          if (!val) return;
+          ensureCategory(val);
+          renderCategorySelect(val);
+        },
+      });
+    }
+  });
+}
+
+function renderCategorySelect(keepValue) {
+  const sel = document.getElementById("category-select");
+  if (!sel) return;
+  const want = keepValue != null ? keepValue : sel.value;
+  sel.innerHTML = `
+    <option value="">— 沒有分類 —</option>
+    ${state.categories.map((c) => `<option value="${escapeAttr(c.name)}">${escapeHTML(c.name)}</option>`).join("")}
+    <option value="__new__">＋ 新增分類…</option>
+  `;
+  if (want && state.categories.some((c) => c.name === want)) sel.value = want;
+  else sel.value = "";
+}
+
+/* ===== icon picker ===== */
+function initIconPicker() {
+  const upload = document.getElementById("icon-upload-btn");
+  const urlBtn = document.getElementById("icon-url-btn");
+  const clear = document.getElementById("icon-clear-btn");
+  const file = document.getElementById("icon-file");
+  if (!upload || !urlBtn || !clear || !file) return;
+
+  upload.addEventListener("click", () => file.click());
+  file.addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith("image/")) { toast("請選圖片檔"); return; }
+    try {
+      const dataUrl = await readAndResize(f, 256);
+      setIcon(dataUrl);
+    } catch {
+      toast("圖片讀取失敗");
+    }
+    e.target.value = "";
   });
 
-  function showNew() {
-    box.hidden = false;
-    sel.disabled = true;
-    input.value = "";
-    setTimeout(() => input.focus(), 30);
+  urlBtn.addEventListener("click", () => {
+    const current = $("#add-form").elements.icon.value || "";
+    openMiniPopover({
+      title: "圖片網址",
+      placeholder: "https://...",
+      defaultValue: current.startsWith("data:") ? "" : current,
+      hint: "貼上任何圖片的網址,儲存後會顯示為工具圖示",
+      type: "url",
+      onConfirm: (val) => setIcon(val || ""),
+    });
+  });
+
+  clear.addEventListener("click", () => setIcon(""));
+}
+
+function setIcon(value) {
+  const f = $("#add-form").elements;
+  f.icon.value = value || "";
+  updateIconPreview();
+}
+
+function updateIconPreview() {
+  const f = $("#add-form").elements;
+  const preview = document.getElementById("icon-preview");
+  const img = document.getElementById("icon-preview-img");
+  const letter = document.getElementById("icon-preview-letter");
+  const clearBtn = document.getElementById("icon-clear-btn");
+  const icon = f.icon.value;
+  const name = f.name.value;
+
+  letter.textContent = initial(name);
+
+  if (icon) {
+    img.onerror = () => {
+      img.hidden = true;
+      img.removeAttribute("src");
+      clearBtn.hidden = true;
+    };
+    img.src = icon;
+    img.hidden = false;
+    clearBtn.hidden = false;
+  } else {
+    img.hidden = true;
+    img.removeAttribute("src");
+    clearBtn.hidden = true;
   }
-  function hideNew() {
-    box.hidden = true;
-    sel.disabled = false;
-    input.value = "";
-  }
-  function commitNew() {
-    const name = input.value.trim();
-    if (!name) { toast("請輸入製作人名稱"); input.focus(); return; }
-    ensureCreator(name);
-    renderCreatorSelect(name);
-    hideNew();
-  }
+
+  const cat = state.categories.find((c) => c.name === f.category.value);
+  preview.dataset.cv = cat ? String(cat.color) : "0";
+}
+
+async function readAndResize(file, maxSize) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        const ratio = Math.min(maxSize / width, maxSize / height, 1);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        // Keep alpha if the source has any (rough heuristic — PNG/SVG)
+        const usePng = /image\/(png|svg)/i.test(file.type);
+        resolve(canvas.toDataURL(usePng ? "image/png" : "image/jpeg", 0.86));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 /* ===== tool popover ===== */
@@ -494,9 +659,15 @@ function initToolPopover() {
     if (e.key === "Enter") { e.preventDefault(); autoFetch(); }
   });
 
-  $("#add-form").addEventListener("input", () => {
+  $("#add-form").addEventListener("input", (e) => {
+    if (e.target.name === "name" || e.target.name === "category") {
+      updateIconPreview();
+    }
     if (state.editingId) return;
     saveJSON(LS_DRAFT_KEY, formData());
+  });
+  $("#add-form").addEventListener("change", (e) => {
+    if (e.target.name === "category") updateIconPreview();
   });
 
   window.addEventListener("resize", () => {
@@ -513,14 +684,6 @@ function openToolPopover(id = null, anchor = null) {
   $("#popover-sub").textContent = id ? "修改後按儲存" : "貼上連結自動讀取,或手動填寫";
   $("#delete-tool").hidden = !id;
 
-  // Always close the inline "new creator" panel and rebuild the dropdown
-  // so editing a tool with an unknown creator (e.g. legacy data) still
-  // shows it as an option.
-  const cnBox = document.getElementById("creator-new");
-  const cSel = document.getElementById("creator-select");
-  if (cnBox) cnBox.hidden = true;
-  if (cSel) cSel.disabled = false;
-
   if (id) {
     const t = allTools().find((x) => x.id === id);
     if (t) {
@@ -528,21 +691,25 @@ function openToolPopover(id = null, anchor = null) {
       form.elements.name.value = t.name || "";
       if (t.creator) ensureCreator(t.creator);
       renderCreatorSelect(t.creator || "");
+      renderCategorySelect(t.category || "");
       form.elements.version.value = t.version || "1.0.0";
-      form.elements.category.value = t.category || "";
       form.elements.type.value = t.type || "url";
       form.elements.url.value = t.url === "#" ? "" : (t.url || "");
       form.elements.description.value = t.description || "";
       form.elements.tags.value = (t.tags || []).join(", ");
+      form.elements.icon.value = t.icon || "";
     }
   } else {
     renderCreatorSelect("");
+    renderCategorySelect(state.prefillCategory || "");
+    form.elements.icon.value = "";
     restoreDraft();
     if (state.prefillCategory) {
-      form.elements.category.value = state.prefillCategory;
+      renderCategorySelect(state.prefillCategory);
       state.prefillCategory = null;
     }
   }
+  updateIconPreview();
 
   const anchorEl = anchor || $("#open-add");
   state.anchorEl = anchorEl;
@@ -567,13 +734,14 @@ function formData() {
   return {
     id: f.id.value || "",
     name: f.name.value.trim(),
-    creator: f.creator.value.trim(),
+    creator: (f.creator.value || "").trim(),
     version: f.version.value.trim() || "1.0.0",
-    category: f.category.value.trim(),
+    category: (f.category.value || "").trim(),
     type: f.type.value,
     url: f.url.value.trim(),
     description: f.description.value.trim(),
     tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
+    icon: f.icon.value.trim(),
   };
 }
 
@@ -583,16 +751,19 @@ function restoreDraft() {
   const f = $("#add-form").elements;
   if (d.name) f.name.value = d.name;
   if (d.creator) {
-    // Only restore if it's a real option (avoid leaking stale drafts)
     const opts = Array.from(f.creator.options || []);
     if (opts.some((o) => o.value === d.creator)) f.creator.value = d.creator;
   }
   if (d.version) f.version.value = d.version;
-  if (d.category) f.category.value = d.category;
+  if (d.category) {
+    const opts = Array.from(f.category.options || []);
+    if (opts.some((o) => o.value === d.category)) f.category.value = d.category;
+  }
   if (d.type) f.type.value = d.type;
   if (d.url) f.url.value = d.url;
   if (d.description) f.description.value = d.description;
   if (d.tags?.length) f.tags.value = d.tags.join(", ");
+  if (d.icon) f.icon.value = d.icon;
 }
 
 function saveTool() {
@@ -621,20 +792,9 @@ function saveTool() {
     type: d.type,
     url: d.url,
     tags: d.tags,
+    icon: d.icon || "",
     updated: new Date().toISOString().slice(0, 10),
   };
-
-  // Pull icon stashed by auto-fetch — try the new id first, then whatever
-  // slug the form was carrying (auto-fetch keys by slugify(name) which may
-  // differ from the uniquified id).
-  const iconKeys = [id, d.id].filter(Boolean);
-  for (const k of iconKeys) {
-    if (pendingIcon[k]) {
-      record.icon = pendingIcon[k];
-      delete pendingIcon[k];
-      break;
-    }
-  }
 
   const idx = state.localTools.findIndex((t) => t.id === id);
   if (idx >= 0) state.localTools[idx] = record;
@@ -709,7 +869,6 @@ async function autoFetch() {
     }
 
     if (!info) throw new Error("找不到資訊");
-    enrichWithSuggestions(info, gh);
     applyAutoFill(info);
 
     if (fallbackNote) {
@@ -780,63 +939,6 @@ function parseGenericURL(url) {
   }
 }
 
-const STOP_WORDS = new Set([
-  "the","of","and","for","with","www","com","org","io","app","page",
-  "js","ts","py","html","css","json","txt","md",
-]);
-
-function enrichWithSuggestions(info, gh) {
-  if (!info) return info;
-
-  // --- Tags: pull words out of name + creator if API didn't give topics ---
-  if (!info.tags || !info.tags.length) {
-    const source = `${info.name || ""} ${info.creator || ""}`;
-    const seen = new Set();
-    const tags = [];
-    source.split(/[\s\-_./]+/).forEach((raw) => {
-      const tok = raw.trim().toLowerCase();
-      if (!tok || tok.length < 2 || tok.length > 18) return;
-      if (/^\d+$/.test(tok)) return;            // skip pure numbers (e.g. 0119)
-      if (STOP_WORDS.has(tok)) return;
-      if (seen.has(tok)) return;
-      seen.add(tok);
-      tags.push(tok);
-    });
-    if (info.type === "python") tags.push("python");
-    if (gh) tags.push("github");
-    if (tags.length) info.tags = Array.from(new Set(tags)).slice(0, 5);
-  }
-
-  // --- Description: short sentence built from what we know ---
-  if (!info.description) {
-    const type = info.type || "url";
-    const creator = info.creator || "";
-    const name = info.name || "";
-    let host = "";
-    try { host = info.url ? new URL(info.url).hostname.replace(/^www\./, "") : ""; } catch {}
-
-    if (gh) {
-      info.description = creator
-        ? `${creator} 製作的 ${name}(GitHub repo)`
-        : `${name}(GitHub repo)`;
-    } else if (type === "python") {
-      info.description = creator
-        ? `${creator} 的 ${name},Python 工具`
-        : `${name},Python 工具`;
-    } else if (type === "iframe") {
-      info.description = `${name},可內嵌的頁面`;
-    } else if (host) {
-      info.description = creator
-        ? `${creator} 在 ${host} 上的工具`
-        : `${host} 上的工具`;
-    } else {
-      info.description = name;
-    }
-  }
-
-  return info;
-}
-
 function applyAutoFill(info) {
   const f = $("#add-form").elements;
   if (info.name) f.name.value = info.name;
@@ -848,14 +950,9 @@ function applyAutoFill(info) {
   if (info.url) f.url.value = info.url;
   if (info.type) f.type.value = info.type;
   if (info.tags?.length) f.tags.value = info.tags.join(", ");
-  if (info.icon) {
-    const id = f.id.value || slugify(f.name.value);
-    f.id.value = id;
-    pendingIcon[id] = info.icon;
-  }
+  if (info.icon) f.icon.value = info.icon;
+  updateIconPreview();
 }
-
-const pendingIcon = {};
 
 /* ===== category popover ===== */
 function initCatPopover() {
