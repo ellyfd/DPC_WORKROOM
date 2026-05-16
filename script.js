@@ -57,6 +57,7 @@ async function init() {
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#open-add-cat").addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
   $("#empty-cta").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
+  $("#open-backup")?.addEventListener("click", openBackupPopover);
   $("#expand-all")?.addEventListener("click", () => setAllCollapsed(false));
   $("#collapse-all")?.addEventListener("click", () => setAllCollapsed(true));
 
@@ -69,6 +70,7 @@ async function init() {
   initIconPicker();
   initTypeSelector();
   initFileUpload();
+  initBackupPopover();
   initModal();
   initShortcuts();
 }
@@ -749,6 +751,89 @@ function downloadPyFile(record) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 100);
+}
+
+/* ===== backup / restore ===== */
+function initBackupPopover() {
+  const pop = document.getElementById("backup-popover");
+  if (!pop) return;
+  pop.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", () => { pop.hidden = true; })
+  );
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !pop.hidden) pop.hidden = true;
+  });
+  document.getElementById("backup-export").addEventListener("click", exportBackup);
+  document.getElementById("backup-import").addEventListener("click", () => {
+    document.getElementById("backup-file").click();
+  });
+  document.getElementById("backup-file").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (file) await importBackup(file);
+    e.target.value = "";
+  });
+}
+
+function openBackupPopover() {
+  document.getElementById("backup-popover").hidden = false;
+}
+
+function exportBackup() {
+  const data = {
+    app: "dpcHub",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    tools: state.localTools,
+    categories: state.categories,
+    creators: state.creators,
+    brands: state.brands,
+  };
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `dpc-hub-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+  toast("已下載備份");
+  document.getElementById("backup-popover").hidden = true;
+}
+
+async function importBackup(file) {
+  try {
+    const text = await readFileAsText(file);
+    const data = JSON.parse(text);
+    if (!data || typeof data !== "object") throw new Error("不是合法 JSON");
+    if (!Array.isArray(data.tools) && !Array.isArray(data.categories)) {
+      throw new Error("看起來不是 DPC Hub 備份檔");
+    }
+    const summary = [
+      Array.isArray(data.tools) ? `${data.tools.length} 個工具` : null,
+      Array.isArray(data.categories) ? `${data.categories.length} 個分類` : null,
+      Array.isArray(data.creators) ? `${data.creators.length} 位製作人` : null,
+      Array.isArray(data.brands) ? `${data.brands.length} 個品牌` : null,
+    ].filter(Boolean).join("、");
+    if (!confirm(`匯入這份備份(${summary})會覆蓋目前所有資料,確定?`)) return;
+
+    if (Array.isArray(data.tools)) state.localTools = data.tools;
+    if (Array.isArray(data.categories)) state.categories = data.categories;
+    if (Array.isArray(data.creators)) state.creators = data.creators;
+    if (Array.isArray(data.brands)) state.brands = data.brands;
+
+    saveTools();
+    saveCats();
+    saveJSON(LS_CREATORS_KEY, state.creators);
+    saveJSON(LS_BRANDS_KEY, state.brands);
+
+    render();
+    toast("匯入成功");
+    document.getElementById("backup-popover").hidden = true;
+  } catch (err) {
+    toast("匯入失敗:" + (err?.message || "未知錯誤"));
+  }
 }
 
 /* ===== category picker ===== */
