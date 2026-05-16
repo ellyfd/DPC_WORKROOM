@@ -46,10 +46,6 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
         新增分類
       </button>
-      <button class="ghost-pill" id="open-backup">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        備份 / 還原
-      </button>
     </div>
 
     <!-- Empty state -->
@@ -115,51 +111,20 @@
           </button>
         </div>
 
-        <!-- 2. Icon picker (single dropdown trigger) -->
-        <div class="icon-picker">
-          <div class="icon-preview" id="icon-preview">
-            <span class="icon-preview-letter" id="icon-preview-letter">?</span>
-            <img id="icon-preview-img" alt="" hidden />
-          </div>
-          <div class="icon-actions">
-            <div class="icon-menu-wrap">
-              <button type="button" class="btn-mini icon-menu-trigger" id="icon-menu-btn" aria-haspopup="true" aria-expanded="false">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                <span>更換圖示</span>
-                <svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              <div class="icon-menu" id="icon-menu" hidden>
-                <button type="button" class="icon-menu-item" data-icon-action="upload">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                  <span>上傳圖片</span>
-                </button>
-                <button type="button" class="icon-menu-item" data-icon-action="url">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-                  <span>用圖片網址</span>
-                </button>
-                <div class="icon-menu-sep" id="icon-menu-sep" hidden></div>
-                <button type="button" class="icon-menu-item danger" data-icon-action="clear" id="icon-menu-clear" hidden>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                  <span>用預設(漸層 + 首字)</span>
-                </button>
-              </div>
-            </div>
-            <input type="file" id="icon-file" accept="image/*" hidden />
-            <input type="hidden" name="icon" />
-          </div>
-        </div>
+        <!-- Icon edited from the tile itself (outer action button), not in this form -->
+        <input type="hidden" name="icon" />
 
         <!-- 4a. File manager (file type) -->
         <div class="file-manager" data-show-for-type="file" hidden>
-          <div class="file-manager-head">
-            <div class="file-manager-title">版本紀錄</div>
-            <button type="button" class="btn-mini btn-mini-primary" id="file-add-version">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
-              上傳新版本
-            </button>
+          <div class="file-manager-title">版本紀錄</div>
+          <div class="file-dropzone" id="file-dropzone" tabindex="0" role="button" aria-label="點這裡或拖檔案進來上傳新版本">
+            <div class="file-list" id="file-list"></div>
+            <div class="file-dropzone-cta">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              <span id="file-dropzone-cta-text">點這裡或拖檔案進來</span>
+            </div>
           </div>
-          <div class="file-list" id="file-list"></div>
-          <div class="file-manager-hint muted small">每次上傳會自動記錄時間,最新一筆是目前版本。檔案大小上限 1 MB,只保留前 5 個版本。</div>
+          <div class="file-manager-hint muted small">每次上傳自動記錄時間 / 上傳人,最新一筆是目前版本。最多保留 5 個版本,單檔上限 25 MB。</div>
           <input type="file" id="file-input" hidden />
         </div>
 
@@ -270,46 +235,6 @@
     </div>
   </div>
 
-  <!-- Backup popover -->
-  <div class="popover" id="backup-popover" hidden>
-    <div class="popover-backdrop" data-close></div>
-    <div class="popover-panel popover-panel-sm" role="dialog" aria-modal="true">
-      <div class="popover-head">
-        <div>
-          <div class="popover-title">備份 / 還原</div>
-          <div class="muted small">資料只存在這台裝置的瀏覽器,跨裝置請手動備份</div>
-        </div>
-        <button class="icon-btn" data-close aria-label="關閉">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
-      </div>
-      <div class="popover-form">
-        <button type="button" class="btn btn-secondary backup-btn" id="backup-export">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-          <span>匯出 JSON 備份</span>
-          <span class="backup-hint">下載目前所有工具、分類、製作人、品牌</span>
-        </button>
-        <button type="button" class="btn btn-secondary backup-btn" id="backup-import">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-          <span>匯入 JSON 備份</span>
-          <span class="backup-hint">會用備份檔取代目前資料</span>
-        </button>
-        <button type="button" class="btn btn-secondary backup-btn" id="backup-share-url">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          <span>複製分享連結</span>
-          <span class="backup-hint">含工具清單的網址(不含檔案內容),貼到手機開啟就能匯入</span>
-        </button>
-        <input type="file" id="backup-file" accept="application/json,.json" hidden />
-        <div class="backup-tip muted small">
-          💡 跨裝置三種做法:<br>
-          ① 複製分享連結 → 用 LINE 傳網址 → 對方點開可匯入<br>
-          ② 匯出 JSON → AirDrop / Mail 傳檔案 → 對方匯入<br>
-          ③ 把 JSON 內容寫進 repo 的 <code>tools.json</code>,所有裝置自動同步
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Mini popover (for adding new creator / category / setting icon URL) -->
   <div class="mini-popover" id="mini-popover" hidden>
     <div class="mini-popover-backdrop" data-close></div>
@@ -322,6 +247,7 @@
       </div>
       <div class="mini-popover-body">
         <input id="mini-popover-input" type="text" />
+        <select id="mini-popover-select" hidden></select>
         <div class="mini-popover-hint muted small" id="mini-popover-hint" hidden></div>
       </div>
       <div class="mini-popover-actions">
@@ -347,6 +273,19 @@
       <span>用預設(漸層 + 首字)</span>
     </button>
     <input type="file" id="tile-icon-file" accept="image/*" hidden />
+  </div>
+
+  <!-- Floating menu (file tile click → download or upload new version) -->
+  <div class="floating-menu" id="tile-file-menu" hidden>
+    <button type="button" class="floating-menu-item" data-action="download">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      <span id="tile-file-menu-download">下載最新版</span>
+    </button>
+    <button type="button" class="floating-menu-item" data-action="upload">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      <span>上傳新版本</span>
+    </button>
+    <input type="file" id="tile-file-upload" hidden />
   </div>
 
   <!-- Toast -->

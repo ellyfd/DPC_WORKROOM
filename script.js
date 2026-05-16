@@ -91,7 +91,6 @@ async function init() {
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#open-add-cat").addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
   $("#empty-cta").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
-  $("#open-backup")?.addEventListener("click", openBackupPopover);
   $("#expand-all")?.addEventListener("click", () => setAllCollapsed(false));
   $("#collapse-all")?.addEventListener("click", () => setAllCollapsed(true));
 
@@ -104,8 +103,8 @@ async function init() {
   initIconPicker();
   initTypeSelector();
   initFileUpload();
-  initBackupPopover();
   initTileIconMenu();
+  initTileFileMenu();
   initShortcuts();
 }
 
@@ -331,34 +330,6 @@ async function maybeImportFromHash() {
     console.warn("Hash import failed:", err);
     history.replaceState(null, "", window.location.pathname + window.location.search);
   }
-}
-
-/* ===== build a self-contained share URL =====
-   We strip file content (way too big for a URL) but keep the rest — names,
-   creators, categories, brands, all file metadata. */
-function buildShareUrl() {
-  const lightTools = state.localTools.map((t) => {
-    if (t.type === "file" && Array.isArray(t.files)) {
-      return {
-        ...t,
-        files: t.files.map((f) => ({
-          name: f.name, size: f.size, uploadedAt: f.uploadedAt,
-        })),
-      };
-    }
-    return t;
-  });
-  const data = {
-    app: "dpcHub",
-    v: 2,
-    tools: lightTools,
-    categories: state.categories,
-    creators: state.creators,
-    brands: state.brands,
-  };
-  const json = JSON.stringify(data);
-  const encoded = btoa(unescape(encodeURIComponent(json)));
-  return `${window.location.origin}${window.location.pathname}#data=${encoded}`;
 }
 
 function ensureBrandsFromTools() {
@@ -679,10 +650,10 @@ function cardHTML(t, cv) {
 function wireSections() {
   // Main tile click = open the tool
   $$("#sections-area [data-open]").forEach((tile) => {
-    tile.addEventListener("click", () => {
+    tile.addEventListener("click", (e) => {
       const id = tile.dataset.open;
       const tool = allTools().find((t) => t.id === id);
-      if (tool) openTool(tool);
+      if (tool) openTool(tool, e.currentTarget);
     });
   });
   // Action row below the tile
@@ -737,16 +708,16 @@ function initial(name) {
   return name.trim().charAt(0).toUpperCase();
 }
 
-function openTool(t) {
-  // File tools download the latest version.
-  if (t.type === "file" && Array.isArray(t.files) && t.files.length) {
-    const latest = t.files[0];
-    if (!latest?.key) {
-      toast("找不到這版的檔案");
+function openTool(t, anchor) {
+  // File tools ask: download the current version, or upload a new one?
+  if (t.type === "file") {
+    if (!Array.isArray(t.files) || !t.files.length) {
+      if (confirm(`「${t.name}」還沒上傳任何檔案。要現在上傳嗎?`)) {
+        openTileFileMenuUploadOnly(t.id, anchor);
+      }
       return;
     }
-    downloadFile(latest);
-    toast(`下載 ${latest.name}`);
+    openTileFileMenu(t.id, anchor);
     return;
   }
   if (!t.url || t.url === "#") {
@@ -768,29 +739,51 @@ function initMiniPopover() {
     el.addEventListener("click", closeMiniPopover)
   );
   const input = document.getElementById("mini-popover-input");
+  const select = document.getElementById("mini-popover-select");
   const confirm = document.getElementById("mini-popover-confirm");
   confirm.addEventListener("click", () => commitMini());
-  input.addEventListener("keydown", (e) => {
+  const keyHandler = (e) => {
     if (e.key === "Enter") { e.preventDefault(); commitMini(); }
     else if (e.key === "Escape") { e.preventDefault(); closeMiniPopover(); }
-  });
+  };
+  input.addEventListener("keydown", keyHandler);
+  select?.addEventListener("keydown", keyHandler);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !pop.hidden) closeMiniPopover();
   });
 }
 
-function openMiniPopover({ title, placeholder = "", defaultValue = "", hint = "", type = "text", onConfirm }) {
+function openMiniPopover({ title, placeholder = "", defaultValue = "", hint = "", type = "text", options = null, onConfirm }) {
   document.getElementById("mini-popover-title").textContent = title;
   const input = document.getElementById("mini-popover-input");
-  input.type = type;
-  input.placeholder = placeholder;
-  input.value = defaultValue || "";
+  const select = document.getElementById("mini-popover-select");
   const hintEl = document.getElementById("mini-popover-hint");
   hintEl.textContent = hint || "";
   hintEl.hidden = !hint;
+  if (options) {
+    select.innerHTML = options
+      .map((o) =>
+        typeof o === "string"
+          ? `<option value="${escapeAttr(o)}">${escapeHTML(o)}</option>`
+          : `<option value="${escapeAttr(o.value)}"${o.disabled ? " disabled" : ""}${o.value === defaultValue ? " selected" : ""}>${escapeHTML(o.label)}</option>`
+      )
+      .join("");
+    if (defaultValue) select.value = defaultValue;
+    select.hidden = false;
+    input.hidden = true;
+  } else {
+    input.type = type;
+    input.placeholder = placeholder;
+    input.value = defaultValue || "";
+    input.hidden = false;
+    select.hidden = true;
+  }
   miniPopoverHandler = onConfirm;
   document.getElementById("mini-popover").hidden = false;
-  setTimeout(() => { input.focus(); input.select(); }, 30);
+  setTimeout(() => {
+    if (options) select.focus();
+    else { input.focus(); input.select(); }
+  }, 30);
 }
 
 function closeMiniPopover() {
@@ -800,7 +793,9 @@ function closeMiniPopover() {
 }
 
 function commitMini() {
-  const val = document.getElementById("mini-popover-input").value.trim();
+  const select = document.getElementById("mini-popover-select");
+  const input = document.getElementById("mini-popover-input");
+  const val = !select.hidden ? select.value : input.value.trim();
   if (!miniPopoverHandler) { closeMiniPopover(); return; }
   const fn = miniPopoverHandler;
   closeMiniPopover();
@@ -942,41 +937,39 @@ function applyTypeMode(type) {
 /* ===== file management (versioned uploads) ===== */
 function initFileUpload() {
   const input = document.getElementById("file-input");
-  const addBtn = document.getElementById("file-add-version");
-  if (!input) return;
+  const zone = document.getElementById("file-dropzone");
+  if (!input || !zone) return;
 
-  addBtn?.addEventListener("click", () => input.click());
   input.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (file) await addFileVersion(file);
     e.target.value = "";
   });
 
-  // Drag-and-drop + click on the empty state row (rendered by renderFileList).
-  const list = document.getElementById("file-list");
-  if (list) {
-    list.addEventListener("click", (e) => {
-      if (e.target.closest(".file-empty")) input.click();
-    });
-    list.addEventListener("dragover", (e) => {
-      const drop = e.target.closest(".file-empty");
-      if (!drop) return;
+  // The whole dropzone (file list area) is one click/drop target — no
+  // separate button. Clicks inside a file row's action buttons still work
+  // because those buttons stopPropagation/handle their own events.
+  zone.addEventListener("click", (e) => {
+    if (e.target.closest("[data-action]")) return;
+    input.click();
+  });
+  zone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      drop.classList.add("dragover");
-    });
-    list.addEventListener("dragleave", (e) => {
-      const drop = e.target.closest(".file-empty");
-      if (drop) drop.classList.remove("dragover");
-    });
-    list.addEventListener("drop", async (e) => {
-      const drop = e.target.closest(".file-empty");
-      if (!drop) return;
-      e.preventDefault();
-      drop.classList.remove("dragover");
-      const file = e.dataTransfer?.files?.[0];
-      if (file) await addFileVersion(file);
-    });
-  }
+      input.click();
+    }
+  });
+  zone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    zone.classList.add("dragover");
+  });
+  zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+  zone.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragover");
+    const file = e.dataTransfer?.files?.[0];
+    if (file) await addFileVersion(file);
+  });
 }
 
 async function addFileVersion(file) {
@@ -1051,13 +1044,14 @@ function readFileAsText(file) {
 function renderFileList() {
   const list = document.getElementById("file-list");
   if (!list) return;
+  const cta = document.getElementById("file-dropzone-cta-text");
+  if (cta) {
+    cta.textContent = state.editingFiles.length
+      ? "點這裡或拖檔案進來上傳新版本"
+      : "還沒有檔案 — 點這裡或拖檔案進來";
+  }
   if (!state.editingFiles.length) {
-    list.innerHTML = `
-      <div class="file-empty">
-        <div style="font-weight:600;margin-bottom:4px">還沒有上傳任何檔案</div>
-        <div style="font-size:12.5px;color:var(--text-mute)">點上方「上傳新版本」,或拖檔案到這裡</div>
-      </div>
-    `;
+    list.innerHTML = "";
     return;
   }
   list.innerHTML = state.editingFiles.map((f, i) => {
@@ -1226,6 +1220,155 @@ function closeTileIconMenu() {
   _iconMenuTargetId = null;
 }
 
+/* ===== tile file menu (click a file tile → download or upload new) ===== */
+let _fileMenuTargetId = null;
+
+function initTileFileMenu() {
+  const menu = document.getElementById("tile-file-menu");
+  const input = document.getElementById("tile-file-upload");
+  if (!menu || !input) return;
+
+  menu.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = _fileMenuTargetId;
+      if (!id) return;
+      const action = btn.dataset.action;
+      if (action === "download") {
+        const tool = allTools().find((t) => t.id === id);
+        const latest = tool?.files?.[0];
+        if (latest?.key) {
+          downloadFile(latest);
+          toast(`下載 ${latest.name}`);
+        } else {
+          toast("找不到這版的檔案");
+        }
+        closeTileFileMenu();
+      } else if (action === "upload") {
+        input.click();
+      }
+    });
+  });
+
+  input.addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    const id = _fileMenuTargetId;
+    e.target.value = "";
+    closeTileFileMenu();
+    if (!f || !id) return;
+    await addVersionToTool(id, f);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (menu.hidden) return;
+    if (e.target.closest("#tile-file-menu")) return;
+    if (e.target.closest("[data-open]")) return;
+    closeTileFileMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) closeTileFileMenu();
+  });
+  window.addEventListener("scroll", closeTileFileMenu, true);
+  window.addEventListener("resize", closeTileFileMenu);
+}
+
+function openTileFileMenu(toolId, anchor) {
+  const menu = document.getElementById("tile-file-menu");
+  if (!menu || !anchor) return;
+  closeTileIconMenu();
+  const tool = allTools().find((t) => t.id === toolId);
+  const latest = tool?.files?.[0];
+  const dlLabel = document.getElementById("tile-file-menu-download");
+  if (dlLabel) dlLabel.textContent = latest ? `下載 ${latest.name}` : "下載最新版";
+  _fileMenuTargetId = toolId;
+  menu.hidden = false;
+  positionFloatingMenu(menu, anchor);
+}
+
+function openTileFileMenuUploadOnly(toolId, anchor) {
+  const input = document.getElementById("tile-file-upload");
+  if (!input) return;
+  _fileMenuTargetId = toolId;
+  // Direct file picker — no menu needed when there's nothing to download.
+  const handler = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    input.removeEventListener("change", handler);
+    if (f) await addVersionToTool(toolId, f);
+    _fileMenuTargetId = null;
+  };
+  input.addEventListener("change", handler);
+  input.click();
+}
+
+function closeTileFileMenu() {
+  const menu = document.getElementById("tile-file-menu");
+  if (menu) menu.hidden = true;
+  _fileMenuTargetId = null;
+}
+
+function positionFloatingMenu(menu, anchor) {
+  const r = anchor.getBoundingClientRect();
+  const mw = menu.offsetWidth || 200;
+  const mh = menu.offsetHeight || 120;
+  let left = r.left;
+  if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+  if (left < 8) left = 8;
+  let top = r.bottom + 6;
+  if (top + mh > window.innerHeight - 8) top = r.top - mh - 6;
+  if (top < 8) top = 8;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+async function addVersionToTool(toolId, file) {
+  if (file.size > MAX_FILE_BYTES) {
+    toast(`檔案太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_FILE_BYTES)})`);
+    return;
+  }
+  const me = await getMe();
+  try {
+    toast("上傳中…");
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "X-Tool-Id": toolId,
+        "X-Filename": encodeURIComponent(file.name),
+        "X-Uploaded-By": encodeURIComponent(me || ""),
+      },
+      body: file,
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const meta = await res.json();
+    let tool = state.localTools.find((t) => t.id === toolId);
+    if (!tool) {
+      const seed = state.seedTools.find((t) => t.id === toolId);
+      if (seed) {
+        tool = { ...seed };
+        state.localTools.push(tool);
+      }
+    }
+    if (!tool) { toast("找不到這個工具"); return; }
+    if (!Array.isArray(tool.files)) tool.files = [];
+    tool.files.unshift({
+      key: meta.key,
+      name: meta.name,
+      size: meta.size,
+      uploadedAt: meta.uploadedAt,
+      uploadedBy: meta.uploadedBy,
+    });
+    if (tool.files.length > MAX_VERSIONS) tool.files.length = MAX_VERSIONS;
+    tool.updated = new Date().toISOString();
+    saveTools();
+    render();
+    toast(`已上傳 ${meta.name}`);
+  } catch (err) {
+    toast("上傳失敗");
+    console.error(err);
+  }
+}
+
 function setToolIcon(toolId, value) {
   // If the tool only exists as a seed (from tools.json), copy it to localTools
   // first so the change persists.
@@ -1246,120 +1389,47 @@ function setToolIcon(toolId, value) {
 /* ===== "current user" (uploader tag) ===== */
 async function getMe() {
   if (state.me) return state.me;
+  return pickCreatorAsMe();
+}
+
+function pickCreatorAsMe() {
   return new Promise((resolve) => {
+    const all = listAllCreators();
+    const options = [
+      { value: "", label: "— 選一個 —", disabled: true },
+      ...all.map((c) => ({ value: c, label: c })),
+      { value: "__new__", label: "＋ 新增製作人…" },
+    ];
     openMiniPopover({
       title: "你是?",
-      placeholder: "輸入你的名字",
-      hint: "之後上傳檔案會記錄是你傳的。隨時可以在「備份 / 還原」改。",
-      onConfirm: (val) => {
-        const name = (val || "").trim();
-        if (name) {
-          state.me = name;
-          localStorage.setItem(LS_ME_KEY, name);
+      hint: "從製作人裡選一個。之後上傳檔案會記錄是你傳的。",
+      options,
+      onConfirm: (picked) => {
+        if (picked === "__new__") {
+          openMiniPopover({
+            title: "新增製作人",
+            placeholder: "輸入名稱",
+            onConfirm: (val) => {
+              const name = (val || "").trim();
+              if (name) {
+                ensureCreator(name);
+                state.me = name;
+                localStorage.setItem(LS_ME_KEY, name);
+              }
+              resolve(name || "");
+            },
+          });
+        } else {
+          const name = (picked || "").trim();
+          if (name) {
+            state.me = name;
+            localStorage.setItem(LS_ME_KEY, name);
+          }
+          resolve(name || "");
         }
-        resolve(name || "");
       },
     });
   });
-}
-
-/* ===== backup / restore ===== */
-function initBackupPopover() {
-  const pop = document.getElementById("backup-popover");
-  if (!pop) return;
-  pop.querySelectorAll("[data-close]").forEach((el) =>
-    el.addEventListener("click", () => { pop.hidden = true; })
-  );
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !pop.hidden) pop.hidden = true;
-  });
-  document.getElementById("backup-export").addEventListener("click", exportBackup);
-  document.getElementById("backup-import").addEventListener("click", () => {
-    document.getElementById("backup-file").click();
-  });
-  document.getElementById("backup-file").addEventListener("change", async (e) => {
-    const file = e.target.files?.[0];
-    if (file) await importBackup(file);
-    e.target.value = "";
-  });
-  document.getElementById("backup-share-url")?.addEventListener("click", shareViaUrl);
-}
-
-async function shareViaUrl() {
-  const url = buildShareUrl();
-  try {
-    if (navigator.clipboard && window.isSecureContext !== false) {
-      await navigator.clipboard.writeText(url);
-      toast(`已複製分享連結(${formatBytes(url.length)})`);
-    } else {
-      prompt("複製這個網址:", url);
-    }
-  } catch {
-    prompt("複製這個網址:", url);
-  }
-  document.getElementById("backup-popover").hidden = true;
-}
-
-function openBackupPopover() {
-  document.getElementById("backup-popover").hidden = false;
-}
-
-function exportBackup() {
-  const data = {
-    app: "dpcHub",
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    tools: state.localTools,
-    categories: state.categories,
-    creators: state.creators,
-    brands: state.brands,
-  };
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `dpc-hub-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 100);
-  toast("已下載備份");
-  document.getElementById("backup-popover").hidden = true;
-}
-
-async function importBackup(file) {
-  try {
-    const text = await readFileAsText(file);
-    const data = JSON.parse(text);
-    if (!data || typeof data !== "object") throw new Error("不是合法 JSON");
-    if (!Array.isArray(data.tools) && !Array.isArray(data.categories)) {
-      throw new Error("看起來不是 DPC Hub 備份檔");
-    }
-    const summary = [
-      Array.isArray(data.tools) ? `${data.tools.length} 個工具` : null,
-      Array.isArray(data.categories) ? `${data.categories.length} 個分類` : null,
-      Array.isArray(data.creators) ? `${data.creators.length} 位製作人` : null,
-      Array.isArray(data.brands) ? `${data.brands.length} 個品牌` : null,
-    ].filter(Boolean).join("、");
-    if (!confirm(`匯入這份備份(${summary})會覆蓋目前所有資料,確定?`)) return;
-
-    if (Array.isArray(data.tools)) state.localTools = data.tools;
-    if (Array.isArray(data.categories)) state.categories = data.categories;
-    if (Array.isArray(data.creators)) state.creators = data.creators;
-    if (Array.isArray(data.brands)) state.brands = data.brands;
-
-    saveTools();
-    saveCats();
-    saveCreators();
-    saveBrands();
-
-    render();
-    toast("匯入成功");
-    document.getElementById("backup-popover").hidden = true;
-  } catch (err) {
-    toast("匯入失敗:" + (err?.message || "未知錯誤"));
-  }
 }
 
 /* ===== category picker ===== */
@@ -1403,116 +1473,10 @@ function renderCategorySelect(keepValue) {
   updateSelectDeleteBtn?.("category");
 }
 
-/* ===== icon picker (single dropdown) ===== */
-function initIconPicker() {
-  const trigger = document.getElementById("icon-menu-btn");
-  const menu = document.getElementById("icon-menu");
-  const file = document.getElementById("icon-file");
-  if (!trigger || !menu || !file) return;
-
-  const closeMenu = () => {
-    menu.hidden = true;
-    trigger.setAttribute("aria-expanded", "false");
-  };
-  const openMenu = () => {
-    menu.hidden = false;
-    trigger.setAttribute("aria-expanded", "true");
-  };
-
-  trigger.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (menu.hidden) openMenu();
-    else closeMenu();
-  });
-
-  menu.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-icon-action]");
-    if (!btn) return;
-    e.stopPropagation();
-    const action = btn.dataset.iconAction;
-    closeMenu();
-    if (action === "upload") {
-      file.click();
-    } else if (action === "url") {
-      const current = $("#add-form").elements.icon.value || "";
-      openMiniPopover({
-        title: "圖片網址",
-        placeholder: "https://...",
-        defaultValue: current.startsWith("data:") ? "" : current,
-        hint: "貼上任何圖片的網址,儲存後會顯示為工具圖示",
-        type: "url",
-        onConfirm: (val) => setIcon(val || ""),
-      });
-    } else if (action === "clear") {
-      setIcon("");
-    }
-  });
-
-  document.addEventListener("click", (e) => {
-    if (menu.hidden) return;
-    if (e.target.closest("#icon-menu")) return;
-    if (e.target.closest("#icon-menu-btn")) return;
-    closeMenu();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !menu.hidden) closeMenu();
-  });
-
-  file.addEventListener("change", async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (!f.type.startsWith("image/")) { toast("請選圖片檔"); return; }
-    try {
-      const dataUrl = await readAndResize(f, 256);
-      setIcon(dataUrl);
-    } catch {
-      toast("圖片讀取失敗");
-    }
-    e.target.value = "";
-  });
-}
-
-function setIcon(value) {
-  const f = $("#add-form").elements;
-  f.icon.value = value || "";
-  updateIconPreview();
-}
-
-function updateIconPreview() {
-  const f = $("#add-form").elements;
-  const preview = document.getElementById("icon-preview");
-  const img = document.getElementById("icon-preview-img");
-  const letter = document.getElementById("icon-preview-letter");
-  const clearBtn = document.getElementById("icon-menu-clear");
-  const sep = document.getElementById("icon-menu-sep");
-  const icon = f.icon.value;
-  const name = f.name.value;
-
-  letter.textContent = initial(name);
-
-  const showClear = (visible) => {
-    if (clearBtn) clearBtn.hidden = !visible;
-    if (sep) sep.hidden = !visible;
-  };
-
-  if (icon) {
-    img.onerror = () => {
-      img.hidden = true;
-      img.removeAttribute("src");
-      showClear(false);
-    };
-    img.src = icon;
-    img.hidden = false;
-    showClear(true);
-  } else {
-    img.hidden = true;
-    img.removeAttribute("src");
-    showClear(false);
-  }
-
-  const cat = state.categories.find((c) => c.name === f.category.value);
-  preview.dataset.cv = cat ? String(cat.color) : "0";
-}
+/* Icon editing happens from the tile (initTileIconMenu), not in the form.
+   These are kept as no-ops so existing call sites don't need branching. */
+function initIconPicker() {}
+function updateIconPreview() {}
 
 async function readAndResize(file, maxSize) {
   return new Promise((resolve, reject) => {
