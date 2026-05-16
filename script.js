@@ -590,6 +590,7 @@ async function autoFetch() {
     }
 
     if (!info) throw new Error("找不到資訊");
+    enrichWithSuggestions(info, gh);
     applyAutoFill(info);
 
     if (fallbackNote) {
@@ -656,6 +657,63 @@ function parseGenericURL(url) {
   } catch {
     return null;
   }
+}
+
+const STOP_WORDS = new Set([
+  "the","of","and","for","with","www","com","org","io","app","page",
+  "js","ts","py","html","css","json","txt","md",
+]);
+
+function enrichWithSuggestions(info, gh) {
+  if (!info) return info;
+
+  // --- Tags: pull words out of name + creator if API didn't give topics ---
+  if (!info.tags || !info.tags.length) {
+    const source = `${info.name || ""} ${info.creator || ""}`;
+    const seen = new Set();
+    const tags = [];
+    source.split(/[\s\-_./]+/).forEach((raw) => {
+      const tok = raw.trim().toLowerCase();
+      if (!tok || tok.length < 2 || tok.length > 18) return;
+      if (/^\d+$/.test(tok)) return;            // skip pure numbers (e.g. 0119)
+      if (STOP_WORDS.has(tok)) return;
+      if (seen.has(tok)) return;
+      seen.add(tok);
+      tags.push(tok);
+    });
+    if (info.type === "python") tags.push("python");
+    if (gh) tags.push("github");
+    if (tags.length) info.tags = Array.from(new Set(tags)).slice(0, 5);
+  }
+
+  // --- Description: short sentence built from what we know ---
+  if (!info.description) {
+    const type = info.type || "url";
+    const creator = info.creator || "";
+    const name = info.name || "";
+    let host = "";
+    try { host = info.url ? new URL(info.url).hostname.replace(/^www\./, "") : ""; } catch {}
+
+    if (gh) {
+      info.description = creator
+        ? `${creator} 製作的 ${name}(GitHub repo)`
+        : `${name}(GitHub repo)`;
+    } else if (type === "python") {
+      info.description = creator
+        ? `${creator} 的 ${name},Python 工具`
+        : `${name},Python 工具`;
+    } else if (type === "iframe") {
+      info.description = `${name},可內嵌的頁面`;
+    } else if (host) {
+      info.description = creator
+        ? `${creator} 在 ${host} 上的工具`
+        : `${host} 上的工具`;
+    } else {
+      info.description = name;
+    }
+  }
+
+  return info;
 }
 
 function applyAutoFill(info) {
