@@ -1,6 +1,7 @@
 const LS_TOOLS_KEY = "dpcHub.tools.v1";
 const LS_CATS_KEY = "dpcHub.categories.v1";
 const LS_DRAFT_KEY = "dpcHub.draft.v1";
+const LS_COLLAPSE_KEY = "dpcHub.collapsed.v1";
 const NUM_COLORS = 7;
 
 const state = {
@@ -13,6 +14,7 @@ const state = {
   editingCat: null,
   prefillCategory: null,
   anchorEl: null,
+  collapsed: {},
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -30,6 +32,7 @@ async function init() {
   }
   state.localTools = loadJSON(LS_TOOLS_KEY, []);
   state.categories = loadJSON(LS_CATS_KEY, []);
+  state.collapsed = loadJSON(LS_COLLAPSE_KEY, {});
   ensureCategoriesFromTools();
 
   render();
@@ -41,6 +44,8 @@ async function init() {
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#open-add-cat").addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
   $("#empty-cta").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
+  $("#expand-all")?.addEventListener("click", () => setAllCollapsed(false));
+  $("#collapse-all")?.addEventListener("click", () => setAllCollapsed(true));
 
   initToolPopover();
   initCatPopover();
@@ -50,12 +55,26 @@ async function init() {
 
 function initShortcuts() {
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = (e.target?.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select") return;
-    e.preventDefault();
-    document.getElementById("search")?.focus();
+    if (e.key === "/") {
+      e.preventDefault();
+      document.getElementById("search")?.focus();
+    } else if (e.key === "n" || e.key === "N") {
+      e.preventDefault();
+      openToolPopover(null, document.getElementById("open-add"));
+    }
   });
+}
+
+function setAllCollapsed(collapsed) {
+  state.collapsed = {};
+  if (collapsed) {
+    for (const g of groupedTools()) state.collapsed[g.name] = true;
+  }
+  saveJSON(LS_COLLAPSE_KEY, state.collapsed);
+  renderSections();
 }
 
 /* ===== storage ===== */
@@ -133,7 +152,7 @@ function render() {
 function renderHeadContext() {
   const el = document.getElementById("head-context");
   if (!el) return;
-  el.textContent = state.filter === "all" ? "所有工具" : state.filter;
+  el.textContent = state.filter === "all" ? "ALL TOOLS" : state.filter;
 }
 
 function renderStats() {
@@ -209,10 +228,11 @@ function renderSections() {
 function sectionHTML(g) {
   const cv = g.color;
   const isSystem = g.system;
+  const collapsed = !!state.collapsed[g.name];
   const cards = g.tools.map((t, i) => cardHTML(t, i, cv)).join("");
   const addCard = !isSystem ? `
     <button class="card-add" data-add-cat="${escapeAttr(g.name)}">
-      <span class="card-add-plus"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg></span>
+      <span class="card-add-plus"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg></span>
       新增到「${escapeHTML(g.name)}」
     </button>
   ` : "";
@@ -229,24 +249,27 @@ function sectionHTML(g) {
     </button>
   `;
 
-  const body = g.tools.length
+  const grid = g.tools.length
     ? `<div class="section-grid">${cards}${addCard}</div>`
     : `<div class="section-grid">
-         <div class="section-empty">這個分類還沒有工具${isSystem ? "" : ",點右上 + 新增"}</div>
+         <div class="section-empty">這個分類還沒有工具${isSystem ? "" : ",按 + 新增"}</div>
          ${addCard}
        </div>`;
 
   return `
-    <section class="section" data-cv="${cv}" data-cat="${escapeAttr(g.name)}">
-      <div class="section-head">
+    <section class="section${collapsed ? " collapsed" : ""}" data-cv="${cv}" data-cat="${escapeAttr(g.name)}">
+      <div class="section-head" data-toggle-cat="${escapeAttr(g.name)}">
         <div class="section-title-row">
+          <span class="section-chevron">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
           <span class="section-color-dot"></span>
           <span class="section-title">${escapeHTML(g.name)}</span>
-          <span class="section-count">${g.tools.length}</span>
+          <span class="section-count">${g.tools.length} TOOLS</span>
         </div>
         <div class="section-actions">${actions}</div>
       </div>
-      ${body}
+      <div class="section-body">${grid}</div>
     </section>
   `;
 }
@@ -295,17 +318,41 @@ function wireSections() {
     });
   });
   $$("#sections-area [data-add-cat]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       state.prefillCategory = btn.dataset.addCat;
       openToolPopover(null, btn);
     });
   });
   $$("#sections-area [data-edit-cat]").forEach((btn) => {
-    btn.addEventListener("click", () => openCatPopover(btn.dataset.editCat, btn));
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openCatPopover(btn.dataset.editCat, btn);
+    });
   });
   $$("#sections-area [data-del-cat]").forEach((btn) => {
-    btn.addEventListener("click", () => deleteCategory(btn.dataset.delCat));
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteCategory(btn.dataset.delCat);
+    });
   });
+  $$("#sections-area [data-toggle-cat]").forEach((head) => {
+    head.addEventListener("click", (e) => {
+      if (e.target.closest(".section-action")) return;
+      toggleSection(head.dataset.toggleCat);
+    });
+  });
+}
+
+function toggleSection(name) {
+  state.collapsed[name] = !state.collapsed[name];
+  saveJSON(LS_COLLAPSE_KEY, state.collapsed);
+  const sec = document.querySelector(`#sections-area .section[data-cat="${cssEscape(name)}"]`);
+  if (sec) sec.classList.toggle("collapsed", !!state.collapsed[name]);
+}
+
+function cssEscape(s) {
+  return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/"/g, '\\"');
 }
 
 function initial(name) {
@@ -714,7 +761,7 @@ function positionPopover(popEl, anchor) {
   const panel = popEl.querySelector(".popover-panel");
   const arrow = popEl.querySelector(".popover-arrow");
   const r = anchor.getBoundingClientRect();
-  const panelWidth = panel.offsetWidth || (panel.classList.contains("popover-panel-sm") ? 340 : 440);
+  const panelWidth = panel.offsetWidth || (panel.classList.contains("popover-panel-sm") ? 360 : 460);
   const panelHeight = panel.offsetHeight || 500;
   const gap = 10;
   const margin = 12;
