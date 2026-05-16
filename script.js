@@ -4,6 +4,7 @@ const LS_CREATORS_KEY = "dpcHub.creators.v1";
 const LS_BRANDS_KEY = "dpcHub.brands.v1";
 const LS_DRAFT_KEY = "dpcHub.draft.v1";
 const LS_COLLAPSE_KEY = "dpcHub.collapsed.v1";
+const LS_ME_KEY = "dpcHub.me.v1";
 const NUM_COLORS = 7;
 const MAX_FILE_BYTES = 1_000_000;  // 1MB per upload — fits multiple versions in 5MB localStorage
 const MAX_VERSIONS = 5;             // keep at most this many file versions per tool
@@ -23,6 +24,8 @@ const state = {
   collapsed: {},
   // versions list for the file-type tool currently open in the popover
   editingFiles: [],
+  // persistent "current user" name (tagged on each file upload)
+  me: "",
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -43,6 +46,7 @@ async function init() {
   state.creators = loadJSON(LS_CREATORS_KEY, []);
   state.brands = loadJSON(LS_BRANDS_KEY, []);
   state.collapsed = loadJSON(LS_COLLAPSE_KEY, {});
+  state.me = (localStorage.getItem(LS_ME_KEY) || "").trim();
   migrateToolsSchema();
   ensureCategoriesFromTools();
   ensureCreatorsFromTools();
@@ -74,6 +78,7 @@ async function init() {
   initTypeSelector();
   initFileUpload();
   initBackupPopover();
+  initTileIconMenu();
   initModal();
   initShortcuts();
 }
@@ -512,40 +517,56 @@ function cardHTML(t, cv) {
     : "";
   const bits = [];
   if (t.creator) bits.push(`製作:${t.creator}`);
-  if (t.version) bits.push(`v${t.version}`);
-  if (tType === "file" && Array.isArray(t.files) && t.files.length > 1) {
-    bits.push(`${t.files.length} 個版本`);
+  if (tType === "file" && Array.isArray(t.files) && t.files.length) {
+    const latest = t.files[0];
+    if (latest?.uploadedAt) bits.push(`最新:${formatDate(latest.uploadedAt)}`);
+    if (t.files.length > 1) bits.push(`${t.files.length} 個版本`);
+  } else if (t.version) {
+    bits.push(`v${t.version}`);
   }
   if (t.description) bits.push(t.description);
   const tip = bits.length ? `${t.name}\n${bits.join(" · ")}` : t.name;
 
   return `
-    <article class="card" data-cv="${cv}" data-id="${escapeAttr(t.id)}" title="${escapeAttr(tip)}">
-      <button class="card-edit" title="編輯">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-      </button>
-      <div class="card-top">
-        <div class="card-icon">
-          <span class="ic-letter">${escapeHTML(initial(t.name))}</span>
-          ${iconImg}
+    <article class="card" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
+      <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" title="${escapeAttr(tip)}">
+        <div class="card-top">
+          <div class="card-icon">
+            <span class="ic-letter">${escapeHTML(initial(t.name))}</span>
+            ${iconImg}
+          </div>
+          <span class="type-badge ${tType}">${type.icon}</span>
         </div>
-        <span class="type-badge ${tType}">${type.icon}</span>
+        <h3 class="card-title">${escapeHTML(t.name)}</h3>
+      </button>
+      <div class="card-actions">
+        <button type="button" class="card-act" data-act="edit" data-id="${escapeAttr(t.id)}" title="編輯">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        </button>
+        <button type="button" class="card-act" data-act="icon" data-id="${escapeAttr(t.id)}" title="換圖">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </button>
       </div>
-      <h3 class="card-title">${escapeHTML(t.name)}</h3>
     </article>
   `;
 }
 
 function wireSections() {
-  $$("#sections-area .card").forEach((card) => {
-    card.addEventListener("click", (e) => {
-      const editBtn = e.target.closest(".card-edit");
-      if (editBtn) {
-        openToolPopover(card.dataset.id, editBtn);
-        return;
-      }
-      const tool = allTools().find((t) => t.id === card.dataset.id);
+  // Main tile click = open the tool
+  $$("#sections-area [data-open]").forEach((tile) => {
+    tile.addEventListener("click", () => {
+      const id = tile.dataset.open;
+      const tool = allTools().find((t) => t.id === id);
       if (tool) openTool(tool);
+    });
+  });
+  // Action row below the tile
+  $$("#sections-area [data-act]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      if (btn.dataset.act === "edit") openToolPopover(id, btn);
+      else if (btn.dataset.act === "icon") openTileIconMenu(id, btn);
     });
   });
   $$("#sections-area [data-add-cat]").forEach((btn) => {
@@ -784,6 +805,8 @@ async function addFileVersion(file) {
     toast(`檔案太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_FILE_BYTES)})`);
     return;
   }
+  // Ask for the uploader's name on the first upload; cached afterwards.
+  const me = await getMe();
   try {
     const content = await readFileAsDataURL(file);
     state.editingFiles.unshift({
@@ -791,6 +814,7 @@ async function addFileVersion(file) {
       size: file.size,
       content,
       uploadedAt: new Date().toISOString(),
+      uploadedBy: me || "",
     });
     if (state.editingFiles.length > MAX_VERSIONS) {
       state.editingFiles.length = MAX_VERSIONS;
@@ -852,9 +876,10 @@ function renderFileList() {
         <div class="file-row-meta">
           <div class="file-row-name">${escapeHTML(f.name)}</div>
           <div class="file-row-info">
-            <span>${escapeHTML(formatBytes(f.size))}</span>
-            <span>·</span>
             <span>${escapeHTML(formatDate(f.uploadedAt))}</span>
+            ${f.uploadedBy ? `<span>·</span><span>${escapeHTML(f.uploadedBy)} 上傳</span>` : ""}
+            <span>·</span>
+            <span>${escapeHTML(formatBytes(f.size))}</span>
             ${isLatest ? `<span class="file-row-latest-badge">目前版本</span>` : ""}
           </div>
         </div>
@@ -935,6 +960,128 @@ function downloadFile(fileObj) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 100);
+}
+
+/* ===== tile icon menu (change-image from the tile, no popover needed) ===== */
+let _iconMenuTargetId = null;
+
+function initTileIconMenu() {
+  const menu = document.getElementById("tile-icon-menu");
+  const file = document.getElementById("tile-icon-file");
+  if (!menu || !file) return;
+
+  menu.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = _iconMenuTargetId;
+      if (!id) return;
+      const action = btn.dataset.action;
+      if (action === "upload") {
+        file.click();
+      } else if (action === "url") {
+        const tool = allTools().find((t) => t.id === id);
+        openMiniPopover({
+          title: "圖片網址",
+          placeholder: "https://…",
+          defaultValue: (tool?.icon || "").startsWith("data:") ? "" : (tool?.icon || ""),
+          type: "url",
+          onConfirm: (val) => setToolIcon(id, val || ""),
+        });
+        closeTileIconMenu();
+      } else if (action === "clear") {
+        setToolIcon(id, "");
+        closeTileIconMenu();
+      }
+    });
+  });
+
+  file.addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    const id = _iconMenuTargetId;
+    e.target.value = "";
+    if (!f || !id) return;
+    try {
+      const dataUrl = await readAndResize(f, 256);
+      setToolIcon(id, dataUrl);
+    } catch {
+      toast("圖片讀取失敗");
+    }
+    closeTileIconMenu();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (menu.hidden) return;
+    if (e.target.closest("#tile-icon-menu")) return;
+    if (e.target.closest("[data-act='icon']")) return;
+    closeTileIconMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) closeTileIconMenu();
+  });
+  window.addEventListener("scroll", closeTileIconMenu, true);
+  window.addEventListener("resize", closeTileIconMenu);
+}
+
+function openTileIconMenu(toolId, anchor) {
+  const menu = document.getElementById("tile-icon-menu");
+  if (!menu) return;
+  _iconMenuTargetId = toolId;
+  menu.hidden = false;
+  // Measure after un-hiding
+  const r = anchor.getBoundingClientRect();
+  const mw = menu.offsetWidth || 200;
+  const mh = menu.offsetHeight || 140;
+  let left = r.left;
+  if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+  if (left < 8) left = 8;
+  let top = r.bottom + 6;
+  if (top + mh > window.innerHeight - 8) top = r.top - mh - 6;
+  if (top < 8) top = 8;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+function closeTileIconMenu() {
+  const menu = document.getElementById("tile-icon-menu");
+  if (menu) menu.hidden = true;
+  _iconMenuTargetId = null;
+}
+
+function setToolIcon(toolId, value) {
+  // If the tool only exists as a seed (from tools.json), copy it to localTools
+  // first so the change persists.
+  let tool = state.localTools.find((t) => t.id === toolId);
+  if (!tool) {
+    const seed = state.seedTools.find((t) => t.id === toolId);
+    if (!seed) return;
+    tool = { ...seed };
+    state.localTools.push(tool);
+  }
+  tool.icon = value || "";
+  tool.updated = new Date().toISOString();
+  saveTools();
+  render();
+  toast(value ? "已更新圖示" : "已用預設圖示");
+}
+
+/* ===== "current user" (uploader tag) ===== */
+async function getMe() {
+  if (state.me) return state.me;
+  return new Promise((resolve) => {
+    openMiniPopover({
+      title: "你是?",
+      placeholder: "輸入你的名字",
+      hint: "之後上傳檔案會記錄是你傳的。隨時可以在「備份 / 還原」改。",
+      onConfirm: (val) => {
+        const name = (val || "").trim();
+        if (name) {
+          state.me = name;
+          localStorage.setItem(LS_ME_KEY, name);
+        }
+        resolve(name || "");
+      },
+    });
+  });
 }
 
 /* ===== backup / restore ===== */
@@ -1181,9 +1328,9 @@ function initToolPopover() {
   $("#save-tool").addEventListener("click", saveTool);
   $("#delete-tool").addEventListener("click", deleteTool);
   $("#auto-fetch").addEventListener("click", autoFetch);
-
-  $("#auto-url").addEventListener("paste", () => setTimeout(autoFetch, 30));
-  $("#auto-url").addEventListener("keydown", (e) => {
+  // Auto-trigger on paste into the URL field, and on Enter.
+  $("#url-input")?.addEventListener("paste", () => setTimeout(autoFetch, 30));
+  $("#url-input")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); autoFetch(); }
   });
 
@@ -1261,7 +1408,7 @@ function openToolPopover(id = null, anchor = null) {
   positionPopover($("#popover"), anchorEl);
   setTimeout(() => {
     if (id) form.elements.name.focus();
-    else $("#auto-url").focus();
+    else document.getElementById("url-input")?.focus();
   }, 50);
 }
 
@@ -1352,7 +1499,7 @@ function saveTool() {
     version: d.version,
     category: d.category,
     type: d.type,
-    url: d.type === "link" ? d.url : (d.url || ""),
+    url: d.type === "link" ? d.url : "",
     asIframe: d.type === "link" ? !!d.asIframe : false,
     tags: d.tags,
     icon: d.icon || "",
@@ -1413,20 +1560,27 @@ function deleteTool() {
 
 /* ===== auto-fetch ===== */
 function resetAutoFill() {
-  const box = $(".auto-fill");
-  box.classList.remove("success", "error");
-  $("#auto-url").value = "";
-  $("#auto-hint").textContent = "支援 GitHub repo(讀取名稱、描述、作者、語言、tags)與一般 URL(讀取網域)";
+  const hint = document.getElementById("auto-hint");
+  if (hint) { hint.hidden = true; hint.classList.remove("success", "error"); hint.textContent = ""; }
+}
+
+function setAutoHint(text, kind) {
+  const hint = document.getElementById("auto-hint");
+  if (!hint) return;
+  hint.classList.remove("success", "error");
+  if (kind) hint.classList.add(kind);
+  hint.textContent = text;
+  hint.hidden = !text;
 }
 
 async function autoFetch() {
-  const url = $("#auto-url").value.trim();
-  if (!url) return;
-  const box = $(".auto-fill");
-  box.classList.remove("success", "error");
+  const urlInput = document.getElementById("url-input");
+  if (!urlInput) return;
+  const url = urlInput.value.trim();
+  if (!url) { setAutoHint("請先在上面貼一個網址", "error"); return; }
   const btn = $("#auto-fetch");
   btn.disabled = true;
-  $("#auto-hint").textContent = "讀取中…";
+  setAutoHint("讀取中…", null);
 
   try {
     const gh = parseGitHub(url);
@@ -1440,7 +1594,7 @@ async function autoFetch() {
         // GitHub API failed — fall back so the user still gets name + owner
         // and only needs to fill in the rest manually.
         info = parseGenericURL(url) || {
-          name: gh.repo, creator: gh.owner, url, type: "url", tags: [], icon: "",
+          name: gh.repo, creator: gh.owner, url, type: "link", tags: [], icon: "",
         };
         info.name = info.name || gh.repo;
         info.creator = info.creator || gh.owner;
@@ -1454,17 +1608,14 @@ async function autoFetch() {
     applyAutoFill(info);
 
     if (fallbackNote) {
-      box.classList.add("error");
-      $("#auto-hint").textContent = `${fallbackNote}。已先用 repo 名稱與 owner 填好,請手動補上描述與正確 URL。`;
+      setAutoHint(`${fallbackNote}。已先填好名稱與作者,其他請自己補。`, "error");
+    } else if (gh) {
+      setAutoHint(`✓ 已讀取 GitHub repo:${gh.owner}/${gh.repo}`, "success");
     } else {
-      box.classList.add("success");
-      $("#auto-hint").textContent = gh
-        ? `✓ 已讀取 GitHub repo:${gh.owner}/${gh.repo}`
-        : "✓ 已從網址讀取網域,請補上名稱與描述";
+      setAutoHint("✓ 已從網址讀取網域,請補上名稱與描述", "success");
     }
   } catch (err) {
-    box.classList.add("error");
-    $("#auto-hint").textContent = "讀取失敗:" + (err?.message || "未知錯誤") + "。請手動填寫。";
+    setAutoHint("讀取失敗:" + (err?.message || "未知錯誤") + "。請手動填寫。", "error");
   } finally {
     btn.disabled = false;
   }
@@ -1486,13 +1637,11 @@ async function fetchGitHubRepo(owner, repo) {
   }
   if (!res.ok) throw new Error("GitHub API " + res.status);
   const data = await res.json();
-  const lang = (data.language || "").toLowerCase();
   return {
     name: data.name,
     description: data.description || "",
     creator: data.owner?.login || owner,
     url: data.html_url,
-    type: lang === "python" ? "python" : "url",
     tags: data.topics || [],
     icon: data.owner?.avatar_url ? `${data.owner.avatar_url}&s=200` : "",
   };
@@ -1505,14 +1654,11 @@ function parseGenericURL(url) {
     const name = host.split(".")[0]
       .replace(/[-_]/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());
-    // Skip the favicon — at 92px it scales up blurry. The gradient + initial
-    // letter looks cleaner and is more readable.
     return {
       name,
       description: "",
       creator: "",
       url: u.href,
-      type: "url",
       tags: [],
       icon: "",
     };
@@ -1522,6 +1668,8 @@ function parseGenericURL(url) {
 }
 
 function applyAutoFill(info) {
+  // Only fills fields that the auto-fetch actually returned. Never touches
+  // the type — the type-selector is authoritative.
   const f = $("#add-form").elements;
   if (info.name) f.name.value = info.name;
   if (info.creator) {
@@ -1530,7 +1678,6 @@ function applyAutoFill(info) {
   }
   if (info.description) f.description.value = info.description;
   if (info.url) f.url.value = info.url;
-  if (info.type) f.type.value = info.type;
   if (info.tags?.length) f.tags.value = info.tags.join(", ");
   if (info.icon) f.icon.value = info.icon;
   updateIconPreview();
