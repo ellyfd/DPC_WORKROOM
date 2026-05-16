@@ -27,9 +27,24 @@ const state = {
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+const CANONICAL_HOST = "dpc-hub.ellyfd.workers.dev";
+
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
+  // Anything that isn't the canonical Worker host (or local dev) gets
+  // redirected. If the visitor still has legacy localStorage data from
+  // the old GitHub Pages deployment, we pack it into the URL hash so
+  // the destination site can offer to import it.
+  const host = location.hostname;
+  if (
+    host !== CANONICAL_HOST &&
+    host !== "localhost" &&
+    !host.startsWith("127.")
+  ) {
+    return redirectToCanonical();
+  }
+
   state.seedTools = [];
   state.collapsed = loadJSON(LS_COLLAPSE_KEY, {});
   state.me = (localStorage.getItem(LS_ME_KEY) || "").trim();
@@ -117,6 +132,53 @@ function setAllCollapsed(collapsed) {
   }
   saveJSON(LS_COLLAPSE_KEY, state.collapsed);
   renderSections();
+}
+
+/* ===== legacy redirect (old GitHub Pages → Worker) =====
+   The old deployment kept everything in localStorage. We pull whatever
+   we find under the legacy keys, pack it into a URL hash and forward
+   the visitor to the canonical Worker URL — where the existing
+   maybeImportFromHash() flow asks them to confirm the import. */
+function redirectToCanonical() {
+  let hash = "";
+  try {
+    const tools = JSON.parse(localStorage.getItem("dpcHub.tools.v1") || "null");
+    const cats = JSON.parse(localStorage.getItem("dpcHub.categories.v1") || "null");
+    const creators = JSON.parse(localStorage.getItem("dpcHub.creators.v1") || "null");
+    const brands = JSON.parse(localStorage.getItem("dpcHub.brands.v1") || "null");
+    const hasAny =
+      (Array.isArray(tools) && tools.length) ||
+      (Array.isArray(cats) && cats.length) ||
+      (Array.isArray(creators) && creators.length) ||
+      (Array.isArray(brands) && brands.length);
+    if (hasAny) {
+      const slimTools = (Array.isArray(tools) ? tools : []).map((t) => {
+        if (t && t.type === "file" && Array.isArray(t.files)) {
+          // Strip file content; URL hashes have practical length limits and
+          // file bytes now belong in R2 anyway.
+          return {
+            ...t,
+            files: t.files.map((f) => ({
+              name: f.name, size: f.size,
+              uploadedAt: f.uploadedAt, uploadedBy: f.uploadedBy,
+            })),
+          };
+        }
+        return t;
+      });
+      const data = {
+        app: "dpcHub",
+        v: 2,
+        tools: slimTools,
+        categories: Array.isArray(cats) ? cats : [],
+        creators: Array.isArray(creators) ? creators : [],
+        brands: Array.isArray(brands) ? brands : [],
+      };
+      const json = JSON.stringify(data);
+      hash = "#data=" + btoa(unescape(encodeURIComponent(json)));
+    }
+  } catch {}
+  location.replace("https://" + CANONICAL_HOST + "/" + hash);
 }
 
 /* ===== storage =====
