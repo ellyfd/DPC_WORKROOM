@@ -45,6 +45,17 @@ async function init() {
   initToolPopover();
   initCatPopover();
   initModal();
+  initShortcuts();
+}
+
+function initShortcuts() {
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+    const tag = (e.target?.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select") return;
+    e.preventDefault();
+    document.getElementById("search")?.focus();
+  });
 }
 
 /* ===== storage ===== */
@@ -116,6 +127,13 @@ function render() {
   renderFilters();
   renderSections();
   renderStats();
+  renderHeadContext();
+}
+
+function renderHeadContext() {
+  const el = document.getElementById("head-context");
+  if (!el) return;
+  el.textContent = state.filter === "all" ? "所有工具" : state.filter;
 }
 
 function renderStats() {
@@ -146,6 +164,7 @@ function renderFilters() {
       $$("#filters .chip").forEach((c) => c.classList.remove("active"));
       el.classList.add("active");
       renderSections();
+      renderHeadContext();
     });
     return el;
   }
@@ -695,25 +714,41 @@ function positionPopover(popEl, anchor) {
   const panel = popEl.querySelector(".popover-panel");
   const arrow = popEl.querySelector(".popover-arrow");
   const r = anchor.getBoundingClientRect();
-  const panelWidth = panel.offsetWidth || (panel.classList.contains("popover-panel-sm") ? 320 : 420);
+  const panelWidth = panel.offsetWidth || (panel.classList.contains("popover-panel-sm") ? 340 : 440);
+  const panelHeight = panel.offsetHeight || 500;
   const gap = 10;
+  const margin = 12;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const anchorCenterX = r.left + r.width / 2;
+  // Anchor on the left half → open to the right; right half → open to the left.
+  const anchorOnLeft = anchorCenterX < vw / 2;
 
   let top = r.bottom + gap;
-  let right = window.innerWidth - r.right;
-  if (right < 12) right = 12;
-  if (right + panelWidth > window.innerWidth - 12) right = 12;
-  if (top + 400 > window.innerHeight - 12 && r.top > 400) {
-    top = Math.max(80, r.top - 400 - gap);
+  if (top + panelHeight > vh - margin && r.top > panelHeight + margin) {
+    top = Math.max(margin, r.top - panelHeight - gap);
+  }
+  top = Math.max(margin, Math.min(top, vh - panelHeight - margin));
+
+  let left;
+  if (anchorOnLeft) {
+    left = r.left;
+    if (left + panelWidth > vw - margin) left = vw - panelWidth - margin;
+    if (left < margin) left = margin;
+  } else {
+    left = r.right - panelWidth;
+    if (left < margin) left = margin;
+    if (left + panelWidth > vw - margin) left = vw - panelWidth - margin;
   }
 
   panel.style.top = `${top}px`;
-  panel.style.right = `${right}px`;
-  panel.style.left = "auto";
+  panel.style.left = `${left}px`;
+  panel.style.right = "auto";
 
-  const anchorCenter = r.left + r.width / 2;
-  const panelRight = window.innerWidth - right;
-  const arrowFromRight = Math.max(12, Math.min(panelWidth - 24, panelRight - anchorCenter - 6));
-  arrow.style.right = `${arrowFromRight}px`;
+  const arrowFromLeft = Math.max(12, Math.min(panelWidth - 24, anchorCenterX - left - 6));
+  arrow.style.left = `${arrowFromLeft}px`;
+  arrow.style.right = "auto";
 }
 
 /* ===== iframe modal ===== */
