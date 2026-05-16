@@ -5,7 +5,8 @@ const LS_BRANDS_KEY = "dpcHub.brands.v1";
 const LS_DRAFT_KEY = "dpcHub.draft.v1";
 const LS_COLLAPSE_KEY = "dpcHub.collapsed.v1";
 const NUM_COLORS = 7;
-const MAX_PY_BYTES = 500_000;   // 500KB cap for stored Python files
+const MAX_FILE_BYTES = 1_000_000;  // 1MB per upload — fits multiple versions in 5MB localStorage
+const MAX_VERSIONS = 5;             // keep at most this many file versions per tool
 
 const state = {
   seedTools: [],
@@ -20,10 +21,8 @@ const state = {
   prefillCategory: null,
   anchorEl: null,
   collapsed: {},
-  // file currently attached to the open popover ({ name, size, content, isNew })
-  editingFile: null,
-  // version that was loaded when the popover opened (so we can detect bumps)
-  editingOriginalVersion: "",
+  // versions list for the file-type tool currently open in the popover
+  editingFiles: [],
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -44,9 +43,13 @@ async function init() {
   state.creators = loadJSON(LS_CREATORS_KEY, []);
   state.brands = loadJSON(LS_BRANDS_KEY, []);
   state.collapsed = loadJSON(LS_COLLAPSE_KEY, {});
+  migrateToolsSchema();
   ensureCategoriesFromTools();
   ensureCreatorsFromTools();
   ensureBrandsFromTools();
+
+  // If the URL has #data=..., offer to import before rendering.
+  await maybeImportFromHash();
 
   render();
 
@@ -126,6 +129,108 @@ function ensureCategoriesFromTools() {
     }
   }
   if (changed) saveCats();
+}
+
+/* ===== schema migration =====
+   Old: type ∈ {"url", "iframe", "python"}; python tools used `file` (singular)
+   New: type ∈ {"link", "file"} with asIframe boolean for link, files[] array for file
+*/
+function migrateToolsSchema() {
+  let changed = false;
+  for (const t of state.localTools) {
+    if (t.type === "url") {
+      t.type = "link";
+      t.asIframe = false;
+      changed = true;
+    } else if (t.type === "iframe") {
+      t.type = "link";
+      t.asIframe = true;
+      changed = true;
+    } else if (t.type === "python") {
+      t.type = "file";
+      changed = true;
+    }
+    if (t.type === "file") {
+      if (!Array.isArray(t.files)) {
+        t.files = t.file && t.file.content
+          ? [{
+              name: t.file.name,
+              size: t.file.size,
+              content: t.file.content,
+              uploadedAt: t.file.uploadedAt
+                ? (t.file.uploadedAt.includes("T") ? t.file.uploadedAt : `${t.file.uploadedAt}T00:00:00.000Z`)
+                : new Date().toISOString(),
+            }]
+          : [];
+        delete t.file;
+        changed = true;
+      }
+    }
+  }
+  if (changed) saveTools();
+}
+
+/* ===== URL-hash data import ===== */
+async function maybeImportFromHash() {
+  const hash = window.location.hash || "";
+  if (!hash.startsWith("#data=")) return;
+  const encoded = hash.slice("#data=".length);
+  if (!encoded) return;
+  try {
+    const json = decodeURIComponent(escape(atob(encoded)));
+    const data = JSON.parse(json);
+    if (!data || data.app !== "dpcHub") return;
+    const counts = [
+      Array.isArray(data.tools) ? `${data.tools.length} 個工具` : null,
+      Array.isArray(data.categories) ? `${data.categories.length} 個分類` : null,
+      Array.isArray(data.creators) ? `${data.creators.length} 位製作人` : null,
+      Array.isArray(data.brands) ? `${data.brands.length} 個品牌` : null,
+    ].filter(Boolean).join("、");
+    const ok = confirm(`從網址讀到一份分享資料(${counts})。要匯入嗎?\n(會覆蓋目前裝置上的資料)`);
+    if (ok) {
+      if (Array.isArray(data.tools)) state.localTools = data.tools;
+      if (Array.isArray(data.categories)) state.categories = data.categories;
+      if (Array.isArray(data.creators)) state.creators = data.creators;
+      if (Array.isArray(data.brands)) state.brands = data.brands;
+      migrateToolsSchema();
+      saveTools();
+      saveCats();
+      saveJSON(LS_CREATORS_KEY, state.creators);
+      saveJSON(LS_BRANDS_KEY, state.brands);
+    }
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+  } catch (err) {
+    console.warn("Hash import failed:", err);
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+}
+
+/* ===== build a self-contained share URL =====
+   We strip file content (way too big for a URL) but keep the rest — names,
+   creators, categories, brands, all file metadata. */
+function buildShareUrl() {
+  const lightTools = state.localTools.map((t) => {
+    if (t.type === "file" && Array.isArray(t.files)) {
+      return {
+        ...t,
+        files: t.files.map((f) => ({
+          name: f.name, size: f.size, uploadedAt: f.uploadedAt,
+        })),
+      };
+    }
+    return t;
+  });
+  const data = {
+    app: "dpcHub",
+    v: 2,
+    tools: lightTools,
+    categories: state.categories,
+    creators: state.creators,
+    brands: state.brands,
+  };
+  const json = JSON.stringify(data);
+  const encoded = btoa(unescape(encodeURIComponent(json)));
+  return `${window.location.origin}${window.location.pathname}#data=${encoded}`;
 }
 
 function ensureBrandsFromTools() {
@@ -319,6 +424,9 @@ function renderFilters() {
 }
 
 const TYPE_META = {
+  link: { label: "LINK", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>` },
+  file: { label: "FILE", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` },
+  // legacy fallbacks
   url: { label: "URL", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>` },
   python: { label: "PY", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v6h8m-8 6H4v6h6m0-12V3h6v6m0 6h4v-6h-6m0 6v6"/></svg>` },
   iframe: { label: "EMBED", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>` },
@@ -397,12 +505,19 @@ function sectionHTML(g, showHeader = true) {
 }
 
 function cardHTML(t, cv) {
-  const type = TYPE_META[t.type] || TYPE_META.url;
+  const tType = t.type || "link";
+  const type = TYPE_META[tType] || TYPE_META.link;
   const iconImg = t.icon
     ? `<img src="${escapeAttr(t.icon)}" alt="" onerror="this.remove()" />`
     : "";
-  const tipParts = [t.creator ? `製作:${t.creator}` : "", t.version ? `v${t.version}` : "", t.description].filter(Boolean);
-  const tip = tipParts.length ? `${t.name}\n${tipParts.join(" · ")}` : t.name;
+  const bits = [];
+  if (t.creator) bits.push(`製作:${t.creator}`);
+  if (t.version) bits.push(`v${t.version}`);
+  if (tType === "file" && Array.isArray(t.files) && t.files.length > 1) {
+    bits.push(`${t.files.length} 個版本`);
+  }
+  if (t.description) bits.push(t.description);
+  const tip = bits.length ? `${t.name}\n${bits.join(" · ")}` : t.name;
 
   return `
     <article class="card" data-cv="${cv}" data-id="${escapeAttr(t.id)}" title="${escapeAttr(tip)}">
@@ -414,7 +529,7 @@ function cardHTML(t, cv) {
           <span class="ic-letter">${escapeHTML(initial(t.name))}</span>
           ${iconImg}
         </div>
-        <span class="type-badge ${t.type || "url"}">${type.icon}</span>
+        <span class="type-badge ${tType}">${type.icon}</span>
       </div>
       <h3 class="card-title">${escapeHTML(t.name)}</h3>
     </article>
@@ -477,10 +592,15 @@ function initial(name) {
 }
 
 function openTool(t) {
-  // Python tools prefer the attached .py file (download); fall back to URL.
-  if (t.type === "python" && t.file?.content) {
-    downloadPyFile(t);
-    toast(`下載 ${t.file.name}`);
+  // File tools download the latest version.
+  if (t.type === "file" && Array.isArray(t.files) && t.files.length) {
+    const latest = t.files[0];
+    if (!latest?.content) {
+      toast("最新版的檔案內容已不在本機(可能是從分享連結匯入的)");
+      return;
+    }
+    downloadFile(latest);
+    toast(`下載 ${latest.name}`);
     return;
   }
   if (!t.url || t.url === "#") {
@@ -489,7 +609,7 @@ function openTool(t) {
     }
     return;
   }
-  if (t.type === "iframe") {
+  if (t.type === "link" && t.asIframe) {
     $("#modal-title").textContent = t.name;
     $("#modal-sub").textContent = `${t.creator} · v${t.version}`;
     $("#modal-frame").src = t.url;
@@ -609,75 +729,73 @@ function setType(type) {
 }
 
 function applyTypeMode(type) {
-  // Toggle elements whose data-show-for-type lists this type
   document.querySelectorAll("[data-show-for-type]").forEach((el) => {
     const types = el.dataset.showForType.split(",").map((s) => s.trim());
     el.hidden = !types.includes(type);
   });
-
-  // URL label: required for url/iframe, optional for python
-  const urlLabelText = document.getElementById("url-label");
-  const urlInput = document.querySelector("#add-form input[name='url']");
-  if (urlLabelText && urlInput) {
-    if (type === "python") {
-      urlLabelText.textContent = "URL(選填)";
-      urlInput.placeholder = "若是 GitHub repo,可貼上連結";
-    } else {
-      urlLabelText.textContent = "URL *";
-      urlInput.placeholder = "https://...";
-    }
-  }
-
-  if (type === "python") {
+  if (type === "file") {
     renderBrandSelect(document.getElementById("brand-select")?.value || "");
-    renderFileInfo();
+    renderFileList();
   }
 }
 
-/* ===== file upload (Python) ===== */
+/* ===== file management (versioned uploads) ===== */
 function initFileUpload() {
-  const drop = document.getElementById("file-drop");
   const input = document.getElementById("file-input");
-  const replace = document.getElementById("file-replace-btn");
-  const remove = document.getElementById("file-remove-btn");
-  if (!drop || !input) return;
+  const addBtn = document.getElementById("file-add-version");
+  if (!input) return;
 
-  drop.addEventListener("click", () => input.click());
-  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("dragover"); });
-  drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
-  drop.addEventListener("drop", (e) => {
-    e.preventDefault();
-    drop.classList.remove("dragover");
-    const file = e.dataTransfer?.files?.[0];
-    if (file) handleFile(file);
-  });
-  input.addEventListener("change", (e) => {
+  addBtn?.addEventListener("click", () => input.click());
+  input.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    if (file) await addFileVersion(file);
     e.target.value = "";
   });
-  replace?.addEventListener("click", () => input.click());
-  remove?.addEventListener("click", () => {
-    state.editingFile = null;
-    renderFileInfo();
-  });
+
+  // Drag-and-drop + click on the empty state row (rendered by renderFileList).
+  const list = document.getElementById("file-list");
+  if (list) {
+    list.addEventListener("click", (e) => {
+      if (e.target.closest(".file-empty")) input.click();
+    });
+    list.addEventListener("dragover", (e) => {
+      const drop = e.target.closest(".file-empty");
+      if (!drop) return;
+      e.preventDefault();
+      drop.classList.add("dragover");
+    });
+    list.addEventListener("dragleave", (e) => {
+      const drop = e.target.closest(".file-empty");
+      if (drop) drop.classList.remove("dragover");
+    });
+    list.addEventListener("drop", async (e) => {
+      const drop = e.target.closest(".file-empty");
+      if (!drop) return;
+      e.preventDefault();
+      drop.classList.remove("dragover");
+      const file = e.dataTransfer?.files?.[0];
+      if (file) await addFileVersion(file);
+    });
+  }
 }
 
-async function handleFile(file) {
-  if (file.size > MAX_PY_BYTES) {
-    toast(`檔案太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_PY_BYTES)})`);
+async function addFileVersion(file) {
+  if (file.size > MAX_FILE_BYTES) {
+    toast(`檔案太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_FILE_BYTES)})`);
     return;
   }
   try {
-    const content = await readFileAsText(file);
-    state.editingFile = {
+    const content = await readFileAsDataURL(file);
+    state.editingFiles.unshift({
       name: file.name,
       size: file.size,
       content,
-      uploadedAt: new Date().toISOString().slice(0, 10),
-      isNew: true,
-    };
-    renderFileInfo();
+      uploadedAt: new Date().toISOString(),
+    });
+    if (state.editingFiles.length > MAX_VERSIONS) {
+      state.editingFiles.length = MAX_VERSIONS;
+    }
+    renderFileList();
     autoFillFromFilename(file.name);
   } catch {
     toast("檔案讀取失敗");
@@ -685,15 +803,23 @@ async function handleFile(file) {
 }
 
 function autoFillFromFilename(filename) {
-  // Suggest tool name from the .py filename if name is still empty.
   const f = $("#add-form").elements;
   if (f.name.value) return;
-  const base = filename.replace(/\.py$/i, "").replace(/[-_]+/g, " ").trim();
+  const base = filename.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
   if (base) {
     const pretty = base.replace(/\b\w/g, (c) => c.toUpperCase());
     f.name.value = pretty;
     updateIconPreview();
   }
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
 }
 
 function readFileAsText(file) {
@@ -705,33 +831,77 @@ function readFileAsText(file) {
   });
 }
 
-function renderFileInfo() {
-  const drop = document.getElementById("file-drop");
-  const info = document.getElementById("file-info");
-  const nameEl = document.getElementById("file-info-name");
-  const sizeEl = document.getElementById("file-info-size");
-  const hint = document.getElementById("file-version-hint");
-  if (!drop || !info) return;
-
-  const file = state.editingFile;
-  if (!file) {
-    drop.hidden = false;
-    info.hidden = true;
-    if (hint) hint.hidden = true;
+function renderFileList() {
+  const list = document.getElementById("file-list");
+  if (!list) return;
+  if (!state.editingFiles.length) {
+    list.innerHTML = `
+      <div class="file-empty">
+        <div style="font-weight:600;margin-bottom:4px">還沒有上傳任何檔案</div>
+        <div style="font-size:12.5px;color:var(--text-mute)">點上方「上傳新版本」,或拖檔案到這裡</div>
+      </div>
+    `;
     return;
   }
-  drop.hidden = true;
-  info.hidden = false;
-  if (nameEl) nameEl.textContent = file.name;
-  if (sizeEl) {
-    const ver = $("#add-form").elements.version?.value || "—";
-    sizeEl.textContent = `${formatBytes(file.size)} · v${ver}${file.uploadedAt ? " · 上傳 " + file.uploadedAt : ""}`;
-  }
-  if (hint) {
-    // Show the version-bump nudge only when we just attached a new file in an
-    // edit session — i.e. when there's an editingId and isNew is true.
-    hint.hidden = !(state.editingId && file.isNew);
-  }
+  list.innerHTML = state.editingFiles.map((f, i) => {
+    const isLatest = i === 0;
+    const canDelete = state.editingFiles.length > 1;
+    return `
+      <div class="file-row${isLatest ? " file-row-latest" : ""}">
+        <div class="file-row-icon">${escapeHTML(fileExt(f.name))}</div>
+        <div class="file-row-meta">
+          <div class="file-row-name">${escapeHTML(f.name)}</div>
+          <div class="file-row-info">
+            <span>${escapeHTML(formatBytes(f.size))}</span>
+            <span>·</span>
+            <span>${escapeHTML(formatDate(f.uploadedAt))}</span>
+            ${isLatest ? `<span class="file-row-latest-badge">目前版本</span>` : ""}
+          </div>
+        </div>
+        <div class="file-row-actions">
+          <button type="button" class="file-row-action" data-action="download" data-version="${i}" title="下載">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          </button>
+          ${canDelete ? `
+            <button type="button" class="file-row-action danger" data-action="delete" data-version="${i}" title="刪除這版">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
+          ` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  list.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.version, 10);
+      const action = btn.dataset.action;
+      if (action === "download") downloadFile(state.editingFiles[idx]);
+      else if (action === "delete") {
+        if (confirm("刪掉這個版本?(無法復原)")) {
+          state.editingFiles.splice(idx, 1);
+          renderFileList();
+        }
+      }
+    });
+  });
+}
+
+function fileExt(name) {
+  const m = /\.([^.]+)$/.exec(name || "");
+  return (m ? m[1] : "FILE").toUpperCase().slice(0, 4);
+}
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
 function formatBytes(n) {
@@ -740,13 +910,27 @@ function formatBytes(n) {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function downloadPyFile(record) {
-  if (!record.file?.content) return;
-  const blob = new Blob([record.file.content], { type: "text/x-python" });
+function downloadFile(fileObj) {
+  if (!fileObj?.content) {
+    toast("這版檔案內容已不在本機(可能是從分享連結匯入的)");
+    return;
+  }
+  let blob;
+  if (fileObj.content.startsWith("data:")) {
+    const [meta, base64] = fileObj.content.split(",");
+    const mime = meta.match(/data:([^;]+)/)?.[1] || "application/octet-stream";
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    blob = new Blob([bytes], { type: mime });
+  } else {
+    // legacy plain-text content (early .py tools)
+    blob = new Blob([fileObj.content], { type: "text/plain" });
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = record.file.name || `${record.id}.py`;
+  a.download = fileObj.name;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -772,6 +956,22 @@ function initBackupPopover() {
     if (file) await importBackup(file);
     e.target.value = "";
   });
+  document.getElementById("backup-share-url")?.addEventListener("click", shareViaUrl);
+}
+
+async function shareViaUrl() {
+  const url = buildShareUrl();
+  try {
+    if (navigator.clipboard && window.isSecureContext !== false) {
+      await navigator.clipboard.writeText(url);
+      toast(`已複製分享連結(${formatBytes(url.length)})`);
+    } else {
+      prompt("複製這個網址:", url);
+    }
+  } catch {
+    prompt("複製這個網址:", url);
+  }
+  document.getElementById("backup-popover").hidden = true;
 }
 
 function openBackupPopover() {
@@ -991,7 +1191,6 @@ function initToolPopover() {
     if (e.target.name === "name" || e.target.name === "category") {
       updateIconPreview();
     }
-    if (e.target.name === "version") renderFileInfo();
     if (state.editingId) return;
     saveJSON(LS_DRAFT_KEY, formData());
   });
@@ -1013,8 +1212,7 @@ function openToolPopover(id = null, anchor = null) {
   $("#popover-sub").textContent = id ? "修改後按儲存" : "貼上連結自動讀取,或手動填寫";
   $("#delete-tool").hidden = !id;
 
-  state.editingFile = null;
-  state.editingOriginalVersion = "";
+  state.editingFiles = [];
 
   if (id) {
     const t = allTools().find((x) => x.id === id);
@@ -1025,16 +1223,17 @@ function openToolPopover(id = null, anchor = null) {
       renderCreatorSelect(t.creator || "");
       renderCategorySelect(t.category || "");
       form.elements.version.value = t.version || "1.0.0";
-      state.editingOriginalVersion = form.elements.version.value;
-      setType(t.type || "url");
+      const tType = (t.type === "file" || t.type === "link") ? t.type : "link";
+      setType(tType);
       form.elements.url.value = t.url === "#" ? "" : (t.url || "");
+      if (form.elements.asIframe) form.elements.asIframe.checked = !!t.asIframe;
       form.elements.description.value = t.description || "";
       form.elements.tags.value = (t.tags || []).join(", ");
       form.elements.icon.value = t.icon || "";
       if (t.brand) ensureBrand(t.brand);
       renderBrandSelect(t.brand || "");
-      if (t.file?.content) {
-        state.editingFile = { ...t.file, isNew: false };
+      if (Array.isArray(t.files)) {
+        state.editingFiles = t.files.map((f) => ({ ...f }));
       }
     }
   } else {
@@ -1043,14 +1242,15 @@ function openToolPopover(id = null, anchor = null) {
     renderBrandSelect("");
     form.elements.icon.value = "";
     form.elements.version.value = "1.0.0";
-    setType("url");
+    if (form.elements.asIframe) form.elements.asIframe.checked = false;
+    setType("link");
     restoreDraft();
     if (state.prefillCategory) {
       renderCategorySelect(state.prefillCategory);
       state.prefillCategory = null;
     }
   }
-  renderFileInfo();
+  renderFileList();
   updateIconPreview();
 
   const anchorEl = anchor || $("#open-add");
@@ -1081,6 +1281,7 @@ function formData() {
     category: (f.category.value || "").trim(),
     type: f.type.value,
     url: f.url.value.trim(),
+    asIframe: f.asIframe ? !!f.asIframe.checked : false,
     description: f.description.value.trim(),
     tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
     icon: f.icon.value.trim(),
@@ -1102,7 +1303,13 @@ function restoreDraft() {
     const opts = Array.from(f.category.options || []);
     if (opts.some((o) => o.value === d.category)) f.category.value = d.category;
   }
-  if (d.type) f.type.value = d.type;
+  if (d.type) {
+    let t = d.type;
+    if (t === "url" || t === "iframe") t = "link";
+    else if (t === "python") t = "file";
+    if (t === "link" || t === "file") setType(t);
+  }
+  if (typeof d.asIframe === "boolean" && f.asIframe) f.asIframe.checked = d.asIframe;
   if (d.url) f.url.value = d.url;
   if (d.description) f.description.value = d.description;
   if (d.tags?.length) f.tags.value = d.tags.join(", ");
@@ -1115,12 +1322,13 @@ function saveTool() {
     toast("請填寫工具名稱與製作人");
     return;
   }
-  if (d.type === "python") {
-    if (!state.editingFile && !d.url) {
-      toast("Python 工具請上傳檔案,或填一個連結");
+  if (d.type === "file") {
+    if (!state.editingFiles.length) {
+      toast("請上傳至少一個檔案");
       return;
     }
   } else {
+    // link
     if (!d.url) {
       toast("請填 URL");
       return;
@@ -1144,25 +1352,21 @@ function saveTool() {
     version: d.version,
     category: d.category,
     type: d.type,
-    url: d.url,
+    url: d.type === "link" ? d.url : (d.url || ""),
+    asIframe: d.type === "link" ? !!d.asIframe : false,
     tags: d.tags,
     icon: d.icon || "",
-    brand: d.type === "python" ? d.brand : "",
-    file: d.type === "python" && state.editingFile
-      ? {
-          name: state.editingFile.name,
-          size: state.editingFile.size,
-          content: state.editingFile.content,
-          uploadedAt: state.editingFile.uploadedAt,
-        }
-      : null,
-    updated: new Date().toISOString().slice(0, 10),
+    brand: d.type === "file" ? d.brand : "",
+    files: d.type === "file"
+      ? state.editingFiles.map((f) => ({
+          name: f.name, size: f.size, content: f.content, uploadedAt: f.uploadedAt,
+        }))
+      : [],
+    updated: new Date().toISOString(),
   };
 
-  // Warn if user replaced the file but didn't bump the version. Save anyway.
-  if (state.editingFile?.isNew && state.editingId && d.version === state.editingOriginalVersion) {
-    toast("提示:上傳了新檔案但版本沒改");
-  }
+  // Drop the legacy single-file field if present from older records.
+  delete record.file;
 
   const idx = state.localTools.findIndex((t) => t.id === id);
   if (idx >= 0) state.localTools[idx] = record;
@@ -1172,10 +1376,17 @@ function saveTool() {
   ensureCreator(d.creator);
 
   if (d.brand) ensureBrand(d.brand);
-  saveTools();
+
+  // Try saving. If localStorage is full (file versions can pile up), tell
+  // the user instead of silently failing.
+  try {
+    saveTools();
+  } catch (err) {
+    toast("儲存失敗:空間不足。試試刪掉舊版本檔案再儲存。");
+    return;
+  }
   localStorage.removeItem(LS_DRAFT_KEY);
-  state.editingFile = null;
-  state.editingOriginalVersion = "";
+  state.editingFiles = [];
   closeToolPopover();
   render();
   toast(isNew ? "已新增" : "已更新");
