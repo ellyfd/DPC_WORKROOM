@@ -152,7 +152,7 @@ function render() {
 function renderHeadContext() {
   const el = document.getElementById("head-context");
   if (!el) return;
-  el.textContent = state.filter === "all" ? "ALL TOOLS" : state.filter;
+  el.textContent = state.filter === "all" ? "所有工具" : state.filter;
 }
 
 function renderStats() {
@@ -168,16 +168,23 @@ function renderStats() {
 function renderFilters() {
   const bar = $("#filters");
   bar.innerHTML = "";
-  if (!state.categories.length) return;
+  if (!state.categories.length && !allTools().length) return;
 
-  bar.appendChild(makeChip("全部", "all"));
-  state.categories.forEach((c) => bar.appendChild(makeChip(c.name, c.name, c.color)));
+  const tools = allTools();
+  const countOf = (name) =>
+    name === "all" ? tools.length : tools.filter((t) => t.category === name).length;
 
-  function makeChip(label, key, cv) {
+  bar.appendChild(makeChip("全部工具", "all", null, countOf("all")));
+  state.categories.forEach((c) =>
+    bar.appendChild(makeChip(c.name, c.name, c.color, countOf(c.name)))
+  );
+
+  function makeChip(label, key, cv, count) {
     const el = document.createElement("button");
     el.className = "chip" + (state.filter === key ? " active" : "");
     if (typeof cv === "number") el.dataset.cv = String(cv);
-    el.innerHTML = (typeof cv === "number" ? `<span class="chip-dot"></span>` : "") + escapeHTML(label);
+    const dot = typeof cv === "number" ? `<span class="chip-dot"></span>` : "";
+    el.innerHTML = `${dot}<span class="chip-name">${escapeHTML(label)}</span><span class="chip-count">${count}</span>`;
     el.addEventListener("click", () => {
       state.filter = key;
       $$("#filters .chip").forEach((c) => c.classList.remove("active"));
@@ -265,7 +272,7 @@ function sectionHTML(g) {
           </span>
           <span class="section-color-dot"></span>
           <span class="section-title">${escapeHTML(g.name)}</span>
-          <span class="section-count">${g.tools.length} TOOLS</span>
+          <span class="section-count">${g.tools.length}</span>
         </div>
         <div class="section-actions">${actions}</div>
       </div>
