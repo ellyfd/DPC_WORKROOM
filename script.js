@@ -1,13 +1,9 @@
-const LS_TOOLS_KEY = "dpcHub.tools.v1";
-const LS_CATS_KEY = "dpcHub.categories.v1";
-const LS_CREATORS_KEY = "dpcHub.creators.v1";
-const LS_BRANDS_KEY = "dpcHub.brands.v1";
 const LS_DRAFT_KEY = "dpcHub.draft.v1";
 const LS_COLLAPSE_KEY = "dpcHub.collapsed.v1";
 const LS_ME_KEY = "dpcHub.me.v1";
 const NUM_COLORS = 7;
-const MAX_FILE_BYTES = 1_000_000;  // 1MB per upload — fits multiple versions in 5MB localStorage
-const MAX_VERSIONS = 5;             // keep at most this many file versions per tool
+const MAX_FILE_BYTES = 25 * 1024 * 1024;  // 25 MB per upload (R2 backed)
+const MAX_VERSIONS = 5;                    // keep at most this many file versions per tool
 
 const state = {
   seedTools: [],
@@ -34,19 +30,35 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
-  try {
-    const res = await fetch("tools.json", { cache: "no-cache" });
-    const data = await res.json();
-    state.seedTools = data.tools || [];
-  } catch {
-    state.seedTools = [];
-  }
-  state.localTools = loadJSON(LS_TOOLS_KEY, []);
-  state.categories = loadJSON(LS_CATS_KEY, []);
-  state.creators = loadJSON(LS_CREATORS_KEY, []);
-  state.brands = loadJSON(LS_BRANDS_KEY, []);
+  state.seedTools = [];
   state.collapsed = loadJSON(LS_COLLAPSE_KEY, {});
   state.me = (localStorage.getItem(LS_ME_KEY) || "").trim();
+
+  await loadRemoteState();
+
+  // First-time seed: if the server is empty, pull the static tools.json
+  // (if present) and push it up as the initial state.
+  if (
+    state.localTools.length === 0 &&
+    state.categories.length === 0 &&
+    state.creators.length === 0 &&
+    state.brands.length === 0
+  ) {
+    try {
+      const res = await fetch("tools.json", { cache: "no-cache" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.tools) && data.tools.length) {
+          state.localTools = data.tools;
+          migrateToolsSchema();
+          ensureCategoriesFromTools();
+          ensureCreatorsFromTools();
+          ensureBrandsFromTools();
+          await syncStateNow();
+        }
+      }
+    } catch {}
+  }
   migrateToolsSchema();
   ensureCategoriesFromTools();
   ensureCreatorsFromTools();
@@ -107,14 +119,75 @@ function setAllCollapsed(collapsed) {
   renderSections();
 }
 
-/* ===== storage ===== */
+/* ===== storage =====
+   Tools / categories / creators / brands live on the server (D1 via the
+   Worker). Per-device UI state (collapse, draft, "me" name) stays in
+   localStorage.
+*/
 function loadJSON(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; }
   catch { return fallback; }
 }
 function saveJSON(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
-const saveTools = () => saveJSON(LS_TOOLS_KEY, state.localTools);
-const saveCats = () => saveJSON(LS_CATS_KEY, state.categories);
+
+async function loadRemoteState() {
+  try {
+    const res = await fetch("/api/state", { cache: "no-cache" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    state.localTools = Array.isArray(data.tools) ? data.tools : [];
+    state.categories = Array.isArray(data.categories) ? data.categories : [];
+    state.creators = Array.isArray(data.creators) ? data.creators : [];
+    state.brands = Array.isArray(data.brands) ? data.brands : [];
+  } catch (e) {
+    toast?.("無法載入伺服器資料,先用空白起頭");
+    state.localTools = [];
+    state.categories = [];
+    state.creators = [];
+    state.brands = [];
+  }
+}
+
+let _syncTimer = null;
+let _syncing = false;
+let _syncPending = false;
+
+function scheduleSync() {
+  if (_syncTimer) clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(syncStateNow, 250);
+}
+
+async function syncStateNow() {
+  if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
+  if (_syncing) { _syncPending = true; return; }
+  _syncing = true;
+  try {
+    const res = await fetch("/api/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tools: state.localTools,
+        categories: state.categories,
+        creators: state.creators,
+        brands: state.brands,
+      }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+  } catch (e) {
+    toast?.("同步到伺服器失敗,稍後再試");
+  } finally {
+    _syncing = false;
+    if (_syncPending) {
+      _syncPending = false;
+      scheduleSync();
+    }
+  }
+}
+
+const saveTools = scheduleSync;
+const saveCats = scheduleSync;
+const saveCreators = scheduleSync;
+const saveBrands = scheduleSync;
 
 /* ===== data helpers ===== */
 function allTools() {
@@ -157,16 +230,7 @@ function migrateToolsSchema() {
     }
     if (t.type === "file") {
       if (!Array.isArray(t.files)) {
-        t.files = t.file && t.file.content
-          ? [{
-              name: t.file.name,
-              size: t.file.size,
-              content: t.file.content,
-              uploadedAt: t.file.uploadedAt
-                ? (t.file.uploadedAt.includes("T") ? t.file.uploadedAt : `${t.file.uploadedAt}T00:00:00.000Z`)
-                : new Date().toISOString(),
-            }]
-          : [];
+        t.files = [];
         delete t.file;
         changed = true;
       }
@@ -200,8 +264,8 @@ async function maybeImportFromHash() {
       migrateToolsSchema();
       saveTools();
       saveCats();
-      saveJSON(LS_CREATORS_KEY, state.creators);
-      saveJSON(LS_BRANDS_KEY, state.brands);
+      saveCreators();
+      saveBrands();
     }
     history.replaceState(null, "", window.location.pathname + window.location.search);
   } catch (err) {
@@ -247,14 +311,14 @@ function ensureBrandsFromTools() {
       changed = true;
     }
   }
-  if (changed) saveJSON(LS_BRANDS_KEY, state.brands);
+  if (changed) saveBrands();
 }
 
 function ensureBrand(name) {
   if (!name) return;
   if (!state.brands.includes(name)) {
     state.brands.push(name);
-    saveJSON(LS_BRANDS_KEY, state.brands);
+    saveBrands();
   }
 }
 
@@ -287,14 +351,14 @@ function ensureCreatorsFromTools() {
       changed = true;
     }
   }
-  if (changed) saveJSON(LS_CREATORS_KEY, state.creators);
+  if (changed) saveCreators();
 }
 
 function ensureCreator(name) {
   if (!name) return;
   if (!state.creators.includes(name)) {
     state.creators.push(name);
-    saveJSON(LS_CREATORS_KEY, state.creators);
+    saveCreators();
   }
 }
 
@@ -616,8 +680,8 @@ function openTool(t) {
   // File tools download the latest version.
   if (t.type === "file" && Array.isArray(t.files) && t.files.length) {
     const latest = t.files[0];
-    if (!latest?.content) {
-      toast("最新版的檔案內容已不在本機(可能是從分享連結匯入的)");
+    if (!latest?.key) {
+      toast("找不到這版的檔案");
       return;
     }
     downloadFile(latest);
@@ -805,24 +869,38 @@ async function addFileVersion(file) {
     toast(`檔案太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_FILE_BYTES)})`);
     return;
   }
-  // Ask for the uploader's name on the first upload; cached afterwards.
   const me = await getMe();
+  const toolId = $("#add-form").elements.id.value || "new";
   try {
-    const content = await readFileAsDataURL(file);
+    toast("上傳中…");
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "X-Tool-Id": toolId,
+        "X-Filename": encodeURIComponent(file.name),
+        "X-Uploaded-By": encodeURIComponent(me || ""),
+      },
+      body: file,
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const meta = await res.json();
     state.editingFiles.unshift({
-      name: file.name,
-      size: file.size,
-      content,
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: me || "",
+      key: meta.key,
+      name: meta.name,
+      size: meta.size,
+      uploadedAt: meta.uploadedAt,
+      uploadedBy: meta.uploadedBy,
     });
     if (state.editingFiles.length > MAX_VERSIONS) {
       state.editingFiles.length = MAX_VERSIONS;
     }
     renderFileList();
     autoFillFromFilename(file.name);
-  } catch {
-    toast("檔案讀取失敗");
+    toast("上傳完成");
+  } catch (err) {
+    toast("檔案上傳失敗");
+    console.error(err);
   }
 }
 
@@ -936,30 +1014,16 @@ function formatBytes(n) {
 }
 
 function downloadFile(fileObj) {
-  if (!fileObj?.content) {
-    toast("這版檔案內容已不在本機(可能是從分享連結匯入的)");
+  if (!fileObj?.key) {
+    toast("找不到這版的檔案");
     return;
   }
-  let blob;
-  if (fileObj.content.startsWith("data:")) {
-    const [meta, base64] = fileObj.content.split(",");
-    const mime = meta.match(/data:([^;]+)/)?.[1] || "application/octet-stream";
-    const bin = atob(base64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    blob = new Blob([bytes], { type: mime });
-  } else {
-    // legacy plain-text content (early .py tools)
-    blob = new Blob([fileObj.content], { type: "text/plain" });
-  }
-  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = fileObj.name;
+  a.href = "/files/" + fileObj.key.split("/").map(encodeURIComponent).join("/");
+  a.download = fileObj.name || "download";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 /* ===== tile icon menu (change-image from the tile, no popover needed) ===== */
@@ -1172,8 +1236,8 @@ async function importBackup(file) {
 
     saveTools();
     saveCats();
-    saveJSON(LS_CREATORS_KEY, state.creators);
-    saveJSON(LS_BRANDS_KEY, state.brands);
+    saveCreators();
+    saveBrands();
 
     render();
     toast("匯入成功");
@@ -1540,7 +1604,11 @@ function saveTool() {
     brand: d.type === "file" ? d.brand : "",
     files: d.type === "file"
       ? state.editingFiles.map((f) => ({
-          name: f.name, size: f.size, content: f.content, uploadedAt: f.uploadedAt,
+          key: f.key,
+          name: f.name,
+          size: f.size,
+          uploadedAt: f.uploadedAt,
+          uploadedBy: f.uploadedBy || "",
         }))
       : [],
     updated: new Date().toISOString(),
@@ -1558,14 +1626,7 @@ function saveTool() {
 
   if (d.brand) ensureBrand(d.brand);
 
-  // Try saving. If localStorage is full (file versions can pile up), tell
-  // the user instead of silently failing.
-  try {
-    saveTools();
-  } catch (err) {
-    toast("儲存失敗:空間不足。試試刪掉舊版本檔案再儲存。");
-    return;
-  }
+  saveTools();
   localStorage.removeItem(LS_DRAFT_KEY);
   state.editingFiles = [];
   closeToolPopover();

@@ -1,0 +1,8 @@
+worker/
+wrangler.toml
+.assetsignore
+.git/
+.github/
+.claude/
+node_modules/
+README.md
