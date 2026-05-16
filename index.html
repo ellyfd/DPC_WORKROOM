@@ -36,6 +36,10 @@
           </svg>
           <input id="search" type="text" placeholder="搜尋工具、製作人、tag…" />
         </div>
+        <button class="btn btn-ghost" id="open-add-cat" title="新增分類">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
+          分類
+        </button>
         <button class="btn btn-primary" id="open-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
           新增工具
@@ -46,11 +50,15 @@
     <div class="filter-bar" id="filters"></div>
 
     <main class="main-area">
-      <div class="tools-grid" id="tools-grid"></div>
+      <div class="sections-area" id="sections-area"></div>
       <div class="empty" id="empty" hidden>
         <div class="empty-art">∅</div>
         <p class="empty-title">還沒有任何工具</p>
         <p class="muted small">點右上角「新增工具」開始建立你的第一個入口</p>
+        <button class="btn btn-primary" id="empty-cta" style="margin-top:12px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          新增第一個工具
+        </button>
       </div>
     </main>
 
@@ -58,7 +66,7 @@
       <div class="muted">
         <span id="stat-total">0</span> 工具 · <span id="stat-creators">0</span> 製作人 · <span id="stat-categories">0</span> 分類
       </div>
-      <div class="muted">本機新增的工具自動儲存於此瀏覽器 (localStorage)</div>
+      <div class="muted">資料儲存在此瀏覽器 (localStorage)</div>
     </footer>
   </div>
 
@@ -70,14 +78,30 @@
       <div class="popover-head">
         <div>
           <div class="popover-title" id="popover-title">新增工具</div>
-          <div class="muted small">欄位自動保存草稿,送出存到本機</div>
+          <div class="muted small" id="popover-sub">貼上連結自動讀取,或手動填寫</div>
         </div>
         <button class="icon-btn" data-close aria-label="關閉">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </div>
+
       <form id="add-form" class="popover-form" onsubmit="return false;">
         <input type="hidden" name="id" />
+
+        <div class="auto-fill">
+          <div class="auto-fill-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 4V2M15 14v-2M8 9l-2-2M21 14l-2-2M5 9H3M22 8h-2M17 15.5l3.5 3.5M12 12l9 9M12 22a10 10 0 1 1 10-10"/></svg>
+            自動讀取
+          </div>
+          <div class="auto-fill-row">
+            <input id="auto-url" type="url" placeholder="貼上 GitHub repo / 任何網址…" />
+            <button type="button" class="btn btn-ghost" id="auto-fetch">讀取</button>
+          </div>
+          <div class="auto-fill-hint muted small" id="auto-hint">支援 GitHub repo(讀取名稱、描述、作者、語言、tags)與一般 URL(讀取網域)</div>
+        </div>
+
+        <div class="form-divider"><span>或自己填</span></div>
+
         <div class="row">
           <label>
             <span>工具名稱 *</span>
@@ -90,27 +114,29 @@
         </div>
         <div class="row">
           <label>
+            <span>分類</span>
+            <input name="category" placeholder="例如:生活 / CLO" list="cat-list" />
+            <datalist id="cat-list"></datalist>
+          </label>
+          <label>
             <span>版本</span>
             <input name="version" placeholder="1.0.0" value="1.0.0" />
           </label>
+        </div>
+        <div class="row">
           <label>
-            <span>分類</span>
-            <input name="category" placeholder="例如:布料 / CLO" list="cat-list" />
-            <datalist id="cat-list"></datalist>
+            <span>連結類型</span>
+            <select name="type">
+              <option value="url">外部網址 (URL)</option>
+              <option value="python">Python script / repo</option>
+              <option value="iframe">可內嵌 (iframe)</option>
+            </select>
+          </label>
+          <label>
+            <span>URL *</span>
+            <input name="url" placeholder="https://..." required />
           </label>
         </div>
-        <label>
-          <span>連結類型</span>
-          <select name="type">
-            <option value="url">外部網址 (URL)</option>
-            <option value="python">Python script / repo</option>
-            <option value="iframe">可內嵌 (iframe)</option>
-          </select>
-        </label>
-        <label>
-          <span>URL *</span>
-          <input name="url" placeholder="https://..." required />
-        </label>
         <label>
           <span>描述</span>
           <textarea name="description" rows="2" placeholder="一句話介紹這個工具"></textarea>
@@ -120,10 +146,45 @@
           <input name="tags" placeholder="例如:布料, 查詢, 自動化" />
         </label>
         <div class="form-actions">
-          <button type="button" class="btn btn-ghost" id="delete-tool" hidden>刪除</button>
+          <button type="button" class="btn btn-danger" id="delete-tool" hidden>刪除</button>
           <div class="form-actions-right">
             <button type="button" class="btn btn-ghost" data-close>取消</button>
             <button type="button" class="btn btn-primary" id="save-tool">儲存</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Category popover -->
+  <div class="popover" id="cat-popover" hidden>
+    <div class="popover-backdrop" data-close></div>
+    <div class="popover-panel popover-panel-sm" role="dialog" aria-modal="true">
+      <div class="popover-arrow"></div>
+      <div class="popover-head">
+        <div>
+          <div class="popover-title" id="cat-popover-title">新增分類</div>
+          <div class="muted small">幫工具分組,例如「生活」「CLO」</div>
+        </div>
+        <button class="icon-btn" data-close aria-label="關閉">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <form id="cat-form" class="popover-form" onsubmit="return false;">
+        <input type="hidden" name="originalName" />
+        <label>
+          <span>分類名稱 *</span>
+          <input name="name" placeholder="例如:生活、CLO、查詢" required />
+        </label>
+        <label>
+          <span>顏色</span>
+          <div class="color-picker" id="color-picker"></div>
+        </label>
+        <div class="form-actions">
+          <button type="button" class="btn btn-danger" id="delete-cat" hidden>刪除</button>
+          <div class="form-actions-right">
+            <button type="button" class="btn btn-ghost" data-close>取消</button>
+            <button type="button" class="btn btn-primary" id="save-cat">儲存</button>
           </div>
         </div>
       </form>
@@ -146,6 +207,9 @@
       <iframe id="modal-frame" src="about:blank" loading="lazy"></iframe>
     </div>
   </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" hidden></div>
 
   <script src="script.js"></script>
 </body>

@@ -1,12 +1,18 @@
 const LS_TOOLS_KEY = "dpcHub.tools.v1";
+const LS_CATS_KEY = "dpcHub.categories.v1";
 const LS_DRAFT_KEY = "dpcHub.draft.v1";
+const NUM_COLORS = 7;
 
 const state = {
   seedTools: [],
   localTools: [],
+  categories: [],
   filter: "all",
   query: "",
   editingId: null,
+  editingCat: null,
+  prefillCategory: null,
+  anchorEl: null,
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -19,38 +25,38 @@ async function init() {
     const res = await fetch("tools.json", { cache: "no-cache" });
     const data = await res.json();
     state.seedTools = data.tools || [];
-  } catch (e) {
+  } catch {
     state.seedTools = [];
   }
-  state.localTools = loadLocalTools();
+  state.localTools = loadJSON(LS_TOOLS_KEY, []);
+  state.categories = loadJSON(LS_CATS_KEY, []);
+  ensureCategoriesFromTools();
 
-  renderFilters();
-  renderGrid();
-  renderStats();
+  render();
 
   $("#search").addEventListener("input", (e) => {
     state.query = e.target.value.trim().toLowerCase();
-    renderGrid();
+    renderSections();
   });
+  $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
+  $("#open-add-cat").addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
+  $("#empty-cta").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
 
-  $("#open-add").addEventListener("click", () => openPopover());
-
-  initPopover();
+  initToolPopover();
+  initCatPopover();
   initModal();
-  restoreDraft();
 }
 
-/* ----- storage ----- */
-function loadLocalTools() {
-  try {
-    return JSON.parse(localStorage.getItem(LS_TOOLS_KEY) || "[]");
-  } catch { return []; }
+/* ===== storage ===== */
+function loadJSON(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; }
+  catch { return fallback; }
 }
-function saveLocalTools() {
-  localStorage.setItem(LS_TOOLS_KEY, JSON.stringify(state.localTools));
-}
+function saveJSON(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
+const saveTools = () => saveJSON(LS_TOOLS_KEY, state.localTools);
+const saveCats = () => saveJSON(LS_CATS_KEY, state.categories);
 
-/* ----- data helpers ----- */
+/* ===== data helpers ===== */
 function allTools() {
   const localIds = new Set(state.localTools.map((t) => t.id));
   const seed = state.seedTools.filter((t) => !localIds.has(t.id));
@@ -58,45 +64,88 @@ function allTools() {
 }
 function uniq(arr) { return Array.from(new Set(arr)); }
 
-function filteredTools() {
-  return allTools().filter((t) => {
-    if (state.filter !== "all" && t.category !== state.filter) return false;
-    if (!state.query) return true;
-    const hay = [t.name, t.creator, t.description, t.category, ...(t.tags || [])]
-      .join(" ").toLowerCase();
-    return hay.includes(state.query);
-  });
+function ensureCategoriesFromTools() {
+  const used = uniq(allTools().map((t) => t.category).filter(Boolean));
+  let changed = false;
+  for (const name of used) {
+    if (!state.categories.find((c) => c.name === name)) {
+      state.categories.push({ name, color: state.categories.length % NUM_COLORS });
+      changed = true;
+    }
+  }
+  if (changed) saveCats();
 }
 
-/* ----- render ----- */
+function ensureCategory(name, color) {
+  if (!name) return;
+  const existing = state.categories.find((c) => c.name === name);
+  if (existing) {
+    if (typeof color === "number") { existing.color = color; saveCats(); }
+    return existing;
+  }
+  const next = { name, color: typeof color === "number" ? color : state.categories.length % NUM_COLORS };
+  state.categories.push(next);
+  saveCats();
+  return next;
+}
+
+function groupedTools() {
+  const tools = allTools();
+  const result = state.categories.map((c) => ({
+    name: c.name,
+    color: c.color,
+    tools: tools.filter((t) => t.category === c.name),
+    system: false,
+  }));
+  const uncat = tools.filter((t) => !t.category || !state.categories.find((c) => c.name === t.category));
+  if (uncat.length) {
+    result.push({ name: "未分類", color: NUM_COLORS, tools: uncat, system: true });
+  }
+  return result;
+}
+
+function matchesQuery(t) {
+  if (!state.query) return true;
+  const hay = [t.name, t.creator, t.description, t.category, ...(t.tags || [])]
+    .join(" ").toLowerCase();
+  return hay.includes(state.query);
+}
+
+/* ===== render ===== */
+function render() {
+  renderFilters();
+  renderSections();
+  renderStats();
+}
+
 function renderStats() {
   const list = allTools();
   $("#stat-total").textContent = list.length;
   $("#stat-creators").textContent = uniq(list.map((t) => t.creator)).length;
-  $("#stat-categories").textContent = uniq(list.map((t) => t.category).filter(Boolean)).length;
+  $("#stat-categories").textContent = state.categories.length;
 
-  const dl = $("#cat-list");
-  dl.innerHTML = uniq(list.map((t) => t.category).filter(Boolean))
-    .map((c) => `<option value="${escapeAttr(c)}"></option>`).join("");
+  $("#cat-list").innerHTML = state.categories
+    .map((c) => `<option value="${escapeAttr(c.name)}"></option>`).join("");
 }
 
 function renderFilters() {
-  const cats = uniq(allTools().map((t) => t.category).filter(Boolean));
   const bar = $("#filters");
   bar.innerHTML = "";
+  if (!state.categories.length) return;
 
   bar.appendChild(makeChip("全部", "all"));
-  cats.forEach((c) => bar.appendChild(makeChip(c, c)));
+  state.categories.forEach((c) => bar.appendChild(makeChip(c.name, c.name, c.color)));
 
-  function makeChip(label, key) {
+  function makeChip(label, key, cv) {
     const el = document.createElement("button");
     el.className = "chip" + (state.filter === key ? " active" : "");
-    el.textContent = label;
+    if (typeof cv === "number") el.dataset.cv = String(cv);
+    el.innerHTML = (typeof cv === "number" ? `<span class="chip-dot"></span>` : "") + escapeHTML(label);
     el.addEventListener("click", () => {
       state.filter = key;
       $$("#filters .chip").forEach((c) => c.classList.remove("active"));
       el.classList.add("active");
-      renderGrid();
+      renderSections();
     });
     return el;
   }
@@ -108,30 +157,135 @@ const TYPE_META = {
   iframe: { label: "EMBED", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>` },
 };
 
-function renderGrid() {
-  const grid = $("#tools-grid");
+function renderSections() {
+  const area = $("#sections-area");
   const empty = $("#empty");
-  const list = filteredTools();
-  const localIds = new Set(state.localTools.map((t) => t.id));
 
-  if (!list.length) {
-    grid.innerHTML = "";
+  if (!allTools().length && !state.categories.length) {
+    area.innerHTML = "";
     empty.hidden = false;
     return;
   }
   empty.hidden = true;
-  grid.innerHTML = list.map((t, i) => cardHTML(t, i, localIds.has(t.id))).join("");
 
-  $$("#tools-grid .card").forEach((card) => {
+  let groups = groupedTools();
+  if (state.filter !== "all") {
+    groups = groups.filter((g) => g.name === state.filter);
+  }
+  if (state.query) {
+    groups = groups
+      .map((g) => ({ ...g, tools: g.tools.filter(matchesQuery) }))
+      .filter((g) => g.tools.length);
+  }
+
+  if (!groups.length) {
+    area.innerHTML = `<div class="section"><div class="section-empty">沒有符合條件的工具</div></div>`;
+    return;
+  }
+
+  area.innerHTML = groups.map(sectionHTML).join("");
+  wireSections();
+}
+
+function sectionHTML(g) {
+  const cv = g.color;
+  const isSystem = g.system;
+  const cards = g.tools.map((t, i) => cardHTML(t, i, cv)).join("");
+  const addCard = !isSystem ? `
+    <button class="card-add" data-add-cat="${escapeAttr(g.name)}">
+      <span class="card-add-plus"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg></span>
+      新增到「${escapeHTML(g.name)}」
+    </button>
+  ` : "";
+
+  const actions = isSystem ? "" : `
+    <button class="section-action" title="新增工具" data-add-cat="${escapeAttr(g.name)}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button class="section-action" title="編輯分類" data-edit-cat="${escapeAttr(g.name)}">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+    </button>
+    <button class="section-action danger" title="刪除分類" data-del-cat="${escapeAttr(g.name)}">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+    </button>
+  `;
+
+  const body = g.tools.length
+    ? `<div class="section-grid">${cards}${addCard}</div>`
+    : `<div class="section-grid">
+         <div class="section-empty">這個分類還沒有工具${isSystem ? "" : ",點右上 + 新增"}</div>
+         ${addCard}
+       </div>`;
+
+  return `
+    <section class="section" data-cv="${cv}" data-cat="${escapeAttr(g.name)}">
+      <div class="section-head">
+        <div class="section-title-row">
+          <span class="section-color-dot"></span>
+          <span class="section-title">${escapeHTML(g.name)}</span>
+          <span class="section-count">${g.tools.length}</span>
+        </div>
+        <div class="section-actions">${actions}</div>
+      </div>
+      ${body}
+    </section>
+  `;
+}
+
+function cardHTML(t, i, cv) {
+  const type = TYPE_META[t.type] || TYPE_META.url;
+  const tags = (t.tags || []).slice(0, 3)
+    .map((tg) => `<span class="tag">${escapeHTML(tg)}</span>`).join("");
+  const iconImg = t.icon
+    ? `<img src="${escapeAttr(t.icon)}" alt="" onerror="this.remove()" />`
+    : "";
+
+  return `
+    <article class="card" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
+      <button class="card-edit" title="編輯">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+      </button>
+      <div class="card-top">
+        <div class="card-icon"><span class="ic-letter">${escapeHTML(initial(t.name))}</span>${iconImg}</div>
+        <span class="type-badge ${t.type || "url"}">${type.icon}${type.label}</span>
+      </div>
+      <h3 class="card-title">${escapeHTML(t.name)}</h3>
+      <p class="card-desc">${escapeHTML(t.description || "—")}</p>
+      <div class="card-tags">${tags}</div>
+      <div class="card-foot">
+        <span class="creator">
+          <span class="avatar">${escapeHTML(initial(t.creator))}</span>
+          <span>${escapeHTML(t.creator || "Unknown")}</span>
+        </span>
+        <span class="version-badge">v${escapeHTML(t.version || "0.0.0")}</span>
+      </div>
+    </article>
+  `;
+}
+
+function wireSections() {
+  $$("#sections-area .card").forEach((card) => {
     card.addEventListener("click", (e) => {
-      if (e.target.closest(".card-edit")) {
-        openPopover(card.dataset.id, false, e.target.closest(".card-edit"));
+      const editBtn = e.target.closest(".card-edit");
+      if (editBtn) {
+        openToolPopover(card.dataset.id, editBtn);
         return;
       }
-      const id = card.dataset.id;
-      const tool = allTools().find((t) => t.id === id);
+      const tool = allTools().find((t) => t.id === card.dataset.id);
       if (tool) openTool(tool);
     });
+  });
+  $$("#sections-area [data-add-cat]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.prefillCategory = btn.dataset.addCat;
+      openToolPopover(null, btn);
+    });
+  });
+  $$("#sections-area [data-edit-cat]").forEach((btn) => {
+    btn.addEventListener("click", () => openCatPopover(btn.dataset.editCat, btn));
+  });
+  $$("#sections-area [data-del-cat]").forEach((btn) => {
+    btn.addEventListener("click", () => deleteCategory(btn.dataset.delCat));
   });
 }
 
@@ -140,41 +294,11 @@ function initial(name) {
   return name.trim().charAt(0).toUpperCase();
 }
 
-function cardHTML(t, i, isLocal) {
-  const type = TYPE_META[t.type] || TYPE_META.url;
-  const cv = i % 8;
-  const tags = (t.tags || []).slice(0, 3)
-    .map((tg) => `<span class="tag">${escapeHTML(tg)}</span>`).join("");
-  const pill = isLocal ? `<span class="local-pill">本機</span>` : "";
-  const editBtn = isLocal
-    ? `<button class="card-edit" title="編輯"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>`
-    : "";
-
-  return `
-    <article class="card ${isLocal ? "editable" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
-      ${editBtn}
-      <div class="card-top">
-        <div class="card-icon">${escapeHTML(initial(t.name))}</div>
-        <span class="type-badge ${t.type || "url"}">${type.icon}${type.label}</span>
-      </div>
-      <h3 class="card-title">${escapeHTML(t.name)} ${pill}</h3>
-      <p class="card-desc">${escapeHTML(t.description || "—")}</p>
-      <div class="card-tags">${tags}</div>
-      <div class="card-foot">
-        <span class="creator">
-          <span class="avatar">${escapeHTML(initial(t.creator))}</span>
-          ${escapeHTML(t.creator || "Unknown")}
-        </span>
-        <span class="version-badge">v${escapeHTML(t.version || "0.0.0")}</span>
-      </div>
-    </article>
-  `;
-}
-
 function openTool(t) {
   if (!t.url || t.url === "#") {
-    const yes = confirm(`「${t.name}」尚未設定連結。要現在編輯嗎?`);
-    if (yes) openPopover(t.id, /*forceLocal*/ true);
+    if (confirm(`「${t.name}」尚未設定連結。要現在編輯嗎?`)) {
+      openToolPopover(t.id);
+    }
     return;
   }
   if (t.type === "iframe") {
@@ -187,35 +311,41 @@ function openTool(t) {
   }
 }
 
-/* ----- popover (add / edit) ----- */
-function initPopover() {
-  const popover = $("#popover");
-  popover.querySelectorAll("[data-close]").forEach((el) =>
-    el.addEventListener("click", closePopover)
+/* ===== tool popover ===== */
+function initToolPopover() {
+  const pop = $("#popover");
+  pop.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", closeToolPopover)
   );
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !popover.hidden) closePopover();
+    if (e.key === "Escape" && !pop.hidden) closeToolPopover();
   });
-
   $("#save-tool").addEventListener("click", saveTool);
   $("#delete-tool").addEventListener("click", deleteTool);
+  $("#auto-fetch").addEventListener("click", autoFetch);
+
+  $("#auto-url").addEventListener("paste", () => setTimeout(autoFetch, 30));
+  $("#auto-url").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); autoFetch(); }
+  });
 
   $("#add-form").addEventListener("input", () => {
     if (state.editingId) return;
-    const data = formData();
-    localStorage.setItem(LS_DRAFT_KEY, JSON.stringify(data));
+    saveJSON(LS_DRAFT_KEY, formData());
   });
 
   window.addEventListener("resize", () => {
-    if (!popover.hidden && state.anchorEl) positionPopover(state.anchorEl);
+    if (!pop.hidden && state.anchorEl) positionPopover(pop, state.anchorEl);
   });
 }
 
-function openPopover(id = null, forceLocal = false, anchorEl = null) {
+function openToolPopover(id = null, anchor = null) {
   state.editingId = id;
   const form = $("#add-form");
   form.reset();
+  resetAutoFill();
   $("#popover-title").textContent = id ? "編輯工具" : "新增工具";
+  $("#popover-sub").textContent = id ? "修改後按儲存" : "貼上連結自動讀取,或手動填寫";
   $("#delete-tool").hidden = !id;
 
   if (id) {
@@ -233,38 +363,25 @@ function openPopover(id = null, forceLocal = false, anchorEl = null) {
     }
   } else {
     restoreDraft();
+    if (state.prefillCategory) {
+      form.elements.category.value = state.prefillCategory;
+      state.prefillCategory = null;
+    }
   }
 
-  const anchor = anchorEl || $("#open-add");
-  state.anchorEl = anchor;
+  const anchorEl = anchor || $("#open-add");
+  state.anchorEl = anchorEl;
+  $("#popover").hidden = true;
+  $("#cat-popover").hidden = true;
   $("#popover").hidden = false;
-  positionPopover(anchor);
-  setTimeout(() => form.elements.name.focus(), 50);
+  positionPopover($("#popover"), anchorEl);
+  setTimeout(() => {
+    if (id) form.elements.name.focus();
+    else $("#auto-url").focus();
+  }, 50);
 }
 
-function positionPopover(anchor) {
-  const panel = $(".popover-panel");
-  const arrow = $(".popover-arrow");
-  const r = anchor.getBoundingClientRect();
-  const panelWidth = 380;
-  const gap = 10;
-
-  const top = r.bottom + gap;
-  let right = window.innerWidth - r.right;
-  if (right + panelWidth > window.innerWidth - 12) {
-    right = 12;
-  }
-  panel.style.top = `${top}px`;
-  panel.style.right = `${right}px`;
-  panel.style.left = "auto";
-
-  const anchorCenter = r.left + r.width / 2;
-  const panelRight = window.innerWidth - right;
-  const arrowFromRight = Math.max(12, Math.min(panelWidth - 24, panelRight - anchorCenter - 6));
-  arrow.style.right = `${arrowFromRight}px`;
-}
-
-function closePopover() {
+function closeToolPopover() {
   $("#popover").hidden = true;
   state.editingId = null;
   state.anchorEl = null;
@@ -286,30 +403,30 @@ function formData() {
 }
 
 function restoreDraft() {
-  try {
-    const raw = localStorage.getItem(LS_DRAFT_KEY);
-    if (!raw) return;
-    const d = JSON.parse(raw);
-    const f = $("#add-form").elements;
-    if (d.name) f.name.value = d.name;
-    if (d.creator) f.creator.value = d.creator;
-    if (d.version) f.version.value = d.version;
-    if (d.category) f.category.value = d.category;
-    if (d.type) f.type.value = d.type;
-    if (d.url) f.url.value = d.url;
-    if (d.description) f.description.value = d.description;
-    if (d.tags && d.tags.length) f.tags.value = d.tags.join(", ");
-  } catch {}
+  const d = loadJSON(LS_DRAFT_KEY, null);
+  if (!d) return;
+  const f = $("#add-form").elements;
+  if (d.name) f.name.value = d.name;
+  if (d.creator) f.creator.value = d.creator;
+  if (d.version) f.version.value = d.version;
+  if (d.category) f.category.value = d.category;
+  if (d.type) f.type.value = d.type;
+  if (d.url) f.url.value = d.url;
+  if (d.description) f.description.value = d.description;
+  if (d.tags?.length) f.tags.value = d.tags.join(", ");
 }
 
 function saveTool() {
   const d = formData();
   if (!d.name || !d.creator || !d.url) {
-    alert("請填寫工具名稱、製作人與 URL。");
+    toast("請填寫工具名稱、製作人與 URL");
     return;
   }
   const id = d.id || slugify(d.name);
+
+  const existing = state.localTools.find((t) => t.id === id);
   const record = {
+    ...(existing || {}),
     id,
     name: d.name,
     description: d.description,
@@ -321,31 +438,285 @@ function saveTool() {
     tags: d.tags,
     updated: new Date().toISOString().slice(0, 10),
   };
+  if (pendingIcon[id]) {
+    record.icon = pendingIcon[id];
+    delete pendingIcon[id];
+  }
+  if (pendingIcon[d.id]) {
+    record.icon = pendingIcon[d.id];
+    delete pendingIcon[d.id];
+  }
 
   const idx = state.localTools.findIndex((t) => t.id === id);
   if (idx >= 0) state.localTools[idx] = record;
   else state.localTools.push(record);
 
-  saveLocalTools();
+  if (d.category) ensureCategory(d.category);
+
+  saveTools();
   localStorage.removeItem(LS_DRAFT_KEY);
-  closePopover();
-  renderFilters();
-  renderGrid();
-  renderStats();
+  closeToolPopover();
+  render();
+  toast(idx >= 0 ? "已更新" : "已新增");
 }
 
 function deleteTool() {
   if (!state.editingId) return;
   if (!confirm("確定要刪除這個工具?")) return;
   state.localTools = state.localTools.filter((t) => t.id !== state.editingId);
-  saveLocalTools();
-  closePopover();
-  renderFilters();
-  renderGrid();
-  renderStats();
+  saveTools();
+  closeToolPopover();
+  render();
+  toast("已刪除");
 }
 
-/* ----- iframe modal ----- */
+/* ===== auto-fetch ===== */
+function resetAutoFill() {
+  const box = $(".auto-fill");
+  box.classList.remove("success", "error");
+  $("#auto-url").value = "";
+  $("#auto-hint").textContent = "支援 GitHub repo(讀取名稱、描述、作者、語言、tags)與一般 URL(讀取網域)";
+}
+
+async function autoFetch() {
+  const url = $("#auto-url").value.trim();
+  if (!url) return;
+  const box = $(".auto-fill");
+  box.classList.remove("success", "error");
+  const btn = $("#auto-fetch");
+  btn.disabled = true;
+  $("#auto-hint").textContent = "讀取中…";
+
+  try {
+    let info = null;
+    const gh = parseGitHub(url);
+    if (gh) info = await fetchGitHubRepo(gh.owner, gh.repo);
+    else info = parseGenericURL(url);
+
+    if (!info) throw new Error("找不到資訊");
+    applyAutoFill(info);
+    box.classList.add("success");
+    $("#auto-hint").textContent = gh
+      ? `✓ 已讀取 GitHub repo:${gh.owner}/${gh.repo}`
+      : "✓ 已從網址讀取網域,請補上名稱與描述";
+  } catch (err) {
+    box.classList.add("error");
+    $("#auto-hint").textContent = "讀取失敗:" + (err?.message || "未知錯誤") + "。請手動填寫。";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function parseGitHub(url) {
+  const m = url.match(/github\.com\/([\w.-]+)\/([\w.-]+)/i);
+  if (!m) return null;
+  return { owner: m[1], repo: m[2].replace(/\.git$/i, "").replace(/\/$/, "") };
+}
+
+async function fetchGitHubRepo(owner, repo) {
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+  if (!res.ok) throw new Error("GitHub API " + res.status);
+  const data = await res.json();
+  const lang = (data.language || "").toLowerCase();
+  return {
+    name: data.name,
+    description: data.description || "",
+    creator: data.owner?.login || owner,
+    url: data.html_url,
+    type: lang === "python" ? "python" : "url",
+    tags: data.topics || [],
+    icon: data.owner?.avatar_url ? `${data.owner.avatar_url}&s=80` : "",
+  };
+}
+
+function parseGenericURL(url) {
+  try {
+    const u = new URL(url.startsWith("http") ? url : "https://" + url);
+    const host = u.hostname.replace(/^www\./, "");
+    const name = host.split(".")[0]
+      .replace(/[-_]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    return {
+      name,
+      description: "",
+      creator: "",
+      url: u.href,
+      type: "url",
+      tags: [],
+      icon: `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function applyAutoFill(info) {
+  const f = $("#add-form").elements;
+  if (info.name) f.name.value = info.name;
+  if (info.creator) f.creator.value = info.creator;
+  if (info.description) f.description.value = info.description;
+  if (info.url) f.url.value = info.url;
+  if (info.type) f.type.value = info.type;
+  if (info.tags?.length) f.tags.value = info.tags.join(", ");
+  if (info.icon) {
+    const id = f.id.value || slugify(f.name.value);
+    f.id.value = id;
+    pendingIcon[id] = info.icon;
+  }
+}
+
+const pendingIcon = {};
+
+/* ===== category popover ===== */
+function initCatPopover() {
+  const pop = $("#cat-popover");
+  pop.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", closeCatPopover)
+  );
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !pop.hidden) closeCatPopover();
+  });
+  $("#save-cat").addEventListener("click", saveCategory);
+  $("#delete-cat").addEventListener("click", () => {
+    if (state.editingCat) deleteCategory(state.editingCat, /*fromPopover*/ true);
+  });
+  renderColorPicker(0);
+}
+
+function renderColorPicker(active) {
+  const wrap = $("#color-picker");
+  wrap.innerHTML = "";
+  for (let i = 0; i < NUM_COLORS; i++) {
+    const sw = document.createElement("button");
+    sw.type = "button";
+    sw.className = "color-swatch" + (i === active ? " active" : "");
+    sw.dataset.cv = String(i);
+    sw.dataset.color = String(i);
+    sw.addEventListener("click", () => {
+      $$("#color-picker .color-swatch").forEach((s) => s.classList.remove("active"));
+      sw.classList.add("active");
+    });
+    wrap.appendChild(sw);
+  }
+}
+
+function openCatPopover(name = null, anchor = null) {
+  state.editingCat = name;
+  const f = $("#cat-form").elements;
+  $("#cat-popover-title").textContent = name ? "編輯分類" : "新增分類";
+  $("#delete-cat").hidden = !name;
+  f.originalName.value = name || "";
+
+  if (name) {
+    const c = state.categories.find((x) => x.name === name);
+    f.name.value = name;
+    renderColorPicker(c?.color ?? 0);
+  } else {
+    f.name.value = "";
+    renderColorPicker(state.categories.length % NUM_COLORS);
+  }
+
+  const anchorEl = anchor || $("#open-add-cat");
+  state.anchorEl = anchorEl;
+  $("#popover").hidden = true;
+  $("#cat-popover").hidden = true;
+  $("#cat-popover").hidden = false;
+  positionPopover($("#cat-popover"), anchorEl);
+  setTimeout(() => f.name.focus(), 50);
+}
+
+function closeCatPopover() {
+  $("#cat-popover").hidden = true;
+  state.editingCat = null;
+  state.anchorEl = null;
+}
+
+function saveCategory() {
+  const f = $("#cat-form").elements;
+  const name = f.name.value.trim();
+  const original = f.originalName.value;
+  const colorEl = $("#color-picker .color-swatch.active");
+  const color = colorEl ? Number(colorEl.dataset.color) : 0;
+
+  if (!name) { toast("請輸入分類名稱"); return; }
+
+  if (original) {
+    if (name !== original) {
+      if (state.categories.find((c) => c.name === name)) {
+        toast("已有同名分類"); return;
+      }
+      state.categories = state.categories.map((c) =>
+        c.name === original ? { name, color } : c
+      );
+      state.localTools = state.localTools.map((t) =>
+        t.category === original ? { ...t, category: name } : t
+      );
+      if (state.filter === original) state.filter = name;
+      saveTools();
+    } else {
+      const c = state.categories.find((x) => x.name === name);
+      if (c) c.color = color;
+    }
+    saveCats();
+    toast("已更新");
+  } else {
+    if (state.categories.find((c) => c.name === name)) {
+      toast("已有同名分類"); return;
+    }
+    state.categories.push({ name, color });
+    saveCats();
+    toast("已新增分類");
+  }
+
+  closeCatPopover();
+  render();
+}
+
+function deleteCategory(name, fromPopover = false) {
+  const inUse = allTools().some((t) => t.category === name);
+  const msg = inUse
+    ? `「${name}」內的工具會變成「未分類」,確定刪除分類?`
+    : `確定刪除分類「${name}」?`;
+  if (!confirm(msg)) return;
+  state.categories = state.categories.filter((c) => c.name !== name);
+  state.localTools = state.localTools.map((t) =>
+    t.category === name ? { ...t, category: "" } : t
+  );
+  if (state.filter === name) state.filter = "all";
+  saveCats();
+  saveTools();
+  if (fromPopover) closeCatPopover();
+  render();
+  toast("已刪除分類");
+}
+
+/* ===== positioning ===== */
+function positionPopover(popEl, anchor) {
+  const panel = popEl.querySelector(".popover-panel");
+  const arrow = popEl.querySelector(".popover-arrow");
+  const r = anchor.getBoundingClientRect();
+  const panelWidth = panel.offsetWidth || (panel.classList.contains("popover-panel-sm") ? 320 : 420);
+  const gap = 10;
+
+  let top = r.bottom + gap;
+  let right = window.innerWidth - r.right;
+  if (right < 12) right = 12;
+  if (right + panelWidth > window.innerWidth - 12) right = 12;
+  if (top + 400 > window.innerHeight - 12 && r.top > 400) {
+    top = Math.max(80, r.top - 400 - gap);
+  }
+
+  panel.style.top = `${top}px`;
+  panel.style.right = `${right}px`;
+  panel.style.left = "auto";
+
+  const anchorCenter = r.left + r.width / 2;
+  const panelRight = window.innerWidth - right;
+  const arrowFromRight = Math.max(12, Math.min(panelWidth - 24, panelRight - anchorCenter - 6));
+  arrow.style.right = `${arrowFromRight}px`;
+}
+
+/* ===== iframe modal ===== */
 function initModal() {
   const modal = $("#modal");
   modal.querySelectorAll("[data-close]").forEach((el) =>
@@ -360,7 +731,17 @@ function initModal() {
   }
 }
 
-/* ----- utils ----- */
+/* ===== toast ===== */
+let toastTimer;
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
+}
+
+/* ===== utils ===== */
 function slugify(s) {
   return s.toLowerCase().trim()
     .replace(/[^\w一-龥-]+/g, "-")
