@@ -1,7 +1,12 @@
+const LS_TOOLS_KEY = "dpcHub.tools.v1";
+const LS_DRAFT_KEY = "dpcHub.draft.v1";
+
 const state = {
-  tools: [],
+  seedTools: [],
+  localTools: [],
   filter: "all",
   query: "",
+  editingId: null,
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -10,44 +15,77 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
-  $("#year").textContent = new Date().getFullYear();
   try {
     const res = await fetch("tools.json", { cache: "no-cache" });
     const data = await res.json();
-    state.tools = data.tools || [];
+    state.seedTools = data.tools || [];
   } catch (e) {
-    state.tools = [];
-    console.error("Failed to load tools.json", e);
+    state.seedTools = [];
   }
+  state.localTools = loadLocalTools();
 
-  renderStats();
   renderFilters();
   renderGrid();
+  renderStats();
 
   $("#search").addEventListener("input", (e) => {
     state.query = e.target.value.trim().toLowerCase();
     renderGrid();
   });
 
-  initAddForm();
+  $("#open-add").addEventListener("click", () => openDrawer());
+
+  initDrawer();
   initModal();
+  restoreDraft();
 }
 
+/* ----- storage ----- */
+function loadLocalTools() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_TOOLS_KEY) || "[]");
+  } catch { return []; }
+}
+function saveLocalTools() {
+  localStorage.setItem(LS_TOOLS_KEY, JSON.stringify(state.localTools));
+}
+
+/* ----- data helpers ----- */
+function allTools() {
+  const localIds = new Set(state.localTools.map((t) => t.id));
+  const seed = state.seedTools.filter((t) => !localIds.has(t.id));
+  return [...seed, ...state.localTools];
+}
 function uniq(arr) { return Array.from(new Set(arr)); }
 
+function filteredTools() {
+  return allTools().filter((t) => {
+    if (state.filter !== "all" && t.category !== state.filter) return false;
+    if (!state.query) return true;
+    const hay = [t.name, t.creator, t.description, t.category, ...(t.tags || [])]
+      .join(" ").toLowerCase();
+    return hay.includes(state.query);
+  });
+}
+
+/* ----- render ----- */
 function renderStats() {
-  $("#stat-total").textContent = state.tools.length;
-  $("#stat-creators").textContent = uniq(state.tools.map((t) => t.creator)).length;
-  $("#stat-categories").textContent = uniq(state.tools.map((t) => t.category).filter(Boolean)).length;
+  const list = allTools();
+  $("#stat-total").textContent = list.length;
+  $("#stat-creators").textContent = uniq(list.map((t) => t.creator)).length;
+  $("#stat-categories").textContent = uniq(list.map((t) => t.category).filter(Boolean)).length;
+
+  const dl = $("#cat-list");
+  dl.innerHTML = uniq(list.map((t) => t.category).filter(Boolean))
+    .map((c) => `<option value="${escapeAttr(c)}"></option>`).join("");
 }
 
 function renderFilters() {
-  const cats = uniq(state.tools.map((t) => t.category).filter(Boolean));
+  const cats = uniq(allTools().map((t) => t.category).filter(Boolean));
   const bar = $("#filters");
   bar.innerHTML = "";
 
-  const all = makeChip("全部", "all");
-  bar.appendChild(all);
+  bar.appendChild(makeChip("全部", "all"));
   cats.forEach((c) => bar.appendChild(makeChip(c, c)));
 
   function makeChip(label, key) {
@@ -64,18 +102,6 @@ function renderFilters() {
   }
 }
 
-function filteredTools() {
-  return state.tools.filter((t) => {
-    if (state.filter !== "all" && t.category !== state.filter) return false;
-    if (!state.query) return true;
-    const hay = [
-      t.name, t.creator, t.description, t.category,
-      ...(t.tags || []),
-    ].join(" ").toLowerCase();
-    return hay.includes(state.query);
-  });
-}
-
 const TYPE_META = {
   url: { label: "URL", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>` },
   python: { label: "PY", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v6h8m-8 6H4v6h6m0-12V3h6v6m0 6h4v-6h-6m0 6v6"/></svg>` },
@@ -86,6 +112,7 @@ function renderGrid() {
   const grid = $("#tools-grid");
   const empty = $("#empty");
   const list = filteredTools();
+  const localIds = new Set(state.localTools.map((t) => t.id));
 
   if (!list.length) {
     grid.innerHTML = "";
@@ -93,43 +120,44 @@ function renderGrid() {
     return;
   }
   empty.hidden = true;
-
-  grid.innerHTML = list.map((t, i) => cardHTML(t, i)).join("");
+  grid.innerHTML = list.map((t, i) => cardHTML(t, i, localIds.has(t.id))).join("");
 
   $$("#tools-grid .card").forEach((card) => {
-    card.addEventListener("mousemove", (e) => {
-      const r = card.getBoundingClientRect();
-      card.style.setProperty("--mx", `${e.clientX - r.left}px`);
-      card.style.setProperty("--my", `${e.clientY - r.top}px`);
-    });
-    card.addEventListener("click", () => {
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".card-edit")) {
+        openDrawer(card.dataset.id);
+        return;
+      }
       const id = card.dataset.id;
-      const tool = state.tools.find((t) => t.id === id);
-      if (!tool) return;
-      openTool(tool);
+      const tool = allTools().find((t) => t.id === id);
+      if (tool) openTool(tool);
     });
   });
 }
 
 function initial(name) {
   if (!name) return "?";
-  const ch = name.trim().charAt(0);
-  return ch.toUpperCase();
+  return name.trim().charAt(0).toUpperCase();
 }
 
-function cardHTML(t, i) {
+function cardHTML(t, i, isLocal) {
   const type = TYPE_META[t.type] || TYPE_META.url;
   const cv = i % 8;
-  const tags = (t.tags || []).slice(0, 4)
+  const tags = (t.tags || []).slice(0, 3)
     .map((tg) => `<span class="tag">${escapeHTML(tg)}</span>`).join("");
+  const pill = isLocal ? `<span class="local-pill">本機</span>` : "";
+  const editBtn = isLocal
+    ? `<button class="card-edit" title="編輯"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>`
+    : "";
 
   return `
-    <article class="card" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
+    <article class="card ${isLocal ? "editable" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
+      ${editBtn}
       <div class="card-top">
         <div class="card-icon">${escapeHTML(initial(t.name))}</div>
         <span class="type-badge ${t.type || "url"}">${type.icon}${type.label}</span>
       </div>
-      <h3 class="card-title">${escapeHTML(t.name)}</h3>
+      <h3 class="card-title">${escapeHTML(t.name)} ${pill}</h3>
       <p class="card-desc">${escapeHTML(t.description || "—")}</p>
       <div class="card-tags">${tags}</div>
       <div class="card-foot">
@@ -145,7 +173,8 @@ function cardHTML(t, i) {
 
 function openTool(t) {
   if (!t.url || t.url === "#") {
-    alert(`「${t.name}」尚未設定連結。請編輯 tools.json 補上 url。`);
+    const yes = confirm(`「${t.name}」尚未設定連結。要現在編輯嗎?`);
+    if (yes) openDrawer(t.id, /*forceLocal*/ true);
     return;
   }
   if (t.type === "iframe") {
@@ -153,12 +182,139 @@ function openTool(t) {
     $("#modal-sub").textContent = `${t.creator} · v${t.version}`;
     $("#modal-frame").src = t.url;
     $("#modal").hidden = false;
-    document.body.style.overflow = "hidden";
   } else {
     window.open(t.url, "_blank", "noopener");
   }
 }
 
+/* ----- drawer (add / edit) ----- */
+function initDrawer() {
+  const drawer = $("#drawer");
+  drawer.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", closeDrawer)
+  );
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !drawer.hidden) closeDrawer();
+  });
+
+  $("#save-tool").addEventListener("click", saveTool);
+  $("#delete-tool").addEventListener("click", deleteTool);
+
+  $("#add-form").addEventListener("input", () => {
+    if (state.editingId) return;
+    const data = formData();
+    localStorage.setItem(LS_DRAFT_KEY, JSON.stringify(data));
+  });
+}
+
+function openDrawer(id = null, forceLocal = false) {
+  state.editingId = id;
+  const form = $("#add-form");
+  form.reset();
+  $("#drawer-title").textContent = id ? "編輯工具" : "新增工具";
+  $("#delete-tool").hidden = !id;
+
+  if (id) {
+    const t = allTools().find((x) => x.id === id);
+    if (t) {
+      form.elements.id.value = t.id;
+      form.elements.name.value = t.name || "";
+      form.elements.creator.value = t.creator || "";
+      form.elements.version.value = t.version || "1.0.0";
+      form.elements.category.value = t.category || "";
+      form.elements.type.value = t.type || "url";
+      form.elements.url.value = t.url === "#" ? "" : (t.url || "");
+      form.elements.description.value = t.description || "";
+      form.elements.tags.value = (t.tags || []).join(", ");
+    }
+  } else {
+    restoreDraft();
+  }
+
+  $("#drawer").hidden = false;
+}
+
+function closeDrawer() {
+  $("#drawer").hidden = true;
+  state.editingId = null;
+}
+
+function formData() {
+  const f = $("#add-form").elements;
+  return {
+    id: f.id.value || "",
+    name: f.name.value.trim(),
+    creator: f.creator.value.trim(),
+    version: f.version.value.trim() || "1.0.0",
+    category: f.category.value.trim(),
+    type: f.type.value,
+    url: f.url.value.trim(),
+    description: f.description.value.trim(),
+    tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
+  };
+}
+
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(LS_DRAFT_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    const f = $("#add-form").elements;
+    if (d.name) f.name.value = d.name;
+    if (d.creator) f.creator.value = d.creator;
+    if (d.version) f.version.value = d.version;
+    if (d.category) f.category.value = d.category;
+    if (d.type) f.type.value = d.type;
+    if (d.url) f.url.value = d.url;
+    if (d.description) f.description.value = d.description;
+    if (d.tags && d.tags.length) f.tags.value = d.tags.join(", ");
+  } catch {}
+}
+
+function saveTool() {
+  const d = formData();
+  if (!d.name || !d.creator || !d.url) {
+    alert("請填寫工具名稱、製作人與 URL。");
+    return;
+  }
+  const id = d.id || slugify(d.name);
+  const record = {
+    id,
+    name: d.name,
+    description: d.description,
+    creator: d.creator,
+    version: d.version,
+    category: d.category,
+    type: d.type,
+    url: d.url,
+    tags: d.tags,
+    updated: new Date().toISOString().slice(0, 10),
+  };
+
+  const idx = state.localTools.findIndex((t) => t.id === id);
+  if (idx >= 0) state.localTools[idx] = record;
+  else state.localTools.push(record);
+
+  saveLocalTools();
+  localStorage.removeItem(LS_DRAFT_KEY);
+  closeDrawer();
+  renderFilters();
+  renderGrid();
+  renderStats();
+}
+
+function deleteTool() {
+  if (!state.editingId) return;
+  if (!confirm("確定要刪除這個工具?")) return;
+  state.localTools = state.localTools.filter((t) => t.id !== state.editingId);
+  saveLocalTools();
+  closeDrawer();
+  renderFilters();
+  renderGrid();
+  renderStats();
+}
+
+/* ----- iframe modal ----- */
 function initModal() {
   const modal = $("#modal");
   modal.querySelectorAll("[data-close]").forEach((el) =>
@@ -170,65 +326,16 @@ function initModal() {
   function closeModal() {
     modal.hidden = true;
     $("#modal-frame").src = "about:blank";
-    document.body.style.overflow = "";
   }
 }
 
-function initAddForm() {
-  const form = $("#add-form");
-  const out = $("#json-out");
-  const copyBtn = $("#copy-json");
-
-  $("#gen-json").addEventListener("click", () => {
-    const data = new FormData(form);
-    const name = (data.get("name") || "").trim();
-    const creator = (data.get("creator") || "").trim();
-    const url = (data.get("url") || "").trim();
-    if (!name || !creator || !url) {
-      alert("請填寫工具名稱、製作人與 URL。");
-      return;
-    }
-    const obj = {
-      id: slugify(name),
-      name,
-      description: (data.get("description") || "").trim(),
-      creator,
-      version: (data.get("version") || "1.0.0").trim(),
-      category: (data.get("category") || "").trim(),
-      type: data.get("type") || "url",
-      url,
-      tags: (data.get("tags") || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      updated: new Date().toISOString().slice(0, 10),
-    };
-    out.hidden = false;
-    out.textContent = JSON.stringify(obj, null, 2) + ",";
-    copyBtn.disabled = false;
-  });
-
-  copyBtn.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(out.textContent);
-      const old = copyBtn.textContent;
-      copyBtn.textContent = "已複製 ✓";
-      setTimeout(() => (copyBtn.textContent = old), 1600);
-    } catch {
-      alert("複製失敗,請手動選取 JSON。");
-    }
-  });
-}
-
+/* ----- utils ----- */
 function slugify(s) {
-  return s
-    .toLowerCase()
-    .trim()
+  return s.toLowerCase().trim()
     .replace(/[^\w一-龥-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40) || "tool-" + Date.now();
 }
-
 function escapeHTML(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
