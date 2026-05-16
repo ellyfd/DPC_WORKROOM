@@ -3,108 +3,116 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DPC Tools Hub</title>
+  <title>DPC // HUB</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Noto+Sans+TC:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="bg-grid"></div>
+  <div class="bg-hex"></div>
   <div class="bg-glow"></div>
+  <div class="bg-scan"></div>
 
   <div class="app">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="brand">
+    <!-- TOP HUD --------------------------------------------- -->
+    <header class="hud-top">
+      <div class="hud-brand">
         <span class="logo-mark">
-          <svg viewBox="0 0 32 32" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4">
+          <svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4">
             <path d="M4 8 L16 4 L28 8 L28 24 L16 28 L4 24 Z" />
             <path d="M4 8 L16 12 L28 8" />
             <path d="M16 12 L16 28" />
           </svg>
         </span>
         <div class="brand-text">
-          <div class="brand-title">DPC <span class="accent">/HUB</span></div>
-          <div class="brand-sub">tools workstation</div>
+          <div class="brand-title">DPC<span class="accent">// HUB</span></div>
+          <div class="brand-sub">
+            <span class="dot live"></span>
+            workstation · online
+          </div>
         </div>
       </div>
 
-      <div class="search">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-3.5-3.5" />
-        </svg>
-        <input id="search" type="text" placeholder="搜尋 tool / creator / tag…" />
-        <kbd class="kbd">/</kbd>
+      <div class="hud-meters">
+        <div class="meter" data-mt="0">
+          <div class="meter-lbl">TOOLS</div>
+          <div class="meter-val" id="stat-total">0</div>
+          <div class="meter-bar"><span></span></div>
+        </div>
+        <div class="meter" data-mt="1">
+          <div class="meter-lbl">CREATORS</div>
+          <div class="meter-val" id="stat-creators">0</div>
+          <div class="meter-bar"><span></span></div>
+        </div>
+        <div class="meter" data-mt="2">
+          <div class="meter-lbl">GROUPS</div>
+          <div class="meter-val" id="stat-categories">0</div>
+          <div class="meter-bar"><span></span></div>
+        </div>
       </div>
 
-      <div class="sidebar-actions">
-        <button class="btn btn-primary" id="open-add">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-          新增工具
-        </button>
+      <div class="hud-tools">
+        <div class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          <input id="search" type="text" placeholder="搜尋 tool / creator / tag…" />
+          <kbd class="kbd">/</kbd>
+        </div>
         <button class="btn btn-ghost" id="open-add-cat" title="新增分類">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
           分類
         </button>
+        <button class="btn btn-primary" id="open-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          NEW TOOL
+        </button>
       </div>
+    </header>
 
-      <div class="sidebar-section">
-        <div class="sidebar-label">
-          <span>FILTER</span>
-          <span class="sidebar-line"></span>
-        </div>
-        <div class="filter-bar" id="filters"></div>
+    <!-- LEFT NAV -------------------------------------------- -->
+    <aside class="hud-side">
+      <div class="hud-side-head">
+        <span class="pip"></span>
+        <span>FILTER · CATEGORIES</span>
       </div>
+      <div class="filter-bar" id="filters"></div>
 
-      <div class="sidebar-spacer"></div>
-
-      <div class="sidebar-stats">
-        <div class="sidebar-label">
-          <span>STATS</span>
-          <span class="sidebar-line"></span>
+      <div class="hud-side-foot">
+        <div class="hud-side-head">
+          <span class="pip warn"></span>
+          <span>SHORTCUTS</span>
         </div>
-        <div class="stat-grid">
-          <div class="stat">
-            <div class="stat-num" id="stat-total">0</div>
-            <div class="stat-lbl">tools</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num" id="stat-creators">0</div>
-            <div class="stat-lbl">creators</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num" id="stat-categories">0</div>
-            <div class="stat-lbl">groups</div>
-          </div>
-        </div>
-        <div class="sidebar-hint">localStorage · this browser</div>
+        <div class="kbd-row"><kbd class="kbd">/</kbd><span>搜尋</span></div>
+        <div class="kbd-row"><kbd class="kbd">ESC</kbd><span>關閉視窗</span></div>
+        <div class="kbd-row"><kbd class="kbd">N</kbd><span>新增工具</span></div>
       </div>
     </aside>
 
-    <!-- Main -->
+    <!-- WORKSPACE ------------------------------------------- -->
     <main class="workspace">
-      <div class="workspace-head">
-        <div class="head-eyebrow">
-          <span class="dot live"></span>
-          <span>WORKSTATION</span>
-          <span class="sep">·</span>
-          <span id="head-context">所有工具</span>
+      <div class="workspace-bar">
+        <div class="wb-left">
+          <span class="wb-tag">SECTOR</span>
+          <span class="wb-context" id="head-context">ALL TOOLS</span>
         </div>
-        <h1 class="workspace-title">所有 DPC 工具,<span class="title-accent">一站直達。</span></h1>
-        <p class="workspace-sub">把散落的工具集中起來,搜尋、分組、快速開啟。</p>
+        <div class="wb-right">
+          <button class="ghost-link" id="expand-all">▼ 全部展開</button>
+          <button class="ghost-link" id="collapse-all">▲ 全部摺疊</button>
+        </div>
       </div>
 
       <div class="sections-area" id="sections-area"></div>
 
       <div class="empty" id="empty" hidden>
         <div class="empty-art">
-          <svg viewBox="0 0 64 64" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="6" y="14" width="22" height="22" rx="3"/>
-            <rect x="36" y="14" width="22" height="22" rx="3"/>
-            <rect x="6" y="42" width="22" height="16" rx="3"/>
-            <rect x="36" y="42" width="22" height="16" rx="3" stroke-dasharray="3 3"/>
+          <svg viewBox="0 0 64 64" width="72" height="72" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="6" y="14" width="22" height="22" rx="1"/>
+            <rect x="36" y="14" width="22" height="22" rx="1"/>
+            <rect x="6" y="42" width="22" height="16" rx="1"/>
+            <rect x="36" y="42" width="22" height="16" rx="1" stroke-dasharray="3 3"/>
           </svg>
         </div>
         <p class="empty-title">工作站還是空的</p>
