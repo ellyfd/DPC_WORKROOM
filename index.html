@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DPC Tools Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+  <div class="bg-grid"></div>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#" class="logo">
+        <span class="logo-mark">
+          <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 8 L16 4 L28 8 L28 24 L16 28 L4 24 Z" />
+            <path d="M4 8 L16 12 L28 8" />
+            <path d="M16 12 L16 28" />
+          </svg>
+        </span>
+        <span class="logo-text">DPC <span class="accent">Hub</span></span>
+      </a>
+      <nav class="nav">
+        <a href="#tools">工具</a>
+        <a href="#how-to-add">新增工具</a>
+        <a href="https://github.com/ellyfd/dpc_workroom" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <div class="hero-eyebrow">
+          <span class="dot"></span> DPC Internal Toolkit
+        </div>
+        <h1 class="hero-title">
+          所有 DPC 工具<br />
+          <span class="gradient-text">一站直達</span>
+        </h1>
+        <p class="hero-sub">
+          RC PAY、3F 請假、TD 查詢、DPC_DIS、布料查詢、CLO 腳本……<br />
+          團隊與朋友的工具,集中在這裡。
+        </p>
+        <div class="hero-actions">
+          <a href="#tools" class="btn btn-primary">瀏覽工具</a>
+          <a href="#how-to-add" class="btn btn-ghost">上傳你的工具 →</a>
+        </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <div class="stat-num" id="stat-total">–</div>
+            <div class="stat-label">工具總數</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num" id="stat-creators">–</div>
+            <div class="stat-label">製作人</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num" id="stat-categories">–</div>
+            <div class="stat-label">分類</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tools" class="tools-section">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <h2>工具列表</h2>
+            <p class="muted">搜尋、篩選,點擊卡片直接開啟。</p>
+          </div>
+          <div class="controls">
+            <div class="search">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input id="search" type="text" placeholder="搜尋工具名稱、製作人、tag…" />
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-bar" id="filters"></div>
+
+        <div class="tools-grid" id="tools-grid"></div>
+
+        <div class="empty" id="empty" hidden>
+          <div class="empty-art">∅</div>
+          <p>找不到符合的工具</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-to-add" class="how-to-section">
+      <div class="container">
+        <div class="how-card">
+          <div class="how-left">
+            <h2>上傳你自己的工具</h2>
+            <p class="muted">填好下面欄位,複製 JSON,送一個 PR 到 <code>tools.json</code>。版本更新只要改 <code>version</code> 與 <code>updated</code> 即可。</p>
+            <ol class="how-steps">
+              <li><span>1</span> 填寫右側欄位</li>
+              <li><span>2</span> 點「產生 JSON」並複製</li>
+              <li><span>3</span> 編輯 <code>tools.json</code>,送 PR</li>
+            </ol>
+            <a class="btn btn-primary" href="https://github.com/ellyfd/dpc_workroom/edit/main/tools.json" target="_blank" rel="noopener">
+              到 GitHub 編輯 tools.json →
+            </a>
+          </div>
+
+          <form class="how-form" id="add-form" onsubmit="return false;">
+            <div class="row">
+              <label>
+                <span>工具名稱 *</span>
+                <input name="name" placeholder="例如:布料查詢 PAGE" required />
+              </label>
+              <label>
+                <span>製作人 *</span>
+                <input name="creator" placeholder="例如:Elly" required />
+              </label>
+            </div>
+            <div class="row">
+              <label>
+                <span>版本</span>
+                <input name="version" placeholder="1.0.0" value="1.0.0" />
+              </label>
+              <label>
+                <span>分類</span>
+                <input name="category" placeholder="例如:布料 / CLO / 查詢" />
+              </label>
+            </div>
+            <label>
+              <span>連結類型</span>
+              <select name="type">
+                <option value="url">外部網址 (URL)</option>
+                <option value="python">Python script / repo</option>
+                <option value="iframe">可內嵌 (iframe)</option>
+              </select>
+            </label>
+            <label>
+              <span>URL *</span>
+              <input name="url" placeholder="https://..." required />
+            </label>
+            <label>
+              <span>描述</span>
+              <textarea name="description" rows="2" placeholder="一句話介紹這個工具"></textarea>
+            </label>
+            <label>
+              <span>Tags (逗號分隔)</span>
+              <input name="tags" placeholder="例如:布料, 查詢, 自動化" />
+            </label>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="gen-json">產生 JSON</button>
+              <button type="button" class="btn btn-ghost" id="copy-json" disabled>複製到剪貼簿</button>
+            </div>
+            <pre class="json-out" id="json-out" hidden></pre>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div>© <span id="year"></span> DPC Tools Hub</div>
+      <div class="muted">Made with ♥ for DPC team & friends</div>
+    </div>
+  </footer>
+
+  <!-- Iframe modal -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="modal-title">工具</div>
+          <div class="modal-sub muted" id="modal-sub"></div>
+        </div>
+        <button class="icon-btn" data-close aria-label="關閉">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <iframe id="modal-frame" src="about:blank" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

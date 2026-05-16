@@ -1,0 +1,76 @@
+{
+  "tools": [
+    {
+      "id": "rc-pay",
+      "name": "RC PAY",
+      "description": "RC 薪資 / 計價系統",
+      "creator": "DPC",
+      "version": "1.0.0",
+      "category": "薪資",
+      "type": "url",
+      "url": "#",
+      "tags": ["RC", "薪資", "計價"],
+      "updated": "2026-01-10"
+    },
+    {
+      "id": "3f-leave",
+      "name": "3F 請假",
+      "description": "3F 部門請假申請系統",
+      "creator": "DPC",
+      "version": "1.0.0",
+      "category": "行政",
+      "type": "url",
+      "url": "#",
+      "tags": ["請假", "3F", "行政"],
+      "updated": "2026-01-10"
+    },
+    {
+      "id": "td-query",
+      "name": "TD 查詢",
+      "description": "TD 資料查詢工具",
+      "creator": "DPC",
+      "version": "1.0.0",
+      "category": "查詢",
+      "type": "url",
+      "url": "#",
+      "tags": ["TD", "查詢"],
+      "updated": "2026-01-10"
+    },
+    {
+      "id": "dpc-dis",
+      "name": "DPC_DIS",
+      "description": "DPC 分配 / 派工系統",
+      "creator": "DPC",
+      "version": "1.0.0",
+      "category": "派工",
+      "type": "url",
+      "url": "#",
+      "tags": ["DPC", "派工", "分配"],
+      "updated": "2026-01-10"
+    },
+    {
+      "id": "fabric-page",
+      "name": "布料查詢 PAGE",
+      "description": "布料規格與庫存查詢頁面",
+      "creator": "朋友 A",
+      "version": "1.0.0",
+      "category": "布料",
+      "type": "iframe",
+      "url": "#",
+      "tags": ["布料", "查詢"],
+      "updated": "2026-01-10"
+    },
+    {
+      "id": "clo-py",
+      "name": "CLO 工具集",
+      "description": "CLO 3D 相關 Python 腳本與自動化工具",
+      "creator": "朋友 B",
+      "version": "0.1.0",
+      "category": "CLO",
+      "type": "python",
+      "url": "#",
+      "tags": ["CLO", "Python", "3D"],
+      "updated": "2026-01-10"
+    }
+  ]
+}
