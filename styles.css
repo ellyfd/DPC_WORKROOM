@@ -381,6 +381,7 @@ h1, h2, h3 { margin: 0; }
 }
 .type-badge svg { width: 13px; height: 13px; }
 .type-badge.link   { color: #2563eb; background: #eff6ff; }
+.type-badge.page   { color: #7c3aed; background: #f3efff; }
 .type-badge.file   { color: #b45309; background: #fffbeb; }
 .type-badge.url    { color: #2563eb; background: #eff6ff; }
 .type-badge.python { color: #b45309; background: #fffbeb; }
@@ -430,8 +431,10 @@ h1, h2, h3 { margin: 0; }
   display: flex;
   gap: 6px;
   margin-top: 2px;
+  position: relative;
 }
 .card-act {
+  position: relative;
   width: 30px; height: 30px;
   border-radius: 8px;
   background: #fff;
@@ -448,9 +451,67 @@ h1, h2, h3 { margin: 0; }
   background: #fff;
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 6px 14px rgba(99, 102, 241, 0.18);
   transform: translateY(-1px);
+  z-index: 5;
 }
 .card-act:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
 .card-act svg { width: 14px; height: 14px; }
+.card-act-label {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+  background: rgba(15, 23, 42, 0.92);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 10;
+}
+.card-act:hover .card-act-label,
+.card-act:focus-visible .card-act-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Lock badge on locked tiles */
+.lock-badge {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+  color: var(--text-dim);
+  z-index: 3;
+}
+.lock-badge svg { width: 11px; height: 11px; }
+.card.is-locked .card-icon { filter: saturate(0.85); }
+
+/* Form: checkbox row */
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.checkbox-row input[type="checkbox"] { margin-top: 2px; flex-shrink: 0; }
+.checkbox-row > span { display: flex; flex-direction: column; gap: 2px; }
+.checkbox-row strong { font-size: 13px; font-weight: 600; color: var(--text); }
 
 /* "Add to this category" tile — matches tool tile size */
 .card-add {
@@ -469,21 +530,24 @@ h1, h2, h3 { margin: 0; }
   min-height: 100%;
   transition: color 0.15s;
 }
-.card-add:hover { color: var(--accent); }
+.card-add { opacity: 0.55; }
+.card-add:hover { color: var(--accent); opacity: 1; }
 .card-add-plus {
-  width: 76px; height: 76px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.5);
-  border: 1px dashed var(--border-2);
+  width: 60px; height: 60px;
+  border-radius: 14px;
+  background: transparent;
+  border: 1.5px dashed var(--border-2);
   display: flex; align-items: center; justify-content: center;
   color: var(--text-mute);
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
+.card-add-plus svg { width: 22px; height: 22px; opacity: 0.7; }
 .card-add:hover .card-add-plus {
   color: var(--accent);
   border-color: var(--accent);
-  background: var(--surface);
+  background: var(--accent-soft);
 }
+.card-add:hover .card-add-plus svg { opacity: 1; }
 
 /* ============================================================
    Page foot — small action pills
@@ -1596,7 +1660,8 @@ h1, h2, h3 { margin: 0; }
   }
   .board { grid-template-columns: 1fr; gap: 16px; }
   .section-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
-  .card-icon, .card-add-plus { width: 72px; height: 72px; font-size: 30px; border-radius: 16px; }
+  .card-icon { width: 72px; height: 72px; font-size: 30px; border-radius: 16px; }
+  .card-add-plus { width: 56px; height: 56px; border-radius: 14px; }
 }
 
 /* phones — stacked compact layout */
@@ -1643,11 +1708,13 @@ h1, h2, h3 { margin: 0; }
   .card { padding: 4px 2px 8px; gap: 6px; border-radius: 12px; }
   .card-tile:hover .card-icon { transform: none; box-shadow: var(--shadow-icon); }
   .card-tile:active .card-icon { transform: scale(0.94); }
-  .card-icon, .card-add-plus {
+  .card-icon {
     width: 60px; height: 60px;
     font-size: 26px;
     border-radius: 14px;
   }
+  .card-add-plus { width: 48px; height: 48px; border-radius: 12px; }
+  .card-add-plus svg { width: 18px; height: 18px; }
   .card-title { font-size: 12.5px; max-width: 80px; }
   .card-add { padding: 4px 2px 36px; }
   .card-actions { gap: 4px; }
@@ -1745,6 +1812,7 @@ h1, h2, h3 { margin: 0; }
 
 @media (max-width: 380px) {
   .section-grid { grid-template-columns: repeat(3, 1fr); }
-  .card-icon, .card-add-plus { width: 68px; height: 68px; font-size: 30px; }
+  .card-icon { width: 68px; height: 68px; font-size: 30px; }
+  .card-add-plus { width: 54px; height: 54px; }
   .card-title { max-width: 90px; font-size: 13px; }
 }
