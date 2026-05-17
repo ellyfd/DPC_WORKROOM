@@ -669,8 +669,8 @@ function cardHTML(t, cv) {
           <div class="card-icon">
             <span class="ic-letter">${escapeHTML(initial(t.name))}</span>
             ${iconImg}
+            <span class="tile-type-chip tile-type-${tType}" aria-label="${escapeAttr(type.label)}"></span>
           </div>
-          <span class="type-badge ${tType}">${type.icon}</span>
           ${locked ? `<span class="lock-badge" title="已鎖定 — 只有 ${escapeAttr(t.lockedBy)} 能編輯/刪除">${lockSvg}</span>` : ""}
         </div>
         <h3 class="card-title">${escapeHTML(t.name)}</h3>
@@ -2026,6 +2026,7 @@ function openToolPopover(id = null, anchor = null) {
   $("#type-selector").hidden = !!id;
 
   state.editingFiles = [];
+  state.editingTags = [];
 
   if (id) {
     const t = allTools().find((x) => x.id === id);
@@ -2038,7 +2039,7 @@ function openToolPopover(id = null, anchor = null) {
       setType(normalizeType(t.type));
       form.elements.url.value = t.url === "#" ? "" : (t.url || "");
       form.elements.description.value = t.description || "";
-      form.elements.tags.value = (t.tags || []).join(", ");
+      state.editingTags = Array.isArray(t.tags) ? t.tags.slice() : [];
       form.elements.icon.value = t.icon || "";
       if (t.brand) ensureBrand(t.brand);
       renderBrandSelect(t.brand || "");
@@ -2091,7 +2092,7 @@ function formData() {
     type: f.type.value,
     url: f.url.value.trim(),
     description: f.description.value.trim(),
-    tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
+    tags: Array.isArray(state.editingTags) ? state.editingTags.slice() : [],
     icon: f.icon.value.trim(),
     brand: (f.brand?.value || "").trim(),
     lock: !!f.lock?.checked,
@@ -2119,7 +2120,7 @@ function restoreDraft() {
   }
   if (d.url) f.url.value = d.url;
   if (d.description) f.description.value = d.description;
-  if (d.tags?.length) f.tags.value = d.tags.join(", ");
+  if (Array.isArray(d.tags) && d.tags.length) state.editingTags = d.tags.slice();
   if (d.icon) f.icon.value = d.icon;
 }
 
@@ -2351,7 +2352,7 @@ function applyAutoFill(info) {
   }
   if (info.description) f.description.value = info.description;
   if (info.url) f.url.value = info.url;
-  if (info.tags?.length) f.tags.value = info.tags.join(", ");
+  if (info.tags?.length) state.editingTags = info.tags.slice();
   if (info.icon) f.icon.value = info.icon;
   updateIconPreview();
 }

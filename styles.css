@@ -373,36 +373,22 @@ h1, h2, h3 { margin: 0; }
   background: #fff;
 }
 
-.type-badge {
+/* Tile type indicator — a small colored dot pinned to the bottom-right
+   corner INSIDE .card-icon. Because .card-icon has overflow: hidden, this
+   chip is physically incapable of escaping or stretching the layout. */
+.tile-type-chip {
   position: absolute;
-  right: -3px; bottom: -3px;
-  width: 24px; height: 24px;
-  min-width: 24px; max-width: 24px;
-  min-height: 24px; max-height: 24px;
-  flex: 0 0 24px;
-  aspect-ratio: 1;
-  box-sizing: border-box;
+  right: 5px; bottom: 5px;
+  width: 9px; height: 9px;
   border-radius: 50%;
-  background: var(--surface);
-  border: 2px solid var(--surface);
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 0;
-  z-index: 3;
-  overflow: hidden;
+  background: var(--text-mute);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95);
+  z-index: 4;
+  pointer-events: none;
 }
-.type-badge svg {
-  width: 13px; height: 13px;
-  min-width: 13px; max-width: 13px;
-  min-height: 13px; max-height: 13px;
-  flex-shrink: 0;
-}
-.type-badge.link   { color: #2563eb; background: #eff6ff; }
-.type-badge.page   { color: #7c3aed; background: #f3efff; }
-.type-badge.file   { color: #b45309; background: #fffbeb; }
-.type-badge.url    { color: #2563eb; background: #eff6ff; }
-.type-badge.python { color: #b45309; background: #fffbeb; }
-.type-badge.iframe { color: #7c3aed; background: #f5f3ff; }
+.tile-type-link, .tile-type-url      { background: #2563eb; }
+.tile-type-page, .tile-type-iframe   { background: #7c3aed; }
+.tile-type-file, .tile-type-python   { background: #d97706; }
 
 .card.is-page .card-icon {
   background: linear-gradient(135deg, #ede9fe, #ddd6fe);
@@ -640,7 +626,7 @@ h1, h2, h3 { margin: 0; }
   left: var(--pop-left, 80px);
   width: 480px;
   max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 60px);
+  max-height: calc(100dvh - 60px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1105,8 +1091,14 @@ h1, h2, h3 { margin: 0; }
 .form-actions {
   display: flex; justify-content: space-between; gap: 8px;
   margin-top: 4px;
-  padding-top: 14px;
+  padding: 10px 0 4px;
   border-top: 1px solid var(--border);
+  /* Pin to bottom of the scrolling popover form so the action buttons
+     stay reachable even when the form is taller than the viewport. */
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  z-index: 2;
 }
 .form-actions-right { display: flex; gap: 8px; margin-left: auto; }
 .form-actions .btn { height: 38px; padding: 0 16px; font-size: 14px; }
@@ -1740,28 +1732,40 @@ h1, h2, h3 { margin: 0; }
   .page-foot { padding-top: 4px; }
   .ghost-pill { height: 40px; padding: 0 18px; font-size: 14.5px; }
 
-  /* Popovers go full-screen-ish */
+  /* Popovers go full-screen-ish. Use dvh so 100vh doesn't include the iOS
+     Safari URL bar — that bug is what was pushing 刪除/儲存 off-screen. */
   .popover-backdrop { background: rgba(15, 23, 42, 0.35); }
   .popover-panel {
     left: 8px !important;
     right: 8px !important;
     width: auto !important;
     top: 8px !important;
-    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
     border-radius: 16px;
   }
   .popover-panel-sm { width: auto !important; }
-  .popover-form .row { grid-template-columns: 1fr; gap: 10px; }
-  .popover-form { padding: 14px 16px 18px; gap: 12px; }
-  .popover-head { padding: 16px 16px 12px; }
+  .popover-form .row { grid-template-columns: 1fr; gap: 8px; }
+  .popover-form { padding: 10px 14px 12px; gap: 8px; }
+  .popover-form label { gap: 3px; font-size: 12.5px; }
+  .popover-form textarea { min-height: 48px; }
+  .popover-head { padding: 12px 14px 10px; }
+  .popover-title { font-size: 15.5px; }
 
   /* Inputs: 16px prevents iOS Safari auto-zoom on focus */
   .popover-form input,
   .popover-form select,
-  .popover-form textarea { font-size: 16px; padding: 11px 12px; }
-  .mini-popover-body input { font-size: 16px; padding: 12px 12px; }
-  .btn-mini { height: 42px; padding: 0 14px; font-size: 14px; }
-  .form-actions .btn { height: 42px; font-size: 14px; padding: 0 18px; }
+  .popover-form textarea { font-size: 16px; padding: 8px 11px; }
+  .mini-popover-body input { font-size: 16px; padding: 10px 12px; }
+  .btn-mini { height: 38px; padding: 0 12px; font-size: 14px; }
+  .form-actions { padding: 8px 0 2px; }
+  .form-actions .btn { height: 38px; font-size: 14px; padding: 0 16px; }
+
+  /* Tighter checkbox row + file panel on mobile */
+  .checkbox-row { padding: 8px 10px; }
+  .file-manager { gap: 6px; }
+  .file-manager-hint { font-size: 11.5px; line-height: 1.4; }
+  .file-dropzone { padding: 6px; }
+  .file-dropzone-cta { padding: 10px 8px; font-size: 13px; }
 
   /* Icon picker tightens up */
   .icon-picker { padding: 10px 12px; gap: 12px; }
@@ -1769,7 +1773,7 @@ h1, h2, h3 { margin: 0; }
 
   /* Modal fits the screen */
   .modal { padding: 8px; }
-  .modal-panel { height: calc(100vh - 16px); max-height: none; border-radius: 14px; }
+  .modal-panel { height: calc(100dvh - 16px); max-height: none; border-radius: 14px; }
   .modal-head { padding: 12px 14px; }
 
   /* Empty state takes less vertical room */
