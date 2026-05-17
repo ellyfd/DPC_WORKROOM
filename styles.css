@@ -1234,50 +1234,49 @@ h1, h2, h3 { margin: 0; }
 .btn-mini-ghost:hover { color: var(--danger); border-color: #fecaca; background: var(--danger-soft); }
 
 /* ============================================================
-   Type selector (segmented control — first step in form)
+   Type selector (compact segmented tabs — first step in form)
    ============================================================ */
 .type-selector {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 4px;
+  gap: 2px;
+  padding: 3px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 10px;
 }
+.type-selector[hidden] { display: none; }
 .type-opt {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 14px 10px;
+  gap: 6px;
+  padding: 7px 10px;
   border: 0;
   background: transparent;
-  border-radius: 9px;
+  border-radius: 7px;
   color: var(--text-dim);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
   text-align: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
 }
-.type-opt svg { width: 22px; height: 22px; }
-.type-opt .type-opt-name {
-  font-size: 14.5px;
-  font-weight: 700;
-  margin-top: 2px;
+.type-opt svg {
+  width: 14px; height: 14px;
+  min-width: 14px; max-width: 14px;
+  min-height: 14px; max-height: 14px;
+  flex-shrink: 0;
 }
-.type-opt .type-opt-hint {
-  font-size: 11.5px;
-  color: var(--text-mute);
-  font-weight: 500;
-}
+.type-opt .type-opt-name { font-size: inherit; font-weight: inherit; }
+.type-opt .type-opt-hint { display: none; }
 .type-opt:hover { color: var(--text); background: rgba(255, 255, 255, 0.55); }
 .type-opt[aria-pressed="true"] {
   background: var(--surface);
   color: var(--accent);
   box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
 }
-.type-opt[aria-pressed="true"] .type-opt-hint { color: var(--text-dim); }
 
 /* URL input with inline 自動讀取 button */
 .url-row {
