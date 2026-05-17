@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260517c" />
+  <link rel="stylesheet" href="styles.css?v=20260517d" />
 </head>
 <body>
   <div class="bg-soft"></div>
@@ -97,22 +97,19 @@
         <input type="hidden" name="id" />
         <input type="hidden" name="type" value="link" />
 
-        <!-- 1. Type — link, page (HTML) or file -->
+        <!-- 1. Type — link, page (HTML) or file. Hidden in edit mode. -->
         <div class="type-selector" id="type-selector">
-          <button type="button" class="type-opt" data-type="link" aria-pressed="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+          <button type="button" class="type-opt" data-type="link" aria-pressed="true" title="URL / GitHub">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
             <span class="type-opt-name">連結</span>
-            <span class="type-opt-hint">URL / GitHub</span>
           </button>
-          <button type="button" class="type-opt" data-type="page">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+          <button type="button" class="type-opt" data-type="page" title="HTML 上傳即發佈">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a13 13 0 0 1 0 18"/><path d="M12 3a13 13 0 0 0 0 18"/></svg>
             <span class="type-opt-name">頁面</span>
-            <span class="type-opt-hint">HTML 上傳即發佈</span>
           </button>
-          <button type="button" class="type-opt" data-type="file">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <button type="button" class="type-opt" data-type="file" title=".py / .xlsx / 任何檔案">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <span class="type-opt-name">檔案</span>
-            <span class="type-opt-hint">.py / .xlsx / 任何</span>
           </button>
         </div>
 
@@ -337,6 +334,6 @@
   <!-- Toast -->
   <div class="toast" id="toast" hidden></div>
 
-  <script src="script.js?v=20260517c"></script>
+  <script src="script.js?v=20260517d"></script>
 </body>
 </html>
