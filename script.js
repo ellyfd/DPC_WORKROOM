@@ -643,8 +643,27 @@ function cardHTML(t, cv) {
   if (t.description) bits.push(t.description);
   const tip = bits.length ? `${t.name}\n${bits.join(" · ")}` : t.name;
 
+  const locked = isToolLocked(t);
+  const lockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+
+  // Action row: per-type "third action".
+  // Link → copy URL; Page → download original; File → download latest.
+  let thirdAct = "";
+  if (tType === "link" && t.url) {
+    thirdAct = `<button type="button" class="card-act" data-act="copy" data-id="${escapeAttr(t.id)}" title="複製連結" aria-label="複製連結">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      <span class="card-act-label">複製</span>
+    </button>`;
+  } else if ((tType === "page" || tType === "file") && Array.isArray(t.files) && t.files.length) {
+    const label = tType === "page" ? "下載原始檔" : "下載";
+    thirdAct = `<button type="button" class="card-act" data-act="download" data-id="${escapeAttr(t.id)}" title="${label}" aria-label="${label}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      <span class="card-act-label">下載</span>
+    </button>`;
+  }
+
   return `
-    <article class="card${isPage ? " is-page" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
+    <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
       <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" title="${escapeAttr(tip)}">
         <div class="card-top">
           <div class="card-icon">
@@ -652,19 +671,32 @@ function cardHTML(t, cv) {
             ${iconImg}
           </div>
           <span class="type-badge ${tType}">${type.icon}</span>
+          ${locked ? `<span class="lock-badge" title="已鎖定 — 只有 ${escapeAttr(t.lockedBy)} 能編輯/刪除">${lockSvg}</span>` : ""}
         </div>
         <h3 class="card-title">${escapeHTML(t.name)}</h3>
       </button>
       <div class="card-actions">
-        <button type="button" class="card-act" data-act="edit" data-id="${escapeAttr(t.id)}" title="編輯">
+        <button type="button" class="card-act" data-act="edit" data-id="${escapeAttr(t.id)}" title="編輯" aria-label="編輯">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+          <span class="card-act-label">編輯</span>
         </button>
-        <button type="button" class="card-act" data-act="icon" data-id="${escapeAttr(t.id)}" title="換圖">
+        <button type="button" class="card-act" data-act="icon" data-id="${escapeAttr(t.id)}" title="換圖" aria-label="換圖">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <span class="card-act-label">換圖</span>
         </button>
+        ${thirdAct}
       </div>
     </article>
   `;
+}
+
+function isToolLocked(t) {
+  return !!(t && t.lockedBy);
+}
+
+function canEditTool(t) {
+  if (!isToolLocked(t)) return true;
+  return t.lockedBy === state.me;
 }
 
 function wireSections() {
@@ -681,8 +713,31 @@ function wireSections() {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const id = btn.dataset.id;
-      if (btn.dataset.act === "edit") openToolPopover(id, btn);
-      else if (btn.dataset.act === "icon") openTileIconMenu(id, btn);
+      const act = btn.dataset.act;
+      const tool = allTools().find((x) => x.id === id);
+      if (act === "edit") {
+        if (!canEditTool(tool)) {
+          toast(`已鎖定 — 只有「${tool.lockedBy}」能編輯`);
+          return;
+        }
+        openToolPopover(id, btn);
+      } else if (act === "icon") {
+        if (!canEditTool(tool)) {
+          toast(`已鎖定 — 只有「${tool.lockedBy}」能換圖`);
+          return;
+        }
+        openTileIconMenu(id, btn);
+      } else if (act === "copy") {
+        copyToolUrl(tool);
+      } else if (act === "download") {
+        const latest = tool?.files?.[0];
+        if (latest?.key) {
+          downloadFile(latest);
+          toast(`下載 ${latest.name}`);
+        } else {
+          toast("找不到檔案");
+        }
+      }
     });
   });
   $$("#sections-area [data-add-cat]").forEach((btn) => {
@@ -729,8 +784,19 @@ function initial(name) {
 }
 
 function openTool(t, anchor) {
-  // File / Page tools: open the unified file panel.
-  if (isFileLikeTool(t)) {
+  // Page tools open directly (single HTML, no versions).
+  if (t.type === "page") {
+    if (!Array.isArray(t.files) || !t.files.length) {
+      if (confirm(`「${t.name}」還沒上傳 HTML。要現在上傳嗎?`)) {
+        openTileFileMenuUploadOnly(t.id, anchor);
+      }
+      return;
+    }
+    window.open(pageUrl(t.id), "_blank", "noopener");
+    return;
+  }
+  // File tools open the admin popup (upload + history). Download is in action row.
+  if (t.type === "file") {
     if (!Array.isArray(t.files) || !t.files.length) {
       if (confirm(`「${t.name}」還沒上傳任何檔案。要現在上傳嗎?`)) {
         openTileFileMenuUploadOnly(t.id, anchor);
@@ -747,6 +813,34 @@ function openTool(t, anchor) {
     return;
   }
   window.open(t.url, "_blank", "noopener");
+}
+
+function copyToolUrl(t) {
+  if (!t) return;
+  let url = "";
+  if (t.type === "link") url = t.url || "";
+  else if (t.type === "page") url = new URL(pageUrl(t.id), window.location.href).href;
+  if (!url) { toast("沒有可複製的網址"); return; }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(url).then(
+      () => toast("已複製連結"),
+      () => fallbackCopy(url)
+    );
+  } else {
+    fallbackCopy(url);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); toast("已複製連結"); }
+  catch { toast("複製失敗"); }
+  document.body.removeChild(ta);
 }
 
 /* ===== mini popover (reusable single-input prompt) ===== */
@@ -1612,76 +1706,37 @@ function openFilePopover(toolId) {
   const histEl = document.getElementById("file-panel-history");
 
   const files = Array.isArray(tool.files) ? tool.files : [];
-  const latest = files[0];
   const isPage = tool.type === "page";
 
   title.textContent = tool.name;
-  sub.textContent = isPage ? "HTML 頁面 · 上傳即覆蓋" : "檔案";
+  sub.textContent = isPage ? "HTML 頁面" : `${files.length} 個版本`;
 
   const uploadBtn = document.getElementById("file-panel-upload-btn");
   const uploadLabel = uploadBtn?.querySelector("span");
   if (uploadLabel) {
     uploadLabel.textContent = isPage
-      ? (latest ? "更換 HTML" : "上傳 HTML")
+      ? (files.length ? "更換 HTML" : "上傳 HTML")
       : "上傳新版本";
   }
 
-  // Latest version block
-  if (!latest) {
-    latestEl.innerHTML = `<div class="file-panel-empty muted">還沒有檔案 — 用下方按鈕上傳。</div>`;
-  } else {
-    const ver = files.length;
-    const dlSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
-    const openSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>`;
-    const verLabel = isPage ? "" : `v${ver} · `;
-    const badge = isPage ? "" : `<span class="file-panel-latest-badge">目前版本</span>`;
-    latestEl.innerHTML = `
-      <div class="file-panel-latest">
-        <div class="file-panel-latest-head">
-          <div class="file-panel-latest-ext">${escapeHTML(fileExt(latest.name))}</div>
-          <div class="file-panel-latest-meta">
-            <div class="file-panel-latest-name">${escapeHTML(latest.name)}</div>
-            <div class="file-panel-latest-info muted small">
-              ${verLabel}${escapeHTML(formatDate(latest.uploadedAt))}
-              ${latest.uploadedBy ? ` · ${escapeHTML(latest.uploadedBy)}` : ""}
-              · ${escapeHTML(formatBytes(latest.size || 0))}
-              ${badge}
-            </div>
-          </div>
-        </div>
-        <div class="file-panel-latest-actions">
-          ${isPage ? `<button type="button" class="btn btn-primary" id="file-panel-open">${openSvg}<span>開啟頁面</span></button>` : ""}
-          <button type="button" class="btn ${isPage ? "btn-secondary" : "btn-primary"}" id="file-panel-download">${dlSvg}<span>${isPage ? "下載原始檔" : "下載"}</span></button>
-        </div>
-      </div>
-    `;
-    latestEl.querySelector("#file-panel-download")?.addEventListener("click", () => {
-      downloadFile(latest);
-      toast(`下載 ${latest.name}`);
-    });
-    latestEl.querySelector("#file-panel-open")?.addEventListener("click", () => {
-      window.open(pageUrl(tool.id), "_blank", "noopener");
-    });
-  }
+  // Slim popup: no prominent "latest" card. Just admin actions.
+  // (Download is now on the action row.)
+  latestEl.innerHTML = "";
 
-  // History (versions other than latest). Pages don't keep history — always hidden.
-  const older = isPage ? [] : files.slice(1);
-  if (!older.length) {
+  // History list. For files: all versions (latest tagged "目前"). For pages: hidden.
+  if (isPage || !files.length) {
     histWrap.hidden = true;
   } else {
     histWrap.hidden = false;
     const dlSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
-    histEl.innerHTML = older.map((f, j) => {
-      const i = j + 1;
+    histEl.innerHTML = files.map((f, i) => {
+      const isLatest = i === 0;
       const ver = files.length - i;
-      const previewBtn = isPage && isHtmlFile(f)
-        ? `<button type="button" class="file-panel-row-btn" data-act="preview" data-version="${i}" title="預覽這版"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>`
-        : "";
       return `
-        <div class="file-panel-row" data-version="${i}">
+        <div class="file-panel-row${isLatest ? " is-latest" : ""}" data-version="${i}">
           <div class="file-panel-row-ver">v${ver}</div>
           <div class="file-panel-row-meta">
-            <div class="file-panel-row-name">${escapeHTML(f.name || "(未命名)")}</div>
+            <div class="file-panel-row-name">${escapeHTML(f.name || "(未命名)")}${isLatest ? ` <span class="file-panel-row-tag">目前</span>` : ""}</div>
             <div class="file-panel-row-info muted small">
               ${escapeHTML(formatDate(f.uploadedAt))}
               ${f.uploadedBy ? ` · ${escapeHTML(f.uploadedBy)}` : ""}
@@ -1689,7 +1744,6 @@ function openFilePopover(toolId) {
             </div>
           </div>
           <div class="file-panel-row-actions">
-            ${previewBtn}
             <button type="button" class="file-panel-row-btn" data-act="download" data-version="${i}" title="下載這版">${dlSvg}</button>
           </div>
         </div>
@@ -1736,6 +1790,11 @@ function positionFloatingMenu(menu, anchor) {
 async function addVersionToTool(toolId, file) {
   if (file.size > MAX_FILE_BYTES) {
     toast(`檔案太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_FILE_BYTES)})`);
+    return;
+  }
+  const existing = allTools().find((t) => t.id === toolId);
+  if (!canEditTool(existing)) {
+    toast(`已鎖定 — 只有「${existing.lockedBy}」能上傳新版`);
     return;
   }
   const me = await getMe();
@@ -1788,6 +1847,11 @@ async function addVersionToTool(toolId, file) {
 }
 
 function setToolIcon(toolId, value) {
+  const existing = allTools().find((t) => t.id === toolId);
+  if (!canEditTool(existing)) {
+    toast(`已鎖定 — 只有「${existing.lockedBy}」能換圖`);
+    return;
+  }
   // If the tool only exists as a seed (from tools.json), copy it to localTools
   // first so the change persists.
   let tool = state.localTools.find((t) => t.id === toolId);
@@ -1978,12 +2042,14 @@ function openToolPopover(id = null, anchor = null) {
       if (Array.isArray(t.files)) {
         state.editingFiles = t.files.map((f) => ({ ...f }));
       }
+      if (form.elements.lock) form.elements.lock.checked = !!t.lockedBy;
     }
   } else {
     renderCreatorSelect("");
     renderCategorySelect(state.prefillCategory || "");
     renderBrandSelect("");
     form.elements.icon.value = "";
+    if (form.elements.lock) form.elements.lock.checked = false;
     setType("link");
     restoreDraft();
     if (state.prefillCategory) {
@@ -2025,6 +2091,7 @@ function formData() {
     tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
     icon: f.icon.value.trim(),
     brand: (f.brand?.value || "").trim(),
+    lock: !!f.lock?.checked,
   };
 }
 
@@ -2058,6 +2125,13 @@ function saveTool() {
   if (!d.name || !d.creator) {
     toast("請填寫工具名稱與製作人");
     return;
+  }
+  if (state.editingId) {
+    const existing = allTools().find((t) => t.id === state.editingId);
+    if (!canEditTool(existing)) {
+      toast(`已鎖定 — 只有「${existing.lockedBy}」能修改`);
+      return;
+    }
   }
   if (d.type === "file" || d.type === "page") {
     if (!state.editingFiles.length) {
@@ -2106,6 +2180,7 @@ function saveTool() {
           uploadedBy: f.uploadedBy || "",
         }))
       : [],
+    lockedBy: d.lock ? d.creator : "",
     updated: new Date().toISOString(),
   };
 
@@ -2140,6 +2215,11 @@ function uniqueSlug(name) {
 
 function deleteTool() {
   if (!state.editingId) return;
+  const t = allTools().find((x) => x.id === state.editingId);
+  if (!canEditTool(t)) {
+    toast(`已鎖定 — 只有「${t.lockedBy}」能刪除`);
+    return;
+  }
   if (!confirm("確定要刪除這個工具?")) return;
   state.localTools = state.localTools.filter((t) => t.id !== state.editingId);
   saveTools();

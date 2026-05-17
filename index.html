@@ -191,6 +191,13 @@
           <span>Tags(逗號分隔)</span>
           <input name="tags" placeholder="例如:布料, 查詢, 自動化" />
         </label>
+        <label class="checkbox-row">
+          <input type="checkbox" name="lock" id="tool-lock" />
+          <span>
+            <strong>鎖定</strong>
+            <span class="muted small" id="tool-lock-hint">只有你能編輯 / 刪除這個工具(以「製作人」為依據)</span>
+          </span>
+        </label>
         <div class="form-actions">
           <button type="button" class="btn btn-danger" id="delete-tool" hidden>刪除</button>
           <div class="form-actions-right">
