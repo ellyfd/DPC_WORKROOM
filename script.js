@@ -105,7 +105,7 @@ async function init() {
   initFileUpload();
   initTileIconMenu();
   initTileFileMenu();
-  initHistoryPopover();
+  initFilePopover();
   initShortcuts();
 }
 
@@ -287,12 +287,17 @@ function migrateToolsSchema() {
       changed = true;
     }
     if ("asIframe" in t) { delete t.asIframe; changed = true; }
-    if (t.type === "file") {
+    if (t.type === "file" || t.type === "page") {
       if (!Array.isArray(t.files)) {
         t.files = [];
         delete t.file;
         changed = true;
       }
+    }
+    // Reclassify legacy file-type HTML tools as the new "page" type.
+    if (t.type === "file" && Array.isArray(t.files) && t.files.length && isHtmlFile(t.files[0])) {
+      t.type = "page";
+      changed = true;
     }
   }
   if (changed) saveTools();
@@ -527,12 +532,20 @@ function renderFilters() {
 
 const TYPE_META = {
   link: { label: "LINK", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>` },
+  page: { label: "PAGE", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>` },
   file: { label: "FILE", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` },
   // legacy fallbacks
   url: { label: "URL", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>` },
   python: { label: "PY", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v6h8m-8 6H4v6h6m0-12V3h6v6m0 6h4v-6h-6m0 6v6"/></svg>` },
   iframe: { label: "EMBED", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>` },
 };
+
+function normalizeType(t) {
+  if (t === "page" || t === "file" || t === "link") return t;
+  if (t === "url" || t === "iframe") return "link";
+  if (t === "python") return "file";
+  return "link";
+}
 
 function renderSections() {
   const area = $("#sections-area");
@@ -712,15 +725,15 @@ function initial(name) {
 }
 
 function openTool(t, anchor) {
-  // File tools ask: download the current version, or upload a new one?
-  if (t.type === "file") {
+  // File / Page tools: open the unified file panel.
+  if (isFileLikeTool(t)) {
     if (!Array.isArray(t.files) || !t.files.length) {
       if (confirm(`「${t.name}」還沒上傳任何檔案。要現在上傳嗎?`)) {
         openTileFileMenuUploadOnly(t.id, anchor);
       }
       return;
     }
-    openTileFileMenu(t.id, anchor);
+    openFilePopover(t.id);
     return;
   }
   if (!t.url || t.url === "#") {
@@ -1100,8 +1113,20 @@ function applyTypeMode(type) {
     const types = el.dataset.showForType.split(",").map((s) => s.trim());
     el.hidden = !types.includes(type);
   });
+  const input = document.getElementById("file-input");
+  if (input) input.accept = type === "page" ? ".html,.htm,text/html" : "";
+  const title = document.getElementById("file-manager-title");
+  const hint = document.getElementById("file-manager-hint");
+  if (title) title.textContent = type === "page" ? "HTML 檔" : "版本紀錄";
+  if (hint) {
+    hint.textContent = type === "page"
+      ? "上傳 HTML 即發佈為 /p/<工具> 頁面。最多保留 5 版,單檔上限 25 MB。"
+      : "每次上傳自動記錄時間 / 上傳人,最新一筆是目前版本。最多保留 5 個版本,單檔上限 25 MB。";
+  }
   if (type === "file") {
     renderBrandSelect(document.getElementById("brand-select")?.value || "");
+  }
+  if (type === "file" || type === "page") {
     renderFileList();
   }
 }
@@ -1147,6 +1172,11 @@ function initFileUpload() {
 async function addFileVersion(file) {
   if (file.size > MAX_FILE_BYTES) {
     toast(`檔案太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_FILE_BYTES)})`);
+    return;
+  }
+  const currentType = $("#add-form").elements.type.value;
+  if (currentType === "page" && !isHtmlFile({ name: file.name })) {
+    toast("頁面類型只接受 .html / .htm");
     return;
   }
   const me = await getMe();
@@ -1314,7 +1344,14 @@ function isHtmlFile(f) {
 }
 
 function isPageTool(t) {
-  return t?.type === "file" && Array.isArray(t.files) && isHtmlFile(t.files[0]);
+  if (!t) return false;
+  if (t.type === "page") return true;
+  // Legacy: file-type tool whose latest is HTML (auto-migrated to "page" on load).
+  return t.type === "file" && Array.isArray(t.files) && isHtmlFile(t.files[0]);
+}
+
+function isFileLikeTool(t) {
+  return t?.type === "file" || t?.type === "page";
 }
 
 function pageUrl(toolId, versionIdx = 0) {
@@ -1509,75 +1546,150 @@ function closeTileFileMenu() {
   _fileMenuTargetId = null;
 }
 
-/* ===== version history popover ===== */
-function initHistoryPopover() {
-  const pop = document.getElementById("history-popover");
+/* ===== unified file panel popover (download + history + upload) ===== */
+let _filePanelToolId = null;
+
+function initFilePopover() {
+  const pop = document.getElementById("file-popover");
   if (!pop) return;
   pop.querySelectorAll("[data-close]").forEach((el) =>
-    el.addEventListener("click", closeHistoryPopover)
+    el.addEventListener("click", closeFilePopover)
   );
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !pop.hidden) closeHistoryPopover();
+    if (e.key === "Escape" && !pop.hidden) closeFilePopover();
+  });
+  const uploadBtn = document.getElementById("file-panel-upload-btn");
+  const uploadInput = document.getElementById("file-panel-upload");
+  uploadBtn?.addEventListener("click", () => {
+    if (!_filePanelToolId) return;
+    const tool = allTools().find((t) => t.id === _filePanelToolId);
+    uploadInput.accept = tool?.type === "page" ? ".html,.htm,text/html" : "";
+    uploadInput.click();
+  });
+  uploadInput?.addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    const id = _filePanelToolId;
+    e.target.value = "";
+    if (!f || !id) return;
+    const tool = allTools().find((t) => t.id === id);
+    if (tool?.type === "page" && !isHtmlFile({ name: f.name })) {
+      toast("這是頁面類型,只接受 .html / .htm");
+      return;
+    }
+    await addVersionToTool(id, f);
+    if (!document.getElementById("file-popover").hidden) openFilePopover(id);
   });
 }
 
-function openHistoryPopover(toolId) {
-  const pop = document.getElementById("history-popover");
-  const list = document.getElementById("history-list");
-  const title = document.getElementById("history-popover-title");
-  const sub = document.getElementById("history-popover-sub");
-  if (!pop || !list) return;
+function openFilePopover(toolId) {
+  const pop = document.getElementById("file-popover");
+  if (!pop) return;
   const tool = allTools().find((t) => t.id === toolId);
-  if (!tool) {
-    toast("找不到這個工具");
-    return;
-  }
-  const files = Array.isArray(tool.files) ? tool.files : [];
-  title.textContent = `${tool.name} — 版本歷史`;
-  sub.textContent = files.length
-    ? `共 ${files.length} 個版本 · 點任一版本可下載`
-    : "還沒有任何版本";
+  if (!tool) { toast("找不到這個工具"); return; }
+  _filePanelToolId = toolId;
 
-  if (!files.length) {
-    list.innerHTML = `<div class="history-empty muted">還沒有上傳檔案</div>`;
+  const title = document.getElementById("file-popover-title");
+  const sub = document.getElementById("file-popover-sub");
+  const latestEl = document.getElementById("file-panel-latest");
+  const histWrap = document.getElementById("file-panel-history-wrap");
+  const histEl = document.getElementById("file-panel-history");
+
+  const files = Array.isArray(tool.files) ? tool.files : [];
+  const latest = files[0];
+  const isPage = tool.type === "page";
+
+  title.textContent = tool.name;
+  sub.textContent = isPage ? "HTML 頁面 · 上傳即發佈" : "檔案";
+
+  // Latest version block
+  if (!latest) {
+    latestEl.innerHTML = `<div class="file-panel-empty muted">還沒有檔案 — 用下方按鈕上傳。</div>`;
   } else {
-    list.innerHTML = files.map((f, i) => {
-      const isLatest = i === 0;
-      const ver = files.length - i;
-      const dlSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
-      return `
-        <button type="button" class="history-row${isLatest ? " is-latest" : ""}" data-version="${i}">
-          <div class="history-row-ver">v${ver}</div>
-          <div class="history-row-meta">
-            <div class="history-row-name">${escapeHTML(f.name || "(未命名)")}</div>
-            <div class="history-row-info">
-              <span>${escapeHTML(formatDate(f.uploadedAt))}</span>
-              ${f.uploadedBy ? `<span>·</span><span>${escapeHTML(f.uploadedBy)}</span>` : ""}
-              <span>·</span>
-              <span>${escapeHTML(formatBytes(f.size || 0))}</span>
-              ${isLatest ? `<span class="history-row-latest-badge">目前版本</span>` : ""}
+    const ver = files.length;
+    const dlSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
+    const openSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>`;
+    latestEl.innerHTML = `
+      <div class="file-panel-latest">
+        <div class="file-panel-latest-head">
+          <div class="file-panel-latest-ext">${escapeHTML(fileExt(latest.name))}</div>
+          <div class="file-panel-latest-meta">
+            <div class="file-panel-latest-name">${escapeHTML(latest.name)}</div>
+            <div class="file-panel-latest-info muted small">
+              v${ver} · ${escapeHTML(formatDate(latest.uploadedAt))}
+              ${latest.uploadedBy ? ` · ${escapeHTML(latest.uploadedBy)}` : ""}
+              · ${escapeHTML(formatBytes(latest.size || 0))}
+              <span class="file-panel-latest-badge">目前版本</span>
             </div>
           </div>
-          <div class="history-row-action" aria-hidden="true">${dlSvg}</div>
-        </button>
+        </div>
+        <div class="file-panel-latest-actions">
+          ${isPage ? `<button type="button" class="btn btn-primary" id="file-panel-open">${openSvg}<span>開啟頁面</span></button>` : ""}
+          <button type="button" class="btn ${isPage ? "btn-secondary" : "btn-primary"}" id="file-panel-download">${dlSvg}<span>${isPage ? "下載原始檔" : "下載"}</span></button>
+        </div>
+      </div>
+    `;
+    latestEl.querySelector("#file-panel-download")?.addEventListener("click", () => {
+      downloadFile(latest);
+      toast(`下載 ${latest.name}`);
+    });
+    latestEl.querySelector("#file-panel-open")?.addEventListener("click", () => {
+      window.open(pageUrl(tool.id), "_blank", "noopener");
+    });
+  }
+
+  // History (versions other than latest)
+  const older = files.slice(1);
+  if (!older.length) {
+    histWrap.hidden = true;
+  } else {
+    histWrap.hidden = false;
+    const dlSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
+    histEl.innerHTML = older.map((f, j) => {
+      const i = j + 1;
+      const ver = files.length - i;
+      const previewBtn = isPage && isHtmlFile(f)
+        ? `<button type="button" class="file-panel-row-btn" data-act="preview" data-version="${i}" title="預覽這版"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>`
+        : "";
+      return `
+        <div class="file-panel-row" data-version="${i}">
+          <div class="file-panel-row-ver">v${ver}</div>
+          <div class="file-panel-row-meta">
+            <div class="file-panel-row-name">${escapeHTML(f.name || "(未命名)")}</div>
+            <div class="file-panel-row-info muted small">
+              ${escapeHTML(formatDate(f.uploadedAt))}
+              ${f.uploadedBy ? ` · ${escapeHTML(f.uploadedBy)}` : ""}
+              · ${escapeHTML(formatBytes(f.size || 0))}
+            </div>
+          </div>
+          <div class="file-panel-row-actions">
+            ${previewBtn}
+            <button type="button" class="file-panel-row-btn" data-act="download" data-version="${i}" title="下載這版">${dlSvg}</button>
+          </div>
+        </div>
       `;
     }).join("");
-    list.querySelectorAll("[data-version]").forEach((row) => {
-      row.addEventListener("click", () => {
-        const i = parseInt(row.dataset.version, 10);
+    histEl.querySelectorAll("[data-act]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = parseInt(btn.dataset.version, 10);
         const f = files[i];
         if (!f) return;
-        downloadFile(f);
-        toast(`下載 ${f.name}`);
+        if (btn.dataset.act === "download") {
+          downloadFile(f);
+          toast(`下載 ${f.name}`);
+        } else if (btn.dataset.act === "preview") {
+          window.open(pageUrl(tool.id, i), "_blank", "noopener");
+        }
       });
     });
   }
+
   pop.hidden = false;
 }
 
-function closeHistoryPopover() {
-  const pop = document.getElementById("history-popover");
+function closeFilePopover() {
+  const pop = document.getElementById("file-popover");
   if (pop) pop.hidden = true;
+  _filePanelToolId = null;
 }
 
 function positionFloatingMenu(menu, anchor) {
@@ -1823,8 +1935,7 @@ function openToolPopover(id = null, anchor = null) {
       if (t.creator) ensureCreator(t.creator);
       renderCreatorSelect(t.creator || "");
       renderCategorySelect(t.category || "");
-      const tType = (t.type === "file" || t.type === "link") ? t.type : "link";
-      setType(tType);
+      setType(normalizeType(t.type));
       form.elements.url.value = t.url === "#" ? "" : (t.url || "");
       form.elements.description.value = t.description || "";
       form.elements.tags.value = (t.tags || []).join(", ");
@@ -1915,9 +2026,13 @@ function saveTool() {
     toast("請填寫工具名稱與製作人");
     return;
   }
-  if (d.type === "file") {
+  if (d.type === "file" || d.type === "page") {
     if (!state.editingFiles.length) {
-      toast("請上傳至少一個檔案");
+      toast(d.type === "page" ? "請上傳 HTML 檔案" : "請上傳至少一個檔案");
+      return;
+    }
+    if (d.type === "page" && !isHtmlFile(state.editingFiles[0])) {
+      toast("頁面類型只接受 .html / .htm");
       return;
     }
   } else {
@@ -1949,7 +2064,7 @@ function saveTool() {
     tags: d.tags,
     icon: d.icon || "",
     brand: d.type === "file" ? d.brand : "",
-    files: d.type === "file"
+    files: (d.type === "file" || d.type === "page")
       ? state.editingFiles.map((f) => ({
           key: f.key,
           name: f.name,
