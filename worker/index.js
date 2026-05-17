@@ -36,7 +36,16 @@ export default {
       return jsonError(err?.message || String(err), 500);
     }
 
-    return env.ASSETS.fetch(request);
+    // Fall back to static assets. Force no-cache on the HTML shell so the
+    // ?v=... query strings on script.js / styles.css always pick up changes.
+    const res = await env.ASSETS.fetch(request);
+    const isHtml = (res.headers.get("Content-Type") || "").startsWith("text/html");
+    if (isHtml) {
+      const headers = new Headers(res.headers);
+      headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      return new Response(res.body, { status: res.status, headers });
+    }
+    return res;
   },
 };
 
