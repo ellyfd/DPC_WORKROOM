@@ -299,6 +299,11 @@ function migrateToolsSchema() {
       t.type = "page";
       changed = true;
     }
+    // Pages keep only the latest file — drop any historical versions.
+    if (t.type === "page" && Array.isArray(t.files) && t.files.length > 1) {
+      t.files = t.files.slice(0, 1);
+      changed = true;
+    }
   }
   if (changed) saveTools();
 }
@@ -1120,7 +1125,7 @@ function applyTypeMode(type) {
   if (title) title.textContent = type === "page" ? "HTML 檔" : "版本紀錄";
   if (hint) {
     hint.textContent = type === "page"
-      ? "上傳 HTML 即發佈為 /p/<工具> 頁面。最多保留 5 版,單檔上限 25 MB。"
+      ? "上傳 HTML 即發佈為 /p/<工具> 頁面。再次上傳會覆蓋上一份,單檔上限 25 MB。"
       : "每次上傳自動記錄時間 / 上傳人,最新一筆是目前版本。最多保留 5 個版本,單檔上限 25 MB。";
   }
   if (type === "file") {
@@ -1195,15 +1200,20 @@ async function addFileVersion(file) {
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const meta = await res.json();
-    state.editingFiles.unshift({
+    const entry = {
       key: meta.key,
       name: meta.name,
       size: meta.size,
       uploadedAt: meta.uploadedAt,
       uploadedBy: meta.uploadedBy,
-    });
-    if (state.editingFiles.length > MAX_VERSIONS) {
-      state.editingFiles.length = MAX_VERSIONS;
+    };
+    if (currentType === "page") {
+      state.editingFiles = [entry];
+    } else {
+      state.editingFiles.unshift(entry);
+      if (state.editingFiles.length > MAX_VERSIONS) {
+        state.editingFiles.length = MAX_VERSIONS;
+      }
     }
     renderFileList();
     autoFillFromFilename(file.name);
@@ -1246,11 +1256,19 @@ function readFileAsText(file) {
 function renderFileList() {
   const list = document.getElementById("file-list");
   if (!list) return;
+  const currentType = $("#add-form").elements.type.value;
+  const isPage = currentType === "page";
   const cta = document.getElementById("file-dropzone-cta-text");
   if (cta) {
-    cta.textContent = state.editingFiles.length
-      ? "點這裡或拖檔案進來上傳新版本"
-      : "還沒有檔案 — 點這裡或拖檔案進來";
+    if (isPage) {
+      cta.textContent = state.editingFiles.length
+        ? "點這裡或拖 HTML 進來覆蓋"
+        : "還沒有 HTML — 點這裡或拖檔案進來";
+    } else {
+      cta.textContent = state.editingFiles.length
+        ? "點這裡或拖檔案進來上傳新版本"
+        : "還沒有檔案 — 點這裡或拖檔案進來";
+    }
   }
   if (!state.editingFiles.length) {
     list.innerHTML = "";
@@ -1258,7 +1276,7 @@ function renderFileList() {
   }
   list.innerHTML = state.editingFiles.map((f, i) => {
     const isLatest = i === 0;
-    const canDelete = state.editingFiles.length > 1;
+    const canDelete = !isPage && state.editingFiles.length > 1;
     return `
       <div class="file-row${isLatest ? " file-row-latest" : ""}">
         <div class="file-row-icon">${escapeHTML(fileExt(f.name))}</div>
@@ -1269,7 +1287,7 @@ function renderFileList() {
             ${f.uploadedBy ? `<span>·</span><span>${escapeHTML(f.uploadedBy)} 上傳</span>` : ""}
             <span>·</span>
             <span>${escapeHTML(formatBytes(f.size))}</span>
-            ${isLatest ? `<span class="file-row-latest-badge">目前版本</span>` : ""}
+            ${isLatest && !isPage ? `<span class="file-row-latest-badge">目前版本</span>` : ""}
           </div>
         </div>
         <div class="file-row-actions">
@@ -1599,7 +1617,15 @@ function openFilePopover(toolId) {
   const isPage = tool.type === "page";
 
   title.textContent = tool.name;
-  sub.textContent = isPage ? "HTML 頁面 · 上傳即發佈" : "檔案";
+  sub.textContent = isPage ? "HTML 頁面 · 上傳即覆蓋" : "檔案";
+
+  const uploadBtn = document.getElementById("file-panel-upload-btn");
+  const uploadLabel = uploadBtn?.querySelector("span");
+  if (uploadLabel) {
+    uploadLabel.textContent = isPage
+      ? (latest ? "更換 HTML" : "上傳 HTML")
+      : "上傳新版本";
+  }
 
   // Latest version block
   if (!latest) {
@@ -1608,6 +1634,8 @@ function openFilePopover(toolId) {
     const ver = files.length;
     const dlSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
     const openSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>`;
+    const verLabel = isPage ? "" : `v${ver} · `;
+    const badge = isPage ? "" : `<span class="file-panel-latest-badge">目前版本</span>`;
     latestEl.innerHTML = `
       <div class="file-panel-latest">
         <div class="file-panel-latest-head">
@@ -1615,10 +1643,10 @@ function openFilePopover(toolId) {
           <div class="file-panel-latest-meta">
             <div class="file-panel-latest-name">${escapeHTML(latest.name)}</div>
             <div class="file-panel-latest-info muted small">
-              v${ver} · ${escapeHTML(formatDate(latest.uploadedAt))}
+              ${verLabel}${escapeHTML(formatDate(latest.uploadedAt))}
               ${latest.uploadedBy ? ` · ${escapeHTML(latest.uploadedBy)}` : ""}
               · ${escapeHTML(formatBytes(latest.size || 0))}
-              <span class="file-panel-latest-badge">目前版本</span>
+              ${badge}
             </div>
           </div>
         </div>
@@ -1637,8 +1665,8 @@ function openFilePopover(toolId) {
     });
   }
 
-  // History (versions other than latest)
-  const older = files.slice(1);
+  // History (versions other than latest). Pages don't keep history — always hidden.
+  const older = isPage ? [] : files.slice(1);
   if (!older.length) {
     histWrap.hidden = true;
   } else {
@@ -1736,18 +1764,24 @@ async function addVersionToTool(toolId, file) {
     }
     if (!tool) { toast("找不到這個工具"); return; }
     if (!Array.isArray(tool.files)) tool.files = [];
-    tool.files.unshift({
+    const entry = {
       key: meta.key,
       name: meta.name,
       size: meta.size,
       uploadedAt: meta.uploadedAt,
       uploadedBy: meta.uploadedBy,
-    });
-    if (tool.files.length > MAX_VERSIONS) tool.files.length = MAX_VERSIONS;
+    };
+    if (tool.type === "page") {
+      // Pages don't keep history — replace whatever's there.
+      tool.files = [entry];
+    } else {
+      tool.files.unshift(entry);
+      if (tool.files.length > MAX_VERSIONS) tool.files.length = MAX_VERSIONS;
+    }
     tool.updated = new Date().toISOString();
     saveTools();
     render();
-    toast(`已上傳 ${meta.name}`);
+    toast(tool.type === "page" ? `已更新 ${meta.name}` : `已上傳 ${meta.name}`);
   } catch (err) {
     toast("上傳失敗");
     console.error(err);
