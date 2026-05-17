@@ -381,6 +381,7 @@ h1, h2, h3 { margin: 0; }
 }
 .type-badge svg { width: 13px; height: 13px; }
 .type-badge.link   { color: #2563eb; background: #eff6ff; }
+.type-badge.page   { color: #7c3aed; background: #f3efff; }
 .type-badge.file   { color: #b45309; background: #fffbeb; }
 .type-badge.url    { color: #2563eb; background: #eff6ff; }
 .type-badge.python { color: #b45309; background: #fffbeb; }

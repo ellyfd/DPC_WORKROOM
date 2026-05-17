@@ -652,7 +652,6 @@ function cardHTML(t, cv) {
             ${iconImg}
           </div>
           <span class="type-badge ${tType}">${type.icon}</span>
-          ${isPage ? `<span class="page-badge" title="HTML 頁面">PAGE</span>` : ""}
         </div>
         <h3 class="card-title">${escapeHTML(t.name)}</h3>
       </button>
