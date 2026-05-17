@@ -455,7 +455,7 @@ function groupedTools() {
 
 function matchesQuery(t) {
   if (!state.query) return true;
-  const hay = [t.name, t.creator, t.description, t.category, ...(t.tags || [])]
+  const hay = [t.name, t.creator, t.description, t.category]
     .join(" ").toLowerCase();
   return hay.includes(state.query);
 }
@@ -2026,7 +2026,6 @@ function openToolPopover(id = null, anchor = null) {
   $("#type-selector").hidden = !!id;
 
   state.editingFiles = [];
-  state.editingTags = [];
 
   if (id) {
     const t = allTools().find((x) => x.id === id);
@@ -2039,7 +2038,6 @@ function openToolPopover(id = null, anchor = null) {
       setType(normalizeType(t.type));
       form.elements.url.value = t.url === "#" ? "" : (t.url || "");
       form.elements.description.value = t.description || "";
-      state.editingTags = Array.isArray(t.tags) ? t.tags.slice() : [];
       form.elements.icon.value = t.icon || "";
       if (t.brand) ensureBrand(t.brand);
       renderBrandSelect(t.brand || "");
@@ -2092,7 +2090,6 @@ function formData() {
     type: f.type.value,
     url: f.url.value.trim(),
     description: f.description.value.trim(),
-    tags: Array.isArray(state.editingTags) ? state.editingTags.slice() : [],
     icon: f.icon.value.trim(),
     brand: (f.brand?.value || "").trim(),
     lock: !!f.lock?.checked,
@@ -2120,7 +2117,6 @@ function restoreDraft() {
   }
   if (d.url) f.url.value = d.url;
   if (d.description) f.description.value = d.description;
-  if (Array.isArray(d.tags) && d.tags.length) state.editingTags = d.tags.slice();
   if (d.icon) f.icon.value = d.icon;
 }
 
@@ -2172,7 +2168,6 @@ function saveTool() {
     category: d.category,
     type: d.type,
     url: d.type === "link" ? d.url : "",
-    tags: d.tags,
     icon: d.icon || "",
     brand: d.type === "file" ? d.brand : "",
     files: (d.type === "file" || d.type === "page")
@@ -2268,7 +2263,7 @@ async function autoFetch() {
         // GitHub API failed — fall back so the user still gets name + owner
         // and only needs to fill in the rest manually.
         info = parseGenericURL(url) || {
-          name: gh.repo, creator: gh.owner, url, type: "link", tags: [], icon: "",
+          name: gh.repo, creator: gh.owner, url, type: "link", icon: "",
         };
         info.name = info.name || gh.repo;
         info.creator = info.creator || gh.owner;
@@ -2316,7 +2311,6 @@ async function fetchGitHubRepo(owner, repo) {
     description: data.description || "",
     creator: data.owner?.login || owner,
     url: data.html_url,
-    tags: data.topics || [],
     icon: data.owner?.avatar_url ? `${data.owner.avatar_url}&s=200` : "",
   };
 }
@@ -2333,7 +2327,6 @@ function parseGenericURL(url) {
       description: "",
       creator: "",
       url: u.href,
-      tags: [],
       icon: "",
     };
   } catch {
@@ -2352,7 +2345,6 @@ function applyAutoFill(info) {
   }
   if (info.description) f.description.value = info.description;
   if (info.url) f.url.value = info.url;
-  if (info.tags?.length) state.editingTags = info.tags.slice();
   if (info.icon) f.icon.value = info.icon;
   updateIconPreview();
 }
