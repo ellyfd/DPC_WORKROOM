@@ -328,7 +328,9 @@ h1, h2, h3 { margin: 0; }
   border: 0;
   cursor: pointer;
   text-align: center;
+  -webkit-tap-highlight-color: transparent;
 }
+.card-act { -webkit-tap-highlight-color: transparent; }
 .card-tile:hover .card-icon {
   transform: scale(1.06);
   box-shadow: 0 14px 30px -12px rgba(15, 23, 42, 0.4);
@@ -371,6 +373,7 @@ h1, h2, h3 { margin: 0; }
   position: absolute;
   right: -3px; bottom: -3px;
   width: 24px; height: 24px;
+  box-sizing: border-box;
   border-radius: 50%;
   background: var(--surface);
   border: 2px solid var(--surface);
@@ -378,6 +381,7 @@ h1, h2, h3 { margin: 0; }
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 0;
   z-index: 3;
+  overflow: hidden;
 }
 .type-badge svg { width: 13px; height: 13px; }
 .type-badge.link   { color: #2563eb; background: #eff6ff; }
