@@ -425,36 +425,32 @@ h1, h2, h3 { margin: 0; }
 .card-tags,
 .card-foot { display: none; }
 
-/* Action row below the tile name — hidden by default, fade in on hover (slot reserved) */
+/* Action row below the tile name — always visible, raised for affordance */
 .card-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-top: 2px;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.15s, visibility 0.15s;
-}
-.card:hover .card-actions,
-.card:focus-within .card-actions {
-  opacity: 1;
-  visibility: visible;
 }
 .card-act {
-  width: 26px; height: 26px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
   color: var(--text-mute);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 6px rgba(15, 23, 42, 0.04);
+  transition: transform 0.12s, color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 .card-act:hover {
   color: var(--accent);
   border-color: var(--accent);
   background: #fff;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 6px 14px rgba(99, 102, 241, 0.18);
+  transform: translateY(-1px);
 }
-.card-act svg { width: 13px; height: 13px; }
+.card-act:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
+.card-act svg { width: 14px; height: 14px; }
 
 /* "Add to this category" tile — matches tool tile size */
 .card-add {
@@ -1505,9 +1501,9 @@ h1, h2, h3 { margin: 0; }
   }
   .card-title { font-size: 12.5px; max-width: 80px; }
   .card-add { padding: 4px 2px 36px; }
-  .card-actions { opacity: 1; gap: 3px; }
-  .card-act { width: 24px; height: 24px; border-radius: 6px; }
-  .card-act svg { width: 12px; height: 12px; }
+  .card-actions { gap: 4px; }
+  .card-act { width: 26px; height: 26px; border-radius: 7px; }
+  .card-act svg { width: 13px; height: 13px; }
   .type-badge { width: 20px; height: 20px; right: -4px; bottom: -4px; }
   .type-badge svg { width: 11px; height: 11px; }
 
@@ -1594,6 +1590,9 @@ h1, h2, h3 { margin: 0; }
 .floating-menu-item.danger { color: var(--text-dim); }
 .floating-menu-item.danger:hover { color: var(--danger); background: var(--danger-soft); }
 .floating-menu-item.danger:hover svg { color: var(--danger); }
+.floating-menu-item.primary { color: var(--accent); font-weight: 600; }
+.floating-menu-item.primary svg { color: var(--accent); }
+.floating-menu-item.primary:hover { background: var(--accent-soft); }
 
 @media (max-width: 380px) {
   .section-grid { grid-template-columns: repeat(3, 1fr); }

@@ -1473,10 +1473,15 @@ function openTileFileMenu(toolId, anchor) {
   closeTileIconMenu();
   const tool = allTools().find((t) => t.id === toolId);
   const latest = tool?.files?.[0];
+  const isPage = isPageTool(tool);
   const dlLabel = document.getElementById("tile-file-menu-download");
-  if (dlLabel) dlLabel.textContent = latest ? `下載 ${latest.name}` : "下載最新版";
+  if (dlLabel) {
+    if (!latest) dlLabel.textContent = "下載最新版";
+    else if (isPage) dlLabel.textContent = `下載原始檔 (${latest.name})`;
+    else dlLabel.textContent = `下載 ${latest.name}`;
+  }
   const pageItem = document.getElementById("tile-file-menu-page");
-  if (pageItem) pageItem.hidden = !isPageTool(tool);
+  if (pageItem) pageItem.hidden = !isPage;
   _fileMenuTargetId = toolId;
   menu.hidden = false;
   positionFloatingMenu(menu, anchor);
