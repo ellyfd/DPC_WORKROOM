@@ -411,7 +411,6 @@ h1, h2, h3 { margin: 0; }
 
 /* Card extras hidden in launchpad view */
 .card-desc,
-.card-tags,
 .card-foot { display: none; }
 
 /* Action row below the tile name — always visible, raised for affordance */
