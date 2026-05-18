@@ -373,18 +373,28 @@ h1, h2, h3 { margin: 0; }
   background: #fff;
 }
 
-/* Tile type indicator — a small colored dot pinned to the bottom-right
+/* Tile type indicator — a small labeled badge pinned to the bottom-right
    corner INSIDE .card-icon. Because .card-icon has overflow: hidden, this
    chip is physically incapable of escaping or stretching the layout. */
 .tile-type-chip {
   position: absolute;
-  right: 5px; bottom: 5px;
-  width: 9px; height: 9px;
-  border-radius: 50%;
+  right: 4px; bottom: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
   background: var(--text-mute);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   z-index: 4;
   pointer-events: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  letter-spacing: 0;
 }
 .tile-type-link, .tile-type-url      { background: #2563eb; }
 .tile-type-page, .tile-type-iframe   { background: #7c3aed; }

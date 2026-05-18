@@ -536,13 +536,13 @@ function renderFilters() {
 }
 
 const TYPE_META = {
-  link: { label: "LINK", icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>` },
-  page: { label: "PAGE", icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="6.5"/><path d="M5.5 12h13"/><path d="M12 5.5c1.7 3.2 1.7 9.8 0 13M12 5.5c-1.7 3.2-1.7 9.8 0 13"/></svg>` },
-  file: { label: "FILE", icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` },
+  link:   { label: "LINK",  short: "連" },
+  page:   { label: "PAGE",  short: "頁" },
+  file:   { label: "FILE",  short: "檔" },
   // legacy fallbacks
-  url: { label: "URL", icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>` },
-  python: { label: "PY", icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v6h8m-8 6H4v6h6m0-12V3h6v6m0 6h4v-6h-6m0 6v6"/></svg>` },
-  iframe: { label: "EMBED", icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>` },
+  url:    { label: "URL",   short: "連" },
+  python: { label: "PY",    short: "檔" },
+  iframe: { label: "EMBED", short: "頁" },
 };
 
 function normalizeType(t) {
@@ -669,7 +669,7 @@ function cardHTML(t, cv) {
           <div class="card-icon">
             <span class="ic-letter">${escapeHTML(initial(t.name))}</span>
             ${iconImg}
-            <span class="tile-type-chip tile-type-${tType}" aria-label="${escapeAttr(type.label)}"></span>
+            <span class="tile-type-chip tile-type-${tType}" aria-label="${escapeAttr(type.label)}">${escapeHTML(type.short)}</span>
           </div>
           ${locked ? `<span class="lock-badge" title="已鎖定 — 只有 ${escapeAttr(t.lockedBy)} 能編輯/刪除">${lockSvg}</span>` : ""}
         </div>
