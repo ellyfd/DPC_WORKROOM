@@ -419,6 +419,10 @@ h1, h2, h3 { margin: 0; }
   line-height: 1.3;
   margin: 0;
   max-width: 100px;
+  /* Reserve exactly two lines of vertical space so a 1-line name (e.g.
+     "TD查找") and a 2-line name (e.g. "Gap 3D Standard") end at the same
+     vertical position — keeps action button rows aligned across tiles. */
+  min-height: calc(1.3em * 2);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;

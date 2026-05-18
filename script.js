@@ -103,7 +103,6 @@ async function init() {
   initIconPicker();
   initTypeSelector();
   initFileUpload();
-  initTileIconMenu();
   initTileFileMenu();
   initFilePopover();
   initShortcuts();
@@ -680,10 +679,6 @@ function cardHTML(t, cv) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
           <span class="card-act-label">編輯</span>
         </button>
-        <button type="button" class="card-act" data-act="icon" data-id="${escapeAttr(t.id)}" title="換圖" aria-label="換圖">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-          <span class="card-act-label">換圖</span>
-        </button>
         ${thirdAct}
       </div>
     </article>
@@ -721,12 +716,6 @@ function wireSections() {
           return;
         }
         openToolPopover(id, btn);
-      } else if (act === "icon") {
-        if (!canEditTool(tool)) {
-          toast(`已鎖定 — 只有「${tool.lockedBy}」能換圖`);
-          return;
-        }
-        openTileIconMenu(id, btn);
       } else if (act === "copy") {
         copyToolUrl(tool);
       } else if (act === "download") {
@@ -1470,90 +1459,6 @@ function pageUrl(toolId, versionIdx = 0) {
   return versionIdx > 0 ? `${base}?v=${versionIdx}` : base;
 }
 
-/* ===== tile icon menu (change-image from the tile, no popover needed) ===== */
-let _iconMenuTargetId = null;
-
-function initTileIconMenu() {
-  const menu = document.getElementById("tile-icon-menu");
-  const file = document.getElementById("tile-icon-file");
-  if (!menu || !file) return;
-
-  menu.querySelectorAll("[data-action]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const id = _iconMenuTargetId;
-      if (!id) return;
-      const action = btn.dataset.action;
-      if (action === "upload") {
-        file.click();
-      } else if (action === "url") {
-        const tool = allTools().find((t) => t.id === id);
-        openMiniPopover({
-          title: "圖片網址",
-          placeholder: "https://…",
-          defaultValue: (tool?.icon || "").startsWith("data:") ? "" : (tool?.icon || ""),
-          type: "url",
-          onConfirm: (val) => setToolIcon(id, val || ""),
-        });
-        closeTileIconMenu();
-      } else if (action === "clear") {
-        setToolIcon(id, "");
-        closeTileIconMenu();
-      }
-    });
-  });
-
-  file.addEventListener("change", async (e) => {
-    const f = e.target.files?.[0];
-    const id = _iconMenuTargetId;
-    e.target.value = "";
-    if (!f || !id) return;
-    try {
-      const dataUrl = await readAndResize(f, 256);
-      setToolIcon(id, dataUrl);
-    } catch {
-      toast("圖片讀取失敗");
-    }
-    closeTileIconMenu();
-  });
-
-  document.addEventListener("click", (e) => {
-    if (menu.hidden) return;
-    if (e.target.closest("#tile-icon-menu")) return;
-    if (e.target.closest("[data-act='icon']")) return;
-    closeTileIconMenu();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !menu.hidden) closeTileIconMenu();
-  });
-  window.addEventListener("scroll", closeTileIconMenu, true);
-  window.addEventListener("resize", closeTileIconMenu);
-}
-
-function openTileIconMenu(toolId, anchor) {
-  const menu = document.getElementById("tile-icon-menu");
-  if (!menu) return;
-  _iconMenuTargetId = toolId;
-  menu.hidden = false;
-  // Measure after un-hiding
-  const r = anchor.getBoundingClientRect();
-  const mw = menu.offsetWidth || 200;
-  const mh = menu.offsetHeight || 140;
-  let left = r.left;
-  if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
-  if (left < 8) left = 8;
-  let top = r.bottom + 6;
-  if (top + mh > window.innerHeight - 8) top = r.top - mh - 6;
-  if (top < 8) top = 8;
-  menu.style.left = `${left}px`;
-  menu.style.top = `${top}px`;
-}
-
-function closeTileIconMenu() {
-  const menu = document.getElementById("tile-icon-menu");
-  if (menu) menu.hidden = true;
-  _iconMenuTargetId = null;
-}
 
 /* ===== tile file menu (click a file tile → download or upload new) ===== */
 let _fileMenuTargetId = null;
@@ -1618,7 +1523,6 @@ function initTileFileMenu() {
 function openTileFileMenu(toolId, anchor) {
   const menu = document.getElementById("tile-file-menu");
   if (!menu || !anchor) return;
-  closeTileIconMenu();
   const tool = allTools().find((t) => t.id === toolId);
   const latest = tool?.files?.[0];
   const isPage = isPageTool(tool);
@@ -1846,27 +1750,6 @@ async function addVersionToTool(toolId, file) {
   }
 }
 
-function setToolIcon(toolId, value) {
-  const existing = allTools().find((t) => t.id === toolId);
-  if (!canEditTool(existing)) {
-    toast(`已鎖定 — 只有「${existing.lockedBy}」能換圖`);
-    return;
-  }
-  // If the tool only exists as a seed (from tools.json), copy it to localTools
-  // first so the change persists.
-  let tool = state.localTools.find((t) => t.id === toolId);
-  if (!tool) {
-    const seed = state.seedTools.find((t) => t.id === toolId);
-    if (!seed) return;
-    tool = { ...seed };
-    state.localTools.push(tool);
-  }
-  tool.icon = value || "";
-  tool.updated = new Date().toISOString();
-  saveTools();
-  render();
-  toast(value ? "已更新圖示" : "已用預設圖示");
-}
 
 /* ===== "current user" (uploader tag) ===== */
 async function getMe() {
@@ -1947,10 +1830,73 @@ function renderCategorySelect(keepValue) {
   else sel.value = "";
 }
 
-/* Icon editing happens from the tile (initTileIconMenu), not in the form.
-   These are kept as no-ops so existing call sites don't need branching. */
-function initIconPicker() {}
-function updateIconPreview() {}
+/* Icon picker lives inside the add/edit popover — preview + 上傳 / 網址 /
+   預設 buttons that update the form's hidden `icon` input. The actual
+   save happens with the rest of the form, on 儲存. */
+function initIconPicker() {
+  const picker = document.getElementById("icon-picker");
+  const fileInput = document.getElementById("icon-picker-file");
+  if (!picker || !fileInput) return;
+
+  picker.querySelectorAll("[data-icon-action]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const action = btn.dataset.iconAction;
+      const f = $("#add-form").elements;
+      if (action === "upload") {
+        fileInput.click();
+      } else if (action === "url") {
+        const current = f.icon.value || "";
+        openMiniPopover({
+          title: "圖片網址",
+          placeholder: "https://…",
+          defaultValue: current.startsWith("data:") ? "" : current,
+          type: "url",
+          onConfirm: (val) => {
+            f.icon.value = (val || "").trim();
+            updateIconPreview();
+          },
+        });
+      } else if (action === "clear") {
+        f.icon.value = "";
+        updateIconPreview();
+      }
+    });
+  });
+
+  fileInput.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const dataUrl = await readAndResize(file, 256);
+      $("#add-form").elements.icon.value = dataUrl;
+      updateIconPreview();
+    } catch {
+      toast("圖片讀取失敗");
+    }
+  });
+}
+
+function updateIconPreview() {
+  const preview = document.getElementById("icon-preview");
+  const letter = document.getElementById("icon-preview-letter");
+  if (!preview || !letter) return;
+  const f = $("#add-form").elements;
+  const iconUrl = (f.icon.value || "").trim();
+  const name = (f.name.value || "").trim();
+  letter.textContent = initial(name);
+  const oldImg = preview.querySelector("img");
+  if (oldImg) oldImg.remove();
+  if (iconUrl) {
+    const img = document.createElement("img");
+    img.src = iconUrl;
+    img.alt = "";
+    img.addEventListener("error", () => img.remove());
+    preview.appendChild(img);
+  }
+}
 
 async function readAndResize(file, maxSize) {
   return new Promise((resolve, reject) => {
