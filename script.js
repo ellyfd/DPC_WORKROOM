@@ -536,13 +536,13 @@ function renderFilters() {
 }
 
 const TYPE_META = {
-  link:   { label: "LINK",  short: "連" },
-  page:   { label: "PAGE",  short: "頁" },
-  file:   { label: "FILE",  short: "檔" },
+  link:   { label: "LINK",  icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>` },
+  page:   { label: "PAGE",  icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16"/><path d="M12 4c2.5 3 2.5 13 0 16M12 4c-2.5 3-2.5 13 0 16"/></svg>` },
+  file:   { label: "FILE",  icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>` },
   // legacy fallbacks
-  url:    { label: "URL",   short: "連" },
-  python: { label: "PY",    short: "檔" },
-  iframe: { label: "EMBED", short: "頁" },
+  url:    { label: "URL",   icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>` },
+  python: { label: "PY",    icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>` },
+  iframe: { label: "EMBED", icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16"/><path d="M12 4c2.5 3 2.5 13 0 16M12 4c-2.5 3-2.5 13 0 16"/></svg>` },
 };
 
 function normalizeType(t) {
@@ -669,7 +669,7 @@ function cardHTML(t, cv) {
           <div class="card-icon">
             <span class="ic-letter">${escapeHTML(initial(t.name))}</span>
             ${iconImg}
-            <span class="tile-type-chip tile-type-${tType}" aria-label="${escapeAttr(type.label)}">${escapeHTML(type.short)}</span>
+            <span class="tile-type-chip tile-type-${tType}" aria-label="${escapeAttr(type.label)}">${type.icon}</span>
           </div>
           ${locked ? `<span class="lock-badge" title="已鎖定 — 只有 ${escapeAttr(t.lockedBy)} 能編輯/刪除">${lockSvg}</span>` : ""}
         </div>
