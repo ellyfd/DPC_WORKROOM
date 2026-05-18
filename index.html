@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260517i" />
+  <link rel="stylesheet" href="styles.css?v=20260517j" />
 </head>
 <body>
   <div class="bg-soft"></div>
@@ -113,8 +113,27 @@
           </button>
         </div>
 
-        <!-- Icon edited from the tile itself (outer action button), not in this form -->
+        <!-- Hidden source of truth — the icon picker below updates this. -->
         <input type="hidden" name="icon" />
+
+        <!-- Icon picker: preview + 上傳 / 網址 / 預設 -->
+        <div class="icon-picker" id="icon-picker">
+          <div class="icon-preview" id="icon-preview">
+            <span class="icon-preview-letter" id="icon-preview-letter"></span>
+          </div>
+          <div class="icon-actions">
+            <button type="button" class="btn-mini" data-icon-action="upload">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              上傳
+            </button>
+            <button type="button" class="btn-mini" data-icon-action="url">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              網址
+            </button>
+            <button type="button" class="btn-mini btn-mini-ghost" data-icon-action="clear">預設</button>
+          </div>
+          <input type="file" id="icon-picker-file" accept="image/*" hidden />
+        </div>
 
         <!-- 4a. File manager (file / page type) -->
         <div class="file-manager" data-show-for-type="file,page" hidden>
@@ -259,24 +278,6 @@
     </div>
   </div>
 
-  <!-- Floating menu (tile icon swap) -->
-  <div class="floating-menu" id="tile-icon-menu" hidden>
-    <button type="button" class="floating-menu-item" data-action="upload">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-      <span>上傳圖片</span>
-    </button>
-    <button type="button" class="floating-menu-item" data-action="url">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-      <span>用網址</span>
-    </button>
-    <div class="floating-menu-sep"></div>
-    <button type="button" class="floating-menu-item danger" data-action="clear">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-      <span>用預設(漸層 + 首字)</span>
-    </button>
-    <input type="file" id="tile-icon-file" accept="image/*" hidden />
-  </div>
-
   <!-- Floating menu (file tile click → primary action by tool type) -->
   <div class="floating-menu" id="tile-file-menu" hidden>
     <button type="button" class="floating-menu-item primary" data-action="page" id="tile-file-menu-page" hidden>
@@ -330,6 +331,6 @@
   <!-- Toast -->
   <div class="toast" id="toast" hidden></div>
 
-  <script src="script.js?v=20260517i"></script>
+  <script src="script.js?v=20260517j"></script>
 </body>
 </html>
