@@ -314,7 +314,15 @@ h1, h2, h3 { margin: 0; }
   border-radius: var(--radius);
   background: transparent;
   border: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.card[draggable="true"] .card-tile { cursor: grab; }
+.card[draggable="true"]:active .card-tile { cursor: grabbing; }
+.card.dragging { opacity: 0.4; }
+.section.drag-over {
+  outline: 2px dashed var(--accent, #6366f1);
+  outline-offset: -4px;
+  background: var(--accent-soft, rgba(99, 102, 241, 0.06));
 }
 
 .card-tile {
