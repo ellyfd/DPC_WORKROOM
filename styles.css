@@ -319,6 +319,21 @@ h1, h2, h3 { margin: 0; }
 .card[draggable="true"] .card-tile { cursor: grab; }
 .card[draggable="true"]:active .card-tile { cursor: grabbing; }
 .card.dragging { opacity: 0.4; }
+.card.card-drop-before,
+.card.card-drop-after { position: relative; }
+.card.card-drop-before::before,
+.card.card-drop-after::after {
+  content: "";
+  position: absolute;
+  top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent, #6366f1);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.18);
+  pointer-events: none;
+}
+.card.card-drop-before::before { left: -4px; }
+.card.card-drop-after::after { right: -4px; }
 .section.drag-over {
   outline: 2px dashed var(--accent, #6366f1);
   outline-offset: -4px;

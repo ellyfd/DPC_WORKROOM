@@ -446,14 +446,22 @@ function groupedTools() {
   const result = state.categories.map((c) => ({
     name: c.name,
     color: c.color,
-    tools: tools.filter((t) => t.category === c.name),
+    tools: sortToolsByOrder(tools.filter((t) => t.category === c.name)),
     system: false,
   }));
   const uncat = tools.filter((t) => !t.category || !state.categories.find((c) => c.name === t.category));
   if (uncat.length) {
-    result.push({ name: "未分類", color: NUM_COLORS, tools: uncat, system: true });
+    result.push({ name: "未分類", color: NUM_COLORS, tools: sortToolsByOrder(uncat), system: true });
   }
   return result;
+}
+
+function sortToolsByOrder(arr) {
+  return arr.slice().sort((a, b) => {
+    const ai = (typeof a.sortIndex === "number") ? a.sortIndex : Number.MAX_SAFE_INTEGER;
+    const bi = (typeof b.sortIndex === "number") ? b.sortIndex : Number.MAX_SAFE_INTEGER;
+    return ai - bi;
+  });
 }
 
 function matchesQuery(t) {
@@ -781,6 +789,37 @@ function wireCardDrag() {
       card.classList.remove("dragging");
       state.draggingToolId = null;
       $$("#sections-area .section.drag-over").forEach((s) => s.classList.remove("drag-over"));
+      $$("#sections-area .card.card-drop-before, #sections-area .card.card-drop-after").forEach((c) =>
+        c.classList.remove("card-drop-before", "card-drop-after")
+      );
+    });
+
+    card.addEventListener("dragover", (e) => {
+      if (!state.draggingToolId) return;
+      if (card.dataset.id === state.draggingToolId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "move";
+      const rect = card.getBoundingClientRect();
+      const before = (e.clientX - rect.left) < rect.width / 2;
+      card.classList.toggle("card-drop-before", before);
+      card.classList.toggle("card-drop-after", !before);
+      const sec = card.closest(".section");
+      if (sec) sec.classList.remove("drag-over");
+    });
+    card.addEventListener("dragleave", (e) => {
+      if (e.relatedTarget && card.contains(e.relatedTarget)) return;
+      card.classList.remove("card-drop-before", "card-drop-after");
+    });
+    card.addEventListener("drop", (e) => {
+      if (!state.draggingToolId) return;
+      if (card.dataset.id === state.draggingToolId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = card.getBoundingClientRect();
+      const before = (e.clientX - rect.left) < rect.width / 2;
+      card.classList.remove("card-drop-before", "card-drop-after");
+      reorderToolNear(state.draggingToolId, card.dataset.id, before ? "before" : "after");
     });
   });
 
@@ -887,6 +926,52 @@ function sameOrder(a, b) {
   return true;
 }
 
+function reorderToolNear(draggedId, targetId, position) {
+  if (!draggedId || !targetId || draggedId === targetId) return;
+  const dragged = allTools().find((t) => t.id === draggedId);
+  const target = allTools().find((t) => t.id === targetId);
+  if (!dragged || !target) return;
+  if (!canEditTool(dragged)) {
+    toast(`已鎖定 — 只有「${dragged.lockedBy}」能移動`);
+    return;
+  }
+
+  const targetCat = target.category || "";
+  const catChanged = (dragged.category || "") !== targetCat;
+
+  const list = sortToolsByOrder(
+    allTools().filter((t) => (t.category || "") === targetCat && t.id !== draggedId)
+  );
+  const targetIdx = list.findIndex((t) => t.id === targetId);
+  if (targetIdx < 0) return;
+  const insertAt = position === "after" ? targetIdx + 1 : targetIdx;
+  list.splice(insertAt, 0, dragged);
+
+  list.forEach((t, i) => {
+    let local = state.localTools.find((lt) => lt.id === t.id);
+    if (!local) {
+      local = {
+        ...t,
+        category: t.id === draggedId ? targetCat : (t.category || ""),
+        sortIndex: i,
+      };
+      if (t.id === draggedId) local.updated = new Date().toISOString();
+      state.localTools.push(local);
+    } else {
+      local.sortIndex = i;
+      if (t.id === draggedId) {
+        local.category = targetCat;
+        local.updated = new Date().toISOString();
+      }
+    }
+  });
+
+  if (targetCat) ensureCategory(targetCat);
+  saveTools();
+  render();
+  toast(catChanged ? (targetCat ? `已移至「${targetCat}」` : "已移出分類") : "已重新排序");
+}
+
 function moveToolToCategory(id, newCat) {
   const tool = allTools().find((t) => t.id === id);
   if (!tool) return;
@@ -897,12 +982,19 @@ function moveToolToCategory(id, newCat) {
   const current = tool.category || "";
   if (current === (newCat || "")) return;
 
+  const targetCat = newCat || "";
+  const siblings = allTools().filter((t) => (t.category || "") === targetCat && t.id !== id);
+  const maxIdx = siblings.reduce((m, t) =>
+    typeof t.sortIndex === "number" && t.sortIndex > m ? t.sortIndex : m, -1);
+  const newSortIndex = maxIdx + 1;
+
   let local = state.localTools.find((t) => t.id === id);
   if (!local) {
-    local = { ...tool, category: newCat || "", updated: new Date().toISOString() };
+    local = { ...tool, category: targetCat, sortIndex: newSortIndex, updated: new Date().toISOString() };
     state.localTools.push(local);
   } else {
-    local.category = newCat || "";
+    local.category = targetCat;
+    local.sortIndex = newSortIndex;
     local.updated = new Date().toISOString();
   }
   if (newCat) ensureCategory(newCat);
