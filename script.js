@@ -851,9 +851,6 @@ function wireCardDrag() {
       if (state.draggingToolId) {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        const tool = allTools().find((t) => t.id === state.draggingToolId);
-        const targetCat = isSystem ? "" : (sec.dataset.cat || "");
-        if (tool && (tool.category || "") === targetCat) return;
         sec.classList.add("drag-over");
         return;
       }
@@ -980,27 +977,39 @@ function moveToolToCategory(id, newCat) {
     return;
   }
   const current = tool.category || "";
-  if (current === (newCat || "")) return;
-
   const targetCat = newCat || "";
-  const siblings = allTools().filter((t) => (t.category || "") === targetCat && t.id !== id);
-  const maxIdx = siblings.reduce((m, t) =>
-    typeof t.sortIndex === "number" && t.sortIndex > m ? t.sortIndex : m, -1);
-  const newSortIndex = maxIdx + 1;
+  const catChanged = current !== targetCat;
 
-  let local = state.localTools.find((t) => t.id === id);
-  if (!local) {
-    local = { ...tool, category: targetCat, sortIndex: newSortIndex, updated: new Date().toISOString() };
-    state.localTools.push(local);
-  } else {
-    local.category = targetCat;
-    local.sortIndex = newSortIndex;
-    local.updated = new Date().toISOString();
-  }
+  const previousList = sortToolsByOrder(allTools().filter((t) => (t.category || "") === targetCat));
+  if (!catChanged && previousList.length && previousList[previousList.length - 1].id === id) return;
+
+  const list = sortToolsByOrder(allTools().filter((t) => (t.category || "") === targetCat && t.id !== id));
+  list.push(tool);
+
+  list.forEach((t, i) => {
+    let local = state.localTools.find((lt) => lt.id === t.id);
+    if (!local) {
+      local = {
+        ...t,
+        category: t.id === id ? targetCat : (t.category || ""),
+        sortIndex: i,
+      };
+      if (t.id === id) local.updated = new Date().toISOString();
+      state.localTools.push(local);
+    } else {
+      local.sortIndex = i;
+      if (t.id === id) {
+        local.category = targetCat;
+        local.updated = new Date().toISOString();
+      }
+    }
+  });
+
   if (newCat) ensureCategory(newCat);
   saveTools();
   render();
-  toast(newCat ? `已移至「${newCat}」` : "已移出分類");
+  if (catChanged) toast(newCat ? `已移至「${newCat}」` : "已移出分類");
+  else toast("已移到最後");
 }
 
 function toggleSection(name) {
