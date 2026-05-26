@@ -788,38 +788,7 @@ function wireCardDrag() {
     card.addEventListener("dragend", () => {
       card.classList.remove("dragging");
       state.draggingToolId = null;
-      $$("#sections-area .section.drag-over").forEach((s) => s.classList.remove("drag-over"));
-      $$("#sections-area .card.card-drop-before, #sections-area .card.card-drop-after").forEach((c) =>
-        c.classList.remove("card-drop-before", "card-drop-after")
-      );
-    });
-
-    card.addEventListener("dragover", (e) => {
-      if (!state.draggingToolId) return;
-      if (card.dataset.id === state.draggingToolId) return;
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = "move";
-      const rect = card.getBoundingClientRect();
-      const before = (e.clientX - rect.left) < rect.width / 2;
-      card.classList.toggle("card-drop-before", before);
-      card.classList.toggle("card-drop-after", !before);
-      const sec = card.closest(".section");
-      if (sec) sec.classList.remove("drag-over");
-    });
-    card.addEventListener("dragleave", (e) => {
-      if (e.relatedTarget && card.contains(e.relatedTarget)) return;
-      card.classList.remove("card-drop-before", "card-drop-after");
-    });
-    card.addEventListener("drop", (e) => {
-      if (!state.draggingToolId) return;
-      if (card.dataset.id === state.draggingToolId) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const rect = card.getBoundingClientRect();
-      const before = (e.clientX - rect.left) < rect.width / 2;
-      card.classList.remove("card-drop-before", "card-drop-after");
-      reorderToolNear(state.draggingToolId, card.dataset.id, before ? "before" : "after");
+      clearAllDragMarks();
     });
   });
 
@@ -843,7 +812,7 @@ function wireCardDrag() {
       });
       head.addEventListener("dragend", () => {
         state.draggingCategoryName = null;
-        clearSectionDropMarks();
+        clearAllDragMarks();
       });
     }
 
@@ -851,7 +820,17 @@ function wireCardDrag() {
       if (state.draggingToolId) {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        sec.classList.add("drag-over");
+        clearCardDropMarks();
+        const targetCard = findCardAtPoint(sec, e.clientX, e.clientY);
+        if (targetCard && targetCard.dataset.id !== state.draggingToolId) {
+          const rect = targetCard.getBoundingClientRect();
+          const before = (e.clientX - rect.left) < rect.width / 2;
+          targetCard.classList.toggle("card-drop-before", before);
+          targetCard.classList.toggle("card-drop-after", !before);
+          sec.classList.remove("drag-over");
+        } else {
+          sec.classList.add("drag-over");
+        }
         return;
       }
       if (state.draggingCategoryName) {
@@ -868,14 +847,22 @@ function wireCardDrag() {
     sec.addEventListener("dragleave", (e) => {
       if (e.relatedTarget && sec.contains(e.relatedTarget)) return;
       sec.classList.remove("drag-over", "section-drop-before", "section-drop-after");
+      $$(".card", sec).forEach((c) => c.classList.remove("card-drop-before", "card-drop-after"));
     });
     sec.addEventListener("drop", (e) => {
       if (state.draggingToolId) {
-        const id = state.draggingToolId;
         e.preventDefault();
-        sec.classList.remove("drag-over");
-        const targetCat = isSystem ? "" : (sec.dataset.cat || "");
-        moveToolToCategory(id, targetCat);
+        const id = state.draggingToolId;
+        const targetCard = findCardAtPoint(sec, e.clientX, e.clientY);
+        clearAllDragMarks();
+        if (targetCard && targetCard.dataset.id !== id) {
+          const rect = targetCard.getBoundingClientRect();
+          const before = (e.clientX - rect.left) < rect.width / 2;
+          reorderToolNear(id, targetCard.dataset.id, before ? "before" : "after");
+        } else {
+          const targetCat = isSystem ? "" : (sec.dataset.cat || "");
+          moveToolToCategory(id, targetCat);
+        }
         return;
       }
       if (state.draggingCategoryName && !isSystem) {
@@ -884,18 +871,35 @@ function wireCardDrag() {
         const targetName = sec.dataset.cat;
         const rect = sec.getBoundingClientRect();
         const before = (e.clientY - rect.top) < rect.height / 2;
-        clearSectionDropMarks();
+        clearAllDragMarks();
         reorderCategory(draggedName, targetName, before ? "before" : "after");
       }
     });
   });
 }
 
-function clearSectionDropMarks() {
+function findCardAtPoint(sec, x, y) {
+  const cards = sec.querySelectorAll(".card[data-id]");
+  for (const c of cards) {
+    const r = c.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return c;
+  }
+  return null;
+}
+
+function clearCardDropMarks() {
+  $$("#sections-area .card.card-drop-before, #sections-area .card.card-drop-after").forEach((c) =>
+    c.classList.remove("card-drop-before", "card-drop-after")
+  );
+}
+
+function clearAllDragMarks() {
+  clearCardDropMarks();
   $$("#sections-area .section").forEach((s) =>
     s.classList.remove("drag-over", "section-drop-before", "section-drop-after", "section-dragging")
   );
 }
+
 
 function reorderCategory(draggedName, targetName, position) {
   if (!draggedName || !targetName || draggedName === targetName) return;
