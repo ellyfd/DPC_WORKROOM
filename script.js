@@ -22,6 +22,8 @@ const state = {
   editingFiles: [],
   // persistent "current user" name (tagged on each file upload)
   me: "",
+  // id of the tool currently being dragged between categories
+  draggingToolId: null,
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -616,7 +618,7 @@ function sectionHTML(g, showHeader = true) {
   const grid = `<div class="section-grid">${cards}${addCard}</div>`;
 
   return `
-    <section class="section" data-cv="${cv}" data-cat="${escapeAttr(g.name)}">
+    <section class="section" data-cv="${cv}" data-cat="${escapeAttr(g.name)}"${isSystem ? ' data-system="1"' : ''}>
       ${header}
       <div class="section-body">${grid}</div>
     </section>
@@ -662,7 +664,7 @@ function cardHTML(t, cv) {
   }
 
   return `
-    <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}">
+    <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}" draggable="true">
       <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" title="${escapeAttr(tip)}">
         <div class="card-top">
           <div class="card-icon">
@@ -754,6 +756,79 @@ function wireSections() {
       toggleSection(head.dataset.toggleCat);
     });
   });
+  wireCardDrag();
+}
+
+function wireCardDrag() {
+  $$("#sections-area .card[data-id]").forEach((card) => {
+    const id = card.dataset.id;
+    const tool = allTools().find((t) => t.id === id);
+    if (!tool || !canEditTool(tool)) {
+      card.removeAttribute("draggable");
+      return;
+    }
+    card.addEventListener("dragstart", (e) => {
+      state.draggingToolId = id;
+      card.classList.add("dragging");
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", id);
+      } catch (_) {}
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      state.draggingToolId = null;
+      $$("#sections-area .section.drag-over").forEach((s) => s.classList.remove("drag-over"));
+    });
+  });
+
+  $$("#sections-area .section").forEach((sec) => {
+    sec.addEventListener("dragover", (e) => {
+      if (!state.draggingToolId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const tool = allTools().find((t) => t.id === state.draggingToolId);
+      const targetCat = sec.dataset.system === "1" ? "" : (sec.dataset.cat || "");
+      if (tool && (tool.category || "") === targetCat) return;
+      sec.classList.add("drag-over");
+    });
+    sec.addEventListener("dragleave", (e) => {
+      if (e.relatedTarget && sec.contains(e.relatedTarget)) return;
+      sec.classList.remove("drag-over");
+    });
+    sec.addEventListener("drop", (e) => {
+      const id = state.draggingToolId || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
+      if (!id) return;
+      e.preventDefault();
+      sec.classList.remove("drag-over");
+      const targetCat = sec.dataset.system === "1" ? "" : (sec.dataset.cat || "");
+      moveToolToCategory(id, targetCat);
+    });
+  });
+}
+
+function moveToolToCategory(id, newCat) {
+  const tool = allTools().find((t) => t.id === id);
+  if (!tool) return;
+  if (!canEditTool(tool)) {
+    toast(`已鎖定 — 只有「${tool.lockedBy}」能移動`);
+    return;
+  }
+  const current = tool.category || "";
+  if (current === (newCat || "")) return;
+
+  let local = state.localTools.find((t) => t.id === id);
+  if (!local) {
+    local = { ...tool, category: newCat || "", updated: new Date().toISOString() };
+    state.localTools.push(local);
+  } else {
+    local.category = newCat || "";
+    local.updated = new Date().toISOString();
+  }
+  if (newCat) ensureCategory(newCat);
+  saveTools();
+  render();
+  toast(newCat ? `已移至「${newCat}」` : "已移出分類");
 }
 
 function toggleSection(name) {
