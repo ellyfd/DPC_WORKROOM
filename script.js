@@ -24,6 +24,8 @@ const state = {
   me: "",
   // id of the tool currently being dragged between categories
   draggingToolId: null,
+  // name of the category currently being dragged for reordering
+  draggingCategoryName: null,
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -783,28 +785,106 @@ function wireCardDrag() {
   });
 
   $$("#sections-area .section").forEach((sec) => {
+    const isSystem = sec.dataset.system === "1";
+    const head = sec.querySelector(".section-head");
+
+    if (head && !isSystem) {
+      head.setAttribute("draggable", "true");
+      head.addEventListener("dragstart", (e) => {
+        if (e.target.closest(".section-action")) {
+          e.preventDefault();
+          return;
+        }
+        state.draggingCategoryName = sec.dataset.cat;
+        sec.classList.add("section-dragging");
+        try {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", "cat:" + sec.dataset.cat);
+        } catch (_) {}
+      });
+      head.addEventListener("dragend", () => {
+        state.draggingCategoryName = null;
+        clearSectionDropMarks();
+      });
+    }
+
     sec.addEventListener("dragover", (e) => {
-      if (!state.draggingToolId) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      const tool = allTools().find((t) => t.id === state.draggingToolId);
-      const targetCat = sec.dataset.system === "1" ? "" : (sec.dataset.cat || "");
-      if (tool && (tool.category || "") === targetCat) return;
-      sec.classList.add("drag-over");
+      if (state.draggingToolId) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const tool = allTools().find((t) => t.id === state.draggingToolId);
+        const targetCat = isSystem ? "" : (sec.dataset.cat || "");
+        if (tool && (tool.category || "") === targetCat) return;
+        sec.classList.add("drag-over");
+        return;
+      }
+      if (state.draggingCategoryName) {
+        if (isSystem) return;
+        if (sec.dataset.cat === state.draggingCategoryName) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const rect = sec.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < rect.height / 2;
+        sec.classList.toggle("section-drop-before", before);
+        sec.classList.toggle("section-drop-after", !before);
+      }
     });
     sec.addEventListener("dragleave", (e) => {
       if (e.relatedTarget && sec.contains(e.relatedTarget)) return;
-      sec.classList.remove("drag-over");
+      sec.classList.remove("drag-over", "section-drop-before", "section-drop-after");
     });
     sec.addEventListener("drop", (e) => {
-      const id = state.draggingToolId || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
-      if (!id) return;
-      e.preventDefault();
-      sec.classList.remove("drag-over");
-      const targetCat = sec.dataset.system === "1" ? "" : (sec.dataset.cat || "");
-      moveToolToCategory(id, targetCat);
+      if (state.draggingToolId) {
+        const id = state.draggingToolId;
+        e.preventDefault();
+        sec.classList.remove("drag-over");
+        const targetCat = isSystem ? "" : (sec.dataset.cat || "");
+        moveToolToCategory(id, targetCat);
+        return;
+      }
+      if (state.draggingCategoryName && !isSystem) {
+        e.preventDefault();
+        const draggedName = state.draggingCategoryName;
+        const targetName = sec.dataset.cat;
+        const rect = sec.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < rect.height / 2;
+        clearSectionDropMarks();
+        reorderCategory(draggedName, targetName, before ? "before" : "after");
+      }
     });
   });
+}
+
+function clearSectionDropMarks() {
+  $$("#sections-area .section").forEach((s) =>
+    s.classList.remove("drag-over", "section-drop-before", "section-drop-after", "section-dragging")
+  );
+}
+
+function reorderCategory(draggedName, targetName, position) {
+  if (!draggedName || !targetName || draggedName === targetName) return;
+  const cats = state.categories.slice();
+  const fromIdx = cats.findIndex((c) => c.name === draggedName);
+  if (fromIdx < 0) return;
+  const [moved] = cats.splice(fromIdx, 1);
+  let toIdx = cats.findIndex((c) => c.name === targetName);
+  if (toIdx < 0) {
+    state.categories.splice(fromIdx, 0, moved);
+    return;
+  }
+  if (position === "after") toIdx += 1;
+  cats.splice(toIdx, 0, moved);
+  if (sameOrder(state.categories, cats)) return;
+  state.categories = cats;
+  saveCats();
+  render();
+  toast("已重新排序");
+}
+
+function sameOrder(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i].name !== b[i].name) return false;
+  return true;
 }
 
 function moveToolToCategory(id, newCat) {
