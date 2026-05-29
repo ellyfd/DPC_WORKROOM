@@ -635,25 +635,15 @@ function cardHTML(t, cv) {
   const iconImg = t.icon
     ? `<img src="${escapeAttr(t.icon)}" alt="" draggable="false" onerror="this.remove()" />`
     : "";
-  const bits = [];
-  if (t.creator) bits.push(`製作:${t.creator}`);
   const isPage = isPageTool(t);
-  if (tType === "file" && Array.isArray(t.files) && t.files.length) {
-    const latest = t.files[0];
-    if (latest?.uploadedAt) bits.push(`最新:${formatDate(latest.uploadedAt)}`);
-    if (t.files.length > 1) bits.push(`${t.files.length} 個版本`);
-  } else if (t.version) {
-    bits.push(`v${t.version}`);
-  }
-  if (t.description) bits.push(t.description);
-  const tip = bits.length ? `${t.name}\n${bits.join(" · ")}` : t.name;
+  const noteAttr = t.description ? ` data-note="${escapeAttr(t.description)}"` : "";
 
   const locked = isToolLocked(t);
   const lockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
 
   return `
-    <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}" draggable="true">
-      <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" title="${escapeAttr(tip)}">
+    <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}"${noteAttr} draggable="true">
+      <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" aria-label="${escapeAttr(t.name)}">
         <div class="card-top">
           <div class="card-icon">
             <span class="ic-letter">${escapeHTML(initial(t.name))}</span>
