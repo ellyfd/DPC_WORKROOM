@@ -1891,6 +1891,7 @@ h1, h2, h3 { margin: 0; }
   transform-origin: top left;
 }
 .floating-menu[hidden] { display: none; }
+.floating-menu-item[hidden] { display: none; }
 .floating-menu-item {
   display: flex;
   align-items: center;

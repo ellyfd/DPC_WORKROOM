@@ -980,15 +980,18 @@ function openTool(t, anchor) {
     window.open(pageUrl(t.id), "_blank", "noopener");
     return;
   }
-  // File tools open the admin popup (upload + history). Download is in action row.
+  // File tools: clicking the tile downloads the latest version directly.
+  // Upload / history live in the right-click menu.
   if (t.type === "file") {
-    if (!Array.isArray(t.files) || !t.files.length) {
+    const latest = t.files?.[0];
+    if (!latest?.key) {
       if (confirm(`「${t.name}」還沒上傳任何檔案。要現在上傳嗎?`)) {
         openTileFileMenuUploadOnly(t.id, anchor);
       }
       return;
     }
-    openFilePopover(t.id);
+    downloadFile(latest);
+    toast(`下載 ${latest.name}`);
     return;
   }
   if (!t.url || t.url === "#") {
@@ -1757,16 +1760,21 @@ let _ctxMenuTargetId = null;
 function initTileContextMenu() {
   const menu = document.getElementById("tile-context-menu");
   if (!menu) return;
+  const uploadInput = document.getElementById("tile-context-upload-input");
 
   menu.querySelectorAll("[data-action]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const id = _ctxMenuTargetId;
+      const action = btn.dataset.action;
+      if (action === "upload") {
+        if (uploadInput) uploadInput.click();
+        return;
+      }
       closeTileContextMenu();
       if (!id) return;
       const tool = allTools().find((t) => t.id === id);
       if (!tool) return;
-      const action = btn.dataset.action;
       if (action === "edit") {
         if (!canEditTool(tool)) {
           toast(`已鎖定 — 只有「${tool.lockedBy}」能編輯`);
@@ -1783,9 +1791,22 @@ function initTileContextMenu() {
         } else {
           toast("找不到檔案");
         }
+      } else if (action === "history") {
+        openFilePopover(id);
       }
     });
   });
+
+  if (uploadInput) {
+    uploadInput.addEventListener("change", async (e) => {
+      const f = e.target.files?.[0];
+      const id = _ctxMenuTargetId;
+      e.target.value = "";
+      closeTileContextMenu();
+      if (!f || !id) return;
+      await addVersionToTool(id, f);
+    });
+  }
 
   document.addEventListener("click", (e) => {
     if (menu.hidden) return;
@@ -1810,18 +1831,28 @@ function openTileContextMenu(toolId, x, y) {
   const tool = allTools().find((t) => t.id === toolId);
   if (!tool) return;
   const tType = tool.type || "link";
+  const latest = tool?.files?.[0];
+  const hasFile = (tType === "page" || tType === "file") && !!latest;
+  const isFileType = tType === "page" || tType === "file";
+
   const copyItem = document.getElementById("tile-context-copy");
   const dlItem = document.getElementById("tile-context-download");
   const dlLabel = document.getElementById("tile-context-download-label");
+  const upItem = document.getElementById("tile-context-upload");
+  const histItem = document.getElementById("tile-context-history");
+
   if (copyItem) copyItem.hidden = !(tType === "link" && tool.url);
   if (dlItem) {
-    const latest = tool?.files?.[0];
-    const hasFile = (tType === "page" || tType === "file") && !!latest;
     dlItem.hidden = !hasFile;
-    if (hasFile && dlLabel) {
-      dlLabel.textContent = tType === "page" ? `下載原始檔 (${latest.name})` : `下載 ${latest.name}`;
+    if (dlLabel) {
+      dlLabel.textContent = hasFile
+        ? (tType === "page" ? `下載原始檔 (${latest.name})` : `下載 ${latest.name}`)
+        : "下載";
     }
   }
+  if (upItem) upItem.hidden = !isFileType;
+  if (histItem) histItem.hidden = !(tType === "file" && Array.isArray(tool.files) && tool.files.length > 1);
+
   _ctxMenuTargetId = toolId;
   menu.hidden = false;
   positionFloatingMenuAt(menu, x, y);
