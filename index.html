@@ -113,27 +113,8 @@
           </button>
         </div>
 
-        <!-- Hidden source of truth — the icon picker below updates this. -->
+        <!-- Hidden icon source — populated by auto-fetch on the URL field. -->
         <input type="hidden" name="icon" />
-
-        <!-- Icon picker: preview + 上傳 / 網址 / 預設 -->
-        <div class="icon-picker" id="icon-picker">
-          <div class="icon-preview" id="icon-preview">
-            <span class="icon-preview-letter" id="icon-preview-letter"></span>
-          </div>
-          <div class="icon-actions">
-            <button type="button" class="btn-mini" data-icon-action="upload">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-              上傳
-            </button>
-            <button type="button" class="btn-mini" data-icon-action="url">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-              網址
-            </button>
-            <button type="button" class="btn-mini btn-mini-ghost" data-icon-action="clear">預設</button>
-          </div>
-          <input type="file" id="icon-picker-file" accept="image/*" hidden />
-        </div>
 
         <!-- 4a. File manager (file / page type) -->
         <div class="file-manager" data-show-for-type="file,page" hidden>
