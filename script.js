@@ -12,6 +12,7 @@ const state = {
   creators: [],
   brands: [],
   filter: "all",
+  brandFilter: "",
   query: "",
   editingId: null,
   editingCat: null,
@@ -90,6 +91,10 @@ async function init() {
 
   $("#search").addEventListener("input", (e) => {
     state.query = e.target.value.trim().toLowerCase();
+    renderSections();
+  });
+  $("#brand-filter")?.addEventListener("change", (e) => {
+    state.brandFilter = e.target.value || "";
     renderSections();
   });
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
@@ -468,7 +473,7 @@ function sortToolsByOrder(arr) {
 
 function matchesQuery(t) {
   if (!state.query) return true;
-  const hay = [t.name, t.creator, t.description, t.category]
+  const hay = [t.name, t.creator, t.description, t.category, t.brand]
     .join(" ").toLowerCase();
   return hay.includes(state.query);
 }
@@ -565,9 +570,24 @@ function normalizeType(t) {
   return "link";
 }
 
+function renderBrandFilter() {
+  const sel = document.getElementById("brand-filter");
+  if (!sel) return;
+  const brands = listAllBrands();
+  const want = state.brandFilter || "";
+  sel.innerHTML = `
+    <option value="">所有客人</option>
+    ${brands.map((b) => `<option value="${escapeAttr(b)}">${escapeHTML(b)}</option>`).join("")}
+  `;
+  sel.value = brands.includes(want) ? want : "";
+  if (sel.value !== want) state.brandFilter = sel.value;
+}
+
 function renderSections() {
   const area = $("#sections-area");
   const empty = $("#empty");
+
+  renderBrandFilter();
 
   if (!allTools().length && !state.categories.length) {
     area.innerHTML = "";
@@ -579,6 +599,11 @@ function renderSections() {
   let groups = groupedTools();
   if (state.filter !== "all") {
     groups = groups.filter((g) => g.name === state.filter);
+  }
+  if (state.brandFilter) {
+    groups = groups
+      .map((g) => ({ ...g, tools: g.tools.filter((t) => t.brand === state.brandFilter) }))
+      .filter((g) => g.tools.length);
   }
   if (state.query) {
     groups = groups
