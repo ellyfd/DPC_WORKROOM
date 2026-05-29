@@ -108,6 +108,7 @@ async function init() {
   initTypeSelector();
   initFileUpload();
   initTileFileMenu();
+  initTileContextMenu();
   initFilePopover();
   initShortcuts();
 }
@@ -597,13 +598,6 @@ function sectionHTML(g, showHeader = true) {
   const cv = g.color;
   const isSystem = g.system;
   const cards = g.tools.map((t) => cardHTML(t, cv)).join("");
-  const addCard = !isSystem ? `
-    <button class="card-add" data-add-cat="${escapeAttr(g.name)}" title="新增到「${escapeAttr(g.name)}」">
-      <span class="card-add-plus">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
-      </span>
-      <span>新增工具</span>
-    </button>` : "";
 
   const header = !showHeader ? "" : `
     <div class="section-head">
@@ -625,7 +619,7 @@ function sectionHTML(g, showHeader = true) {
     </div>
   `;
 
-  const grid = `<div class="section-grid">${cards}${addCard}</div>`;
+  const grid = `<div class="section-grid">${cards}</div>`;
 
   return `
     <section class="section" data-cv="${cv}" data-cat="${escapeAttr(g.name)}"${isSystem ? ' data-system="1"' : ''}>
@@ -657,22 +651,6 @@ function cardHTML(t, cv) {
   const locked = isToolLocked(t);
   const lockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
 
-  // Action row: per-type "third action".
-  // Link → copy URL; Page → download original; File → download latest.
-  let thirdAct = "";
-  if (tType === "link" && t.url) {
-    thirdAct = `<button type="button" class="card-act" data-act="copy" data-id="${escapeAttr(t.id)}" title="複製連結" aria-label="複製連結">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      <span class="card-act-label">複製</span>
-    </button>`;
-  } else if ((tType === "page" || tType === "file") && Array.isArray(t.files) && t.files.length) {
-    const label = tType === "page" ? "下載原始檔" : "下載";
-    thirdAct = `<button type="button" class="card-act" data-act="download" data-id="${escapeAttr(t.id)}" title="${label}" aria-label="${label}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-      <span class="card-act-label">下載</span>
-    </button>`;
-  }
-
   return `
     <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}" draggable="true">
       <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" title="${escapeAttr(tip)}">
@@ -686,13 +664,6 @@ function cardHTML(t, cv) {
         </div>
         <h3 class="card-title">${escapeHTML(t.name)}</h3>
       </button>
-      <div class="card-actions">
-        <button type="button" class="card-act" data-act="edit" data-id="${escapeAttr(t.id)}" title="編輯" aria-label="編輯">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-          <span class="card-act-label">編輯</span>
-        </button>
-        ${thirdAct}
-      </div>
     </article>
   `;
 }
@@ -715,37 +686,11 @@ function wireSections() {
       if (tool) openTool(tool, e.currentTarget);
     });
   });
-  // Action row below the tile
-  $$("#sections-area [data-act]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.id;
-      const act = btn.dataset.act;
-      const tool = allTools().find((x) => x.id === id);
-      if (act === "edit") {
-        if (!canEditTool(tool)) {
-          toast(`已鎖定 — 只有「${tool.lockedBy}」能編輯`);
-          return;
-        }
-        openToolPopover(id, btn);
-      } else if (act === "copy") {
-        copyToolUrl(tool);
-      } else if (act === "download") {
-        const latest = tool?.files?.[0];
-        if (latest?.key) {
-          downloadFile(latest);
-          toast(`下載 ${latest.name}`);
-        } else {
-          toast("找不到檔案");
-        }
-      }
-    });
-  });
-  $$("#sections-area [data-add-cat]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      state.prefillCategory = btn.dataset.addCat;
-      openToolPopover(null, btn);
+  // Right-click on a tile opens the context menu (edit / copy / download)
+  $$("#sections-area .card[data-id]").forEach((card) => {
+    card.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openTileContextMenu(card.dataset.id, e.clientX, e.clientY);
     });
   });
   $$("#sections-area [data-edit-cat]").forEach((btn) => {
@@ -1813,6 +1758,101 @@ function openTileFileMenuUploadOnly(toolId, anchor) {
   };
   input.addEventListener("change", handler);
   input.click();
+}
+
+/* ===== tile context menu (right-click → edit / copy / download) ===== */
+let _ctxMenuTargetId = null;
+
+function initTileContextMenu() {
+  const menu = document.getElementById("tile-context-menu");
+  if (!menu) return;
+
+  menu.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = _ctxMenuTargetId;
+      closeTileContextMenu();
+      if (!id) return;
+      const tool = allTools().find((t) => t.id === id);
+      if (!tool) return;
+      const action = btn.dataset.action;
+      if (action === "edit") {
+        if (!canEditTool(tool)) {
+          toast(`已鎖定 — 只有「${tool.lockedBy}」能編輯`);
+          return;
+        }
+        openToolPopover(id, null);
+      } else if (action === "copy") {
+        copyToolUrl(tool);
+      } else if (action === "download") {
+        const latest = tool?.files?.[0];
+        if (latest?.key) {
+          downloadFile(latest);
+          toast(`下載 ${latest.name}`);
+        } else {
+          toast("找不到檔案");
+        }
+      }
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (menu.hidden) return;
+    if (e.target.closest("#tile-context-menu")) return;
+    closeTileContextMenu();
+  });
+  document.addEventListener("contextmenu", (e) => {
+    if (menu.hidden) return;
+    if (e.target.closest(".card[data-id]")) return;
+    closeTileContextMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) closeTileContextMenu();
+  });
+  window.addEventListener("scroll", closeTileContextMenu, true);
+  window.addEventListener("resize", closeTileContextMenu);
+}
+
+function openTileContextMenu(toolId, x, y) {
+  const menu = document.getElementById("tile-context-menu");
+  if (!menu) return;
+  const tool = allTools().find((t) => t.id === toolId);
+  if (!tool) return;
+  const tType = tool.type || "link";
+  const copyItem = document.getElementById("tile-context-copy");
+  const dlItem = document.getElementById("tile-context-download");
+  const dlLabel = document.getElementById("tile-context-download-label");
+  if (copyItem) copyItem.hidden = !(tType === "link" && tool.url);
+  if (dlItem) {
+    const latest = tool?.files?.[0];
+    const hasFile = (tType === "page" || tType === "file") && !!latest;
+    dlItem.hidden = !hasFile;
+    if (hasFile && dlLabel) {
+      dlLabel.textContent = tType === "page" ? `下載原始檔 (${latest.name})` : `下載 ${latest.name}`;
+    }
+  }
+  _ctxMenuTargetId = toolId;
+  menu.hidden = false;
+  positionFloatingMenuAt(menu, x, y);
+}
+
+function closeTileContextMenu() {
+  const menu = document.getElementById("tile-context-menu");
+  if (menu) menu.hidden = true;
+  _ctxMenuTargetId = null;
+}
+
+function positionFloatingMenuAt(menu, x, y) {
+  const mw = menu.offsetWidth || 200;
+  const mh = menu.offsetHeight || 120;
+  let left = x;
+  let top = y;
+  if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+  if (left < 8) left = 8;
+  if (top + mh > window.innerHeight - 8) top = window.innerHeight - mh - 8;
+  if (top < 8) top = 8;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
 }
 
 function closeTileFileMenu() {
