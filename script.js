@@ -1879,9 +1879,16 @@ function initTileTooltip() {
     const padL = parseFloat(cs.paddingLeft) || 0;
     const padR = parseFloat(cs.paddingRight) || 0;
     const innerWidth = section.clientWidth - padL - padR;
-    tt.style.left = `${padL}px`;
     tt.style.maxWidth = `${innerWidth}px`;
     tt.style.top = `${cardRect.bottom - secRect.top + 6}px`;
+    const tw = tt.offsetWidth;
+    const cardCenter = (cardRect.left + cardRect.right) / 2 - secRect.left;
+    const minLeft = padL;
+    const maxLeft = section.clientWidth - padR - tw;
+    let left = cardCenter - tw / 2;
+    if (left < minLeft) left = minLeft;
+    if (left > maxLeft) left = maxLeft;
+    tt.style.left = `${left}px`;
     current = tt;
   });
 
