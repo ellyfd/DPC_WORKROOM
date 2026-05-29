@@ -219,19 +219,19 @@ h1, h2, h3 { margin: 0; }
   align-items: start;
 }
 
-/* Section — coloured block per category */
+/* Section — neutral surface; category colour shows only on the dot */
 .section {
   position: relative;
-  background: var(--c-bg, var(--surface));
-  border: 1px solid var(--c-border, var(--border));
-  border-radius: 18px;
-  padding: 18px 18px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px 12px;
 }
 
 .section-head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   padding: 0 2px;
 }
 .section-title-row {
@@ -247,18 +247,18 @@ h1, h2, h3 { margin: 0; }
   box-shadow: 0 0 0 3px rgba(255,255,255,0.8);
 }
 .section-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--c-text, var(--text));
-  letter-spacing: 0.04em;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-mute);
+  letter-spacing: 0.03em;
   line-height: 1.2;
   text-transform: uppercase;
 }
 .section-count {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--c-text, var(--text-mute));
-  opacity: 0.7;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-mute);
+  opacity: 0.65;
   font-variant-numeric: tabular-nums;
 }
 
@@ -463,21 +463,17 @@ h1, h2, h3 { margin: 0; }
 }
 
 .card-title {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
   text-align: center;
   line-height: 1.3;
   margin: 0;
-  max-width: 100px;
-  /* Reserve exactly two lines of vertical space so a 1-line name (e.g.
-     "TD查找") and a 2-line name (e.g. "Gap 3D Standard") end at the same
-     vertical position — keeps action button rows aligned across tiles. */
-  min-height: calc(1.3em * 2);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  max-width: 100%;
+  width: 100%;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
   letter-spacing: -0.005em;
 }
 
