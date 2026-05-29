@@ -1,4 +1,4 @@
-name = "dpc-hub"
+name = "dpcwork"
 main = "worker/index.js"
 compatibility_date = "2024-12-01"
 

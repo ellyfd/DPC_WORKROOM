@@ -32,7 +32,7 @@ const state = {
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-const CANONICAL_HOST = "dpc-hub.ellyfd.workers.dev";
+const CANONICAL_HOST = "dpcwork.ellyfd.workers.dev";
 
 document.addEventListener("DOMContentLoaded", init);
 
