@@ -1843,11 +1843,12 @@ function openTileContextMenu(toolId, x, y) {
 
   if (copyItem) copyItem.hidden = !(tType === "link" && tool.url);
   if (dlItem) {
-    dlItem.hidden = !hasFile;
+    // File-type tiles already download on click — only Page tools surface
+    // a download action here (download the source HTML).
+    const showDownload = hasFile && tType === "page";
+    dlItem.hidden = !showDownload;
     if (dlLabel) {
-      dlLabel.textContent = hasFile
-        ? (tType === "page" ? `下載原始檔 (${latest.name})` : `下載 ${latest.name}`)
-        : "下載";
+      dlLabel.textContent = showDownload ? `下載原始檔 (${latest.name})` : "下載";
     }
   }
   if (upItem) upItem.hidden = !isFileType;
