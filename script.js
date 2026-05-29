@@ -1878,8 +1878,9 @@ function initTileTooltip() {
     const cs = getComputedStyle(section);
     const padL = parseFloat(cs.paddingLeft) || 0;
     const padR = parseFloat(cs.paddingRight) || 0;
+    const innerWidth = section.clientWidth - padL - padR;
     tt.style.left = `${padL}px`;
-    tt.style.right = `${padR}px`;
+    tt.style.maxWidth = `${innerWidth}px`;
     tt.style.top = `${cardRect.bottom - secRect.top + 6}px`;
     current = tt;
   });
