@@ -109,6 +109,7 @@ async function init() {
   initFileUpload();
   initTileFileMenu();
   initTileContextMenu();
+  initTileTooltip();
   initFilePopover();
   initShortcuts();
 }
@@ -1843,6 +1844,55 @@ function positionFloatingMenuAt(menu, x, y) {
   if (top < 8) top = 8;
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
+}
+
+/* ===== tile hover tooltip — shows the description, section-wide ===== */
+function initTileTooltip() {
+  const area = document.getElementById("sections-area");
+  if (!area) return;
+  let current = null;
+
+  const hide = () => {
+    if (current) {
+      current.remove();
+      current = null;
+    }
+  };
+
+  area.addEventListener("mouseover", (e) => {
+    const card = e.target.closest(".card[data-note]");
+    if (!card) return;
+    if (current && current._card === card) return;
+    const section = card.closest(".section");
+    if (!section) return;
+    const note = card.getAttribute("data-note");
+    if (!note) return;
+    hide();
+    const tt = document.createElement("div");
+    tt.className = "tile-tooltip";
+    tt.textContent = note;
+    tt._card = card;
+    section.appendChild(tt);
+    const secRect = section.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const cs = getComputedStyle(section);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    tt.style.left = `${padL}px`;
+    tt.style.right = `${padR}px`;
+    tt.style.top = `${cardRect.bottom - secRect.top + 6}px`;
+    current = tt;
+  });
+
+  area.addEventListener("mouseout", (e) => {
+    const card = e.target.closest(".card[data-note]");
+    if (!card) return;
+    if (e.relatedTarget && card.contains(e.relatedTarget)) return;
+    if (current && current._card === card) hide();
+  });
+
+  window.addEventListener("scroll", hide, true);
+  window.addEventListener("resize", hide);
 }
 
 function closeTileFileMenu() {
