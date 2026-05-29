@@ -319,6 +319,10 @@ h1, h2, h3 { margin: 0; }
 .card[draggable="true"] .card-tile { cursor: grab; }
 .card[draggable="true"]:active .card-tile { cursor: grabbing; }
 .card.dragging { opacity: 0.4; }
+.card img {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
 .card.card-drop-before,
 .card.card-drop-after {
   background: rgba(99, 102, 241, 0.08);

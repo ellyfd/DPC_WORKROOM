@@ -639,7 +639,7 @@ function cardHTML(t, cv) {
   const tType = t.type || "link";
   const type = TYPE_META[tType] || TYPE_META.link;
   const iconImg = t.icon
-    ? `<img src="${escapeAttr(t.icon)}" alt="" onerror="this.remove()" />`
+    ? `<img src="${escapeAttr(t.icon)}" alt="" draggable="false" onerror="this.remove()" />`
     : "";
   const bits = [];
   if (t.creator) bits.push(`製作:${t.creator}`);
