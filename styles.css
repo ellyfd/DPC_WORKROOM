@@ -68,7 +68,7 @@ h1, h2, h3 { margin: 0; }
 .page {
   position: relative;
   z-index: 1;
-  max-width: 1080px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 40px 32px 60px;
   display: flex;
@@ -214,7 +214,7 @@ h1, h2, h3 { margin: 0; }
    ============================================================ */
 .board {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   align-items: start;
 }
@@ -1710,6 +1710,11 @@ h1, h2, h3 { margin: 0; }
 /* ============================================================
    Responsive — designed for phone-first usage
    ============================================================ */
+
+/* narrow desktop — board drops from 3 to 2 columns */
+@media (max-width: 1200px) {
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 /* tablet / narrow desktop — board collapses to single column */
 @media (max-width: 880px) {
