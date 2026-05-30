@@ -613,6 +613,59 @@ h1, h2, h3 { margin: 0; }
 .lock-badge svg { width: 11px; height: 11px; }
 .card.is-locked .card-icon { filter: saturate(0.85); }
 
+/* 本週上新 — "NEW" pill pinned to the top-right of a tile */
+.new-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 5;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: #fff;
+  background: linear-gradient(135deg, #fb7185, #f43f5e);
+  border: 2px solid var(--surface);
+  box-shadow: 0 3px 8px -2px rgba(244, 63, 94, 0.55);
+  pointer-events: none;
+}
+
+/* ============================================================
+   本週上新 signboard — pinned overview board of new tools
+   ============================================================ */
+.section.signboard {
+  background:
+    linear-gradient(135deg, rgba(99, 102, 241, 0.10), rgba(236, 72, 153, 0.08)),
+    var(--surface);
+  border-color: rgba(99, 102, 241, 0.28);
+  box-shadow: 0 14px 38px -22px rgba(99, 102, 241, 0.5);
+}
+.signboard-head {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.signboard-spark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f59e0b;
+  align-self: center;
+}
+.signboard-title {
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-weight: 700;
+  font-size: 16px;
+}
+.signboard-sub {
+  font-size: 12px;
+  color: var(--text-mute);
+  font-weight: 500;
+}
+
 /* Form: checkbox row */
 .checkbox-row {
   display: flex;
