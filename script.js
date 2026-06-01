@@ -537,9 +537,21 @@ function renderNewArrivalsNotice(tools, sig) {
   });
 
   const groupsHTML = cats.map((cat) => {
-    const items = byCat.get(cat).map((t) =>
-      `<button type="button" class="new-item" data-open-new="${escapeAttr(t.id)}">${escapeHTML(t.name)}</button>`
-    ).join("");
+    const items = byCat.get(cat).map((t) => {
+      const who = t.creator
+        ? `<span class="new-item-who">${escapeHTML(t.creator)}</span>`
+        : "";
+      const note = t.description
+        ? `<span class="new-item-note">${escapeHTML(t.description)}</span>`
+        : "";
+      const meta = (who || note)
+        ? `<span class="new-item-meta">${who}${note}</span>`
+        : "";
+      return `<button type="button" class="new-item" data-open-new="${escapeAttr(t.id)}">
+          <span class="new-item-name">${escapeHTML(t.name)}</span>
+          ${meta}
+        </button>`;
+    }).join("");
     return `
       <div class="new-group">
         <div class="new-group-title">${escapeHTML(cat)}<span class="new-group-count">${byCat.get(cat).length}</span></div>
