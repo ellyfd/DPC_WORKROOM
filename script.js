@@ -537,9 +537,11 @@ function renderNewArrivalsNotice(tools, sig) {
   });
 
   const groupsHTML = cats.map((cat) => {
+    const catObj = state.categories.find((c) => c.name === cat);
+    const cv = catObj ? catObj.color : NUM_COLORS;
     const items = byCat.get(cat).map((t) => {
       const who = t.creator
-        ? `<span class="new-item-who">${escapeHTML(t.creator)}</span>`
+        ? `<span class="new-item-who"><span class="new-item-ava">${escapeHTML(initial(t.creator))}</span>${escapeHTML(t.creator)}</span>`
         : "";
       const note = t.description
         ? `<span class="new-item-note">${escapeHTML(t.description)}</span>`
@@ -548,13 +550,20 @@ function renderNewArrivalsNotice(tools, sig) {
         ? `<span class="new-item-meta">${who}${note}</span>`
         : "";
       return `<button type="button" class="new-item" data-open-new="${escapeAttr(t.id)}">
-          <span class="new-item-name">${escapeHTML(t.name)}</span>
+          <span class="new-item-row">
+            <span class="new-item-name">${escapeHTML(t.name)}</span>
+            <svg class="new-item-go" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </span>
           ${meta}
         </button>`;
     }).join("");
     return `
-      <div class="new-group">
-        <div class="new-group-title">${escapeHTML(cat)}<span class="new-group-count">${byCat.get(cat).length}</span></div>
+      <div class="new-group" data-cv="${cv}">
+        <div class="new-group-head">
+          <span class="new-group-dot"></span>
+          <span class="new-group-name">${escapeHTML(cat)}</span>
+          <span class="new-group-count">${byCat.get(cat).length}</span>
+        </div>
         <div class="new-group-items">${items}</div>
       </div>`;
   }).join("");
