@@ -1,6 +1,7 @@
 const LS_DRAFT_KEY = "dpcHub.draft.v1";
 const LS_COLLAPSE_KEY = "dpcHub.collapsed.v1";
 const LS_ME_KEY = "dpcHub.me.v1";
+const LS_NEW_SEEN_KEY = "dpcHub.newSeen.v1";
 const NUM_COLORS = 7;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;  // 25 MB per upload (R2 backed)
 const MAX_VERSIONS = 5;                    // keep at most this many file versions per tool
@@ -88,6 +89,9 @@ async function init() {
   await maybeImportFromHash();
 
   render();
+
+  // After the board is up, surface a dismissable "本週上新" notice (once per batch).
+  maybeShowNewArrivalsNotice();
 
   $("#search").addEventListener("input", (e) => {
     state.query = e.target.value.trim().toLowerCase();
@@ -497,11 +501,70 @@ function newToolsThisWeek() {
     .sort((a, b) => toolBirthTime(b) - toolBirthTime(a));
 }
 
-// Resolve the colour index for whichever category a tool belongs to, so a
-// tool shown in the 本週上新 board keeps the same icon tint as in its section.
-function categoryColorFor(t) {
-  const c = t && t.category && state.categories.find((x) => x.name === t.category);
-  return c ? c.color : NUM_COLORS;
+// A short signature of the current "new this week" set, so we only auto-show
+// the notice once per distinct batch. When a newer tool arrives the signature
+// changes and the notice pops again on next load.
+function newToolsSignature(tools) {
+  return tools.map((t) => t.id).sort().join("|");
+}
+
+// 本週上新通知 — a dismissable popover shown once on load. Pure text: groups
+// the week's new tools by category, no icons or logos. Clicking a tool name
+// opens it; there's a "don't show again for this batch" affordance.
+function maybeShowNewArrivalsNotice() {
+  const fresh = newToolsThisWeek();
+  if (!fresh.length) return;
+  const sig = newToolsSignature(fresh);
+  if (loadJSON(LS_NEW_SEEN_KEY, "") === sig) return;  // already dismissed this batch
+  renderNewArrivalsNotice(fresh, sig);
+}
+
+function renderNewArrivalsNotice(tools, sig) {
+  const pop = document.getElementById("new-popover");
+  if (!pop) return;
+
+  // Group by category, preserving the category order already on screen.
+  const order = state.categories.map((c) => c.name);
+  const byCat = new Map();
+  for (const t of tools) {
+    const cat = t.category || "未分類";
+    if (!byCat.has(cat)) byCat.set(cat, []);
+    byCat.get(cat).push(t);
+  }
+  const cats = [...byCat.keys()].sort((a, b) => {
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
+
+  const groupsHTML = cats.map((cat) => {
+    const items = byCat.get(cat).map((t) =>
+      `<button type="button" class="new-item" data-open-new="${escapeAttr(t.id)}">${escapeHTML(t.name)}</button>`
+    ).join("");
+    return `
+      <div class="new-group">
+        <div class="new-group-title">${escapeHTML(cat)}<span class="new-group-count">${byCat.get(cat).length}</span></div>
+        <div class="new-group-items">${items}</div>
+      </div>`;
+  }).join("");
+
+  pop.querySelector("#new-popover-count").textContent = tools.length;
+  pop.querySelector("#new-popover-body").innerHTML = groupsHTML;
+  pop.hidden = false;
+
+  const close = () => { pop.hidden = true; };
+  const dismiss = () => { saveJSON(LS_NEW_SEEN_KEY, sig); close(); };
+
+  pop.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", close, { once: true })
+  );
+  pop.querySelector("#new-popover-dismiss").addEventListener("click", dismiss, { once: true });
+  pop.querySelectorAll("[data-open-new]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const t = allTools().find((x) => x.id === btn.dataset.openNew);
+      close();
+      if (t) openTool(t, btn);
+    })
+  );
 }
 
 function matchesQuery(t) {
@@ -649,40 +712,8 @@ function renderSections() {
     return;
   }
 
-  // 本週上新 signboard — a single overview board of everything added in the
-  // last week, pinned above the categories. Only shown on the unfiltered
-  // home view so it stays a clean "what's new" summary (the same tools still
-  // carry a NEW badge inside their own category below).
-  let html = "";
-  if (state.filter === "all" && !state.query && !state.brandFilter) {
-    const fresh = newToolsThisWeek();
-    if (fresh.length) html += signboardHTML(fresh);
-  }
-  html += groups.map((g) => sectionHTML(g, true)).join("");
-
-  area.innerHTML = html;
+  area.innerHTML = groups.map((g) => sectionHTML(g, true)).join("");
   wireSections();
-}
-
-function signboardHTML(tools) {
-  const cards = tools
-    .map((t) => cardHTML(t, categoryColorFor(t), { draggable: false }))
-    .join("");
-  return `
-    <section class="section signboard" data-signboard="1">
-      <div class="section-head signboard-head">
-        <div class="section-title-row">
-          <span class="signboard-spark" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.9 5.1L19 9l-5.1 1.9L12 16l-1.9-5.1L5 9l5.1-1.9L12 2z"/><path d="M19 14l.9 2.4L22 17l-2.1.8L19 20l-.8-2.2L16 17l2.2-.6L19 14z"/></svg>
-          </span>
-          <span class="section-title signboard-title">本週上新</span>
-          <span class="section-count">${tools.length}</span>
-        </div>
-        <span class="signboard-sub">最近 ${NEW_WINDOW_DAYS} 天新增的工具</span>
-      </div>
-      <div class="section-body"><div class="section-grid">${cards}</div></div>
-    </section>
-  `;
 }
 
 function sectionHTML(g, showHeader = true) {
@@ -720,7 +751,7 @@ function sectionHTML(g, showHeader = true) {
   `;
 }
 
-function cardHTML(t, cv, opts = {}) {
+function cardHTML(t, cv) {
   const tType = t.type || "link";
   const type = TYPE_META[tType] || TYPE_META.link;
   const iconImg = t.icon
@@ -732,10 +763,9 @@ function cardHTML(t, cv, opts = {}) {
   const locked = isToolLocked(t);
   const lockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
   const fresh = isNewTool(t);
-  const draggable = opts.draggable === false ? "false" : "true";
 
   return `
-    <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}${fresh ? " is-new" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}"${noteAttr} draggable="${draggable}">
+    <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}${fresh ? " is-new" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}"${noteAttr} draggable="true">
       <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" aria-label="${escapeAttr(t.name)}">
         <div class="card-top">
           <div class="card-icon">
@@ -800,9 +830,6 @@ function wireSections() {
 
 function wireCardDrag() {
   $$("#sections-area .card[data-id]").forEach((card) => {
-    // Cards inside the 本週上新 board are duplicates of real cards — don't
-    // wire drag-reorder on them (that lives in their own category section).
-    if (card.closest(".signboard")) return;
     const id = card.dataset.id;
     const tool = allTools().find((t) => t.id === id);
     if (!tool || !canEditTool(tool)) {
@@ -825,9 +852,6 @@ function wireCardDrag() {
   });
 
   $$("#sections-area .section").forEach((sec) => {
-    // The 本週上新 board is read-only — skip drag wiring so tools can't be
-    // dropped into it (it has no real category) or its header dragged.
-    if (sec.dataset.signboard) return;
     const isSystem = sec.dataset.system === "1";
     const head = sec.querySelector(".section-head");
 
