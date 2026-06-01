@@ -475,18 +475,26 @@ function sortToolsByOrder(arr) {
 const NEW_WINDOW_DAYS = 7;
 const NEW_WINDOW_MS = NEW_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
+// The timestamp we treat as "when this tool first appeared". New tools get an
+// explicit createdAt; older records (saved before that field existed) fall
+// back to `updated` so the 本週上新 board still works for them.
+function toolBirthTime(t) {
+  const iso = (t && (t.createdAt || t.updated)) || "";
+  const ms = new Date(iso).getTime();
+  return isNaN(ms) ? 0 : ms;
+}
+
 function isNewTool(t) {
-  if (!t || !t.createdAt) return false;
-  const created = new Date(t.createdAt).getTime();
-  if (isNaN(created)) return false;
+  const born = toolBirthTime(t);
+  if (!born) return false;
   const now = Date.now();
-  return created <= now && (now - created) <= NEW_WINDOW_MS;
+  return born <= now && (now - born) <= NEW_WINDOW_MS;
 }
 
 function newToolsThisWeek() {
   return allTools()
     .filter(isNewTool)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    .sort((a, b) => toolBirthTime(b) - toolBirthTime(a));
 }
 
 // Resolve the colour index for whichever category a tool belongs to, so a
@@ -2597,7 +2605,10 @@ function saveTool() {
         }))
       : [],
     lockedBy: d.lock ? d.creator : "",
-    createdAt: existing?.createdAt || new Date().toISOString(),
+    // Stamp creation time once. New tools get "now"; tools saved before this
+    // field existed keep their original `updated` time so editing an old tool
+    // doesn't make it masquerade as a fresh arrival.
+    createdAt: existing?.createdAt || existing?.updated || new Date().toISOString(),
     updated: new Date().toISOString(),
   };
 
