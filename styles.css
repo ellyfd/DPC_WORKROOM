@@ -633,38 +633,85 @@ h1, h2, h3 { margin: 0; }
 }
 
 /* ============================================================
-   本週上新 signboard — pinned overview board of new tools
+   本週上新 通知 — dismissable login popover (text only, no icons)
    ============================================================ */
-.section.signboard {
-  background:
-    linear-gradient(135deg, rgba(99, 102, 241, 0.10), rgba(236, 72, 153, 0.08)),
-    var(--surface);
-  border-color: rgba(99, 102, 241, 0.28);
-  box-shadow: 0 14px 38px -22px rgba(99, 102, 241, 0.5);
+.new-popover-panel {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  width: 420px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 60px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+  animation: new-pop-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.signboard-head {
-  align-items: center;
-  flex-wrap: wrap;
+@keyframes new-pop-in {
+  from { transform: translate(-50%, -50%) scale(0.96); opacity: 0; }
+  to   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 }
-.signboard-spark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #f59e0b;
-  align-self: center;
+.new-popover-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; padding: 0 7px;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fb7185, #f43f5e);
+  color: #fff;
+  font-size: 12px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
 }
-.signboard-title {
-  color: var(--text);
-  text-transform: none;
-  letter-spacing: 0.01em;
-  font-weight: 700;
-  font-size: 16px;
+.new-popover-body {
+  padding: 8px 20px 4px;
+  overflow-y: auto;
 }
-.signboard-sub {
-  font-size: 12px;
+.new-group { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.new-group:last-child { border-bottom: 0; }
+.new-group-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 700;
   color: var(--text-mute);
-  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
 }
+.new-group-count {
+  font-size: 11px; font-weight: 600;
+  color: var(--text-mute); opacity: 0.7;
+}
+.new-group-items { display: flex; flex-direction: column; gap: 2px; }
+.new-item {
+  text-align: left;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+}
+.new-item:hover { background: var(--accent-soft); color: var(--accent); }
+.new-popover-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+}
+.new-popover-dismiss {
+  background: transparent; border: 0;
+  color: var(--text-mute);
+  font-size: 13px;
+  padding: 6px 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.new-popover-dismiss:hover { color: var(--text-dim); }
 
 /* Form: checkbox row */
 .checkbox-row {

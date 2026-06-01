@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260601a" />
+  <link rel="stylesheet" href="styles.css?v=20260601b" />
 </head>
 <body>
   <div class="bg-soft"></div>
@@ -85,6 +85,27 @@
     <button id="expand-all"></button>
     <button id="collapse-all"></button>
     <nav id="filters"></nav>
+  </div>
+
+  <!-- 本週上新 notice — dismissable popover shown on load (text only) -->
+  <div class="popover" id="new-popover" hidden>
+    <div class="popover-backdrop" data-close></div>
+    <div class="new-popover-panel" role="dialog" aria-modal="true" aria-labelledby="new-popover-title">
+      <div class="popover-head">
+        <div>
+          <div class="popover-title" id="new-popover-title">本週上新<span class="new-popover-count" id="new-popover-count">0</span></div>
+          <div class="muted small">最近 7 天新增的工具</div>
+        </div>
+        <button class="icon-btn" data-close aria-label="關閉">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="new-popover-body" id="new-popover-body"></div>
+      <div class="new-popover-foot">
+        <button type="button" class="new-popover-dismiss" id="new-popover-dismiss">不再顯示這批</button>
+        <button type="button" class="btn btn-primary" data-close>知道了</button>
+      </div>
+    </div>
   </div>
 
   <!-- Add / Edit tool popover -->
@@ -346,6 +367,6 @@
   <!-- Toast -->
   <div class="toast" id="toast" hidden></div>
 
-  <script src="script.js?v=20260601a"></script>
+  <script src="script.js?v=20260601b"></script>
 </body>
 </html>
