@@ -475,8 +475,8 @@ function sortToolsByOrder(arr) {
   });
 }
 
-/* ===== 本週上新 (new this week) ===== */
-const NEW_WINDOW_DAYS = 7;
+/* ===== 本週上新 (new arrivals) ===== */
+const NEW_WINDOW_DAYS = 3;
 const NEW_WINDOW_MS = NEW_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 // The timestamp we treat as "when this tool first appeared". New tools get an
