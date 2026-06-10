@@ -2588,19 +2588,28 @@ function imagesFromClipboard(dt) {
   }
   return out;
 }
-async function uploadTipImage(file) {
+async function uploadTipImage(file, name) {
+  const fname = name || file.name || "screenshot.png";
   const res = await fetch("/api/upload", {
     method: "POST",
     headers: {
       "Content-Type": file.type || "application/octet-stream",
       "X-Tool-Id": "tip-image",
-      "X-Filename": encodeURIComponent(file.name || "screenshot.png"),
+      "X-Filename": encodeURIComponent(fname),
       "X-Uploaded-By": encodeURIComponent(state.me || ""),
     },
     body: file,
   });
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
+}
+// Pasted screenshots come through as generic "image.png" / "screenshot.png" —
+// show them simply as "screenshot". Real picked filenames are kept as-is.
+function tipImageName(file) {
+  if (!file.name || /^(image|screenshot)(\s*\(\d+\))?\.\w+$/i.test(file.name)) {
+    return "screenshot";
+  }
+  return file.name;
 }
 async function attachTipImages(fileList, target) {
   const files = [...(fileList || [])].filter(isImageFile);
@@ -2614,8 +2623,9 @@ async function attachTipImages(fileList, target) {
     }
     try {
       toast("上傳截圖中…");
-      const meta = await uploadTipImage(file);
-      const ref = { key: meta.key, name: meta.name };
+      const name = tipImageName(file);
+      const meta = await uploadTipImage(file, name);
+      const ref = { key: meta.key, name };
       if (target === "edit") editingTipImages.push(ref);
       else pendingTipImages.push(ref);
       ok++;
@@ -2630,32 +2640,37 @@ async function attachTipImages(fileList, target) {
 }
 function tipImagesDisplayHTML(images) {
   if (!Array.isArray(images) || !images.length) return "";
-  return `<div class="tip-imgs">` + images.map((img) =>
-    `<button type="button" class="tip-thumb" data-img-key="${escapeAttr(img.key)}" title="點開看大圖">
-       <img src="${fileUrl(img.key)}" alt="${escapeAttr(img.name || "截圖")}" loading="lazy" />
-     </button>`).join("") + `</div>`;
+  return `<div class="tip-imgs">` + images.map((img) => {
+    const name = img.name || "截圖";
+    return `<button type="button" class="tip-thumb" data-img-key="${escapeAttr(img.key)}" title="點開看大圖:${escapeAttr(name)}">
+       <img src="${fileUrl(img.key)}" alt="${escapeAttr(name)}" loading="lazy" />
+       <span class="tip-thumb-name">${escapeHTML(name)}</span>
+     </button>`;
+  }).join("") + `</div>`;
+}
+function tipFileCardHTML(img, rmAttr) {
+  const name = img.name || "截圖";
+  return `<div class="tip-filecard">
+       <img class="tip-filecard-img" src="${fileUrl(img.key)}" alt="" />
+       <span class="tip-filecard-name" title="${escapeAttr(name)}">${escapeHTML(name)}</span>
+       <button type="button" class="tip-filecard-rm" ${rmAttr} aria-label="移除截圖" title="移除">
+         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+       </button>
+     </div>`;
 }
 function tipImagesEditHTML(images) {
   if (!Array.isArray(images) || !images.length) return "";
-  return `<div class="tip-imgs editing">` + images.map((img, i) =>
-    `<span class="tip-thumb">
-       <img src="${fileUrl(img.key)}" alt="${escapeAttr(img.name || "")}" />
-       <button type="button" class="tip-thumb-rm" data-rm-edit-img="${i}" aria-label="移除截圖">
-         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
-       </button>
-     </span>`).join("") + `</div>`;
+  return `<div class="tip-files editing">` +
+    images.map((img, i) => tipFileCardHTML(img, `data-rm-edit-img="${i}"`)).join("") +
+    `</div>`;
 }
 function renderPendingTipImages() {
   const wrap = document.getElementById("tip-image-previews");
   if (!wrap) return;
   wrap.hidden = pendingTipImages.length === 0;
-  wrap.innerHTML = pendingTipImages.map((img, i) =>
-    `<span class="tip-thumb">
-       <img src="${fileUrl(img.key)}" alt="${escapeAttr(img.name || "")}" />
-       <button type="button" class="tip-thumb-rm" data-rm-pending="${i}" aria-label="移除截圖">
-         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
-       </button>
-     </span>`).join("");
+  wrap.innerHTML = pendingTipImages
+    .map((img, i) => tipFileCardHTML(img, `data-rm-pending="${i}"`))
+    .join("");
 }
 function captureEditDraft() {
   const ta = document.querySelector(".tip-edit-input");
