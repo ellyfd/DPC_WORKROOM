@@ -105,6 +105,11 @@ async function init() {
   });
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#open-tips")?.addEventListener("click", () => openTipsPopover());
+  // 小知識 results shown inside the board (from the header search) → open the popover, pre-filtered.
+  $("#sections-area")?.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-open-tips-search]");
+    if (b) openTipsPopover(b.dataset.openTipsSearch);
+  });
   $("#open-add-cat").addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
   $("#empty-cta").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#expand-all")?.addEventListener("click", () => setAllCollapsed(false));
@@ -738,13 +743,65 @@ function renderSections() {
       .filter((g) => g.tools.length);
   }
 
+  // The header search also looks through 小知識 — surface any matches as a
+  // block above the tool sections so they aren't "missing".
+  const tipMatches = state.query ? matchingTips(state.query) : [];
+  const tipsBlock = tipMatches.length ? tipResultsHTML(tipMatches, state.query) : "";
+
   if (!groups.length) {
-    area.innerHTML = `<div class="section"><div class="section-body"><div class="section-grid"><div class="section-empty">沒有符合條件的工具</div></div></div></div>`;
+    // Found tips but no tools → just show the tips block (no "no tools" noise).
+    area.innerHTML = tipsBlock ||
+      `<div class="section"><div class="section-body"><div class="section-grid"><div class="section-empty">沒有符合條件的工具</div></div></div></div>`;
     return;
   }
 
-  area.innerHTML = groups.map((g) => sectionHTML(g, true)).join("");
+  area.innerHTML = tipsBlock + groups.map((g) => sectionHTML(g, true)).join("");
   wireSections();
+}
+
+// Tips whose text or author matches a query, newest first.
+function matchingTips(q) {
+  const query = String(q || "").toLowerCase();
+  if (!query) return [];
+  const tips = Array.isArray(state.tips) ? state.tips : [];
+  return tips
+    .filter((t) => `${t.text || ""} ${t.author || ""}`.toLowerCase().includes(query))
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+
+// A board section showing 小知識 that match the header search.
+function tipResultsHTML(tips, q) {
+  const ql = String(q || "").toLowerCase();
+  const shown = tips.slice(0, 4);
+  const items = shown.map((tip) => {
+    const who = tip.author
+      ? `<span class="tipres-who"><span class="tipres-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
+      : `<span class="tipres-who tipres-anon">匿名</span>`;
+    return `<button type="button" class="tipres-item" data-open-tips-search="${escapeAttr(q)}">
+        <span class="tipres-text">${highlightTip(tip.text, ql)}</span>
+        <span class="tipres-meta">${who}<span class="tipres-time">${escapeHTML(formatDate(tip.createdAt))}</span></span>
+      </button>`;
+  }).join("");
+  const more = tips.length > shown.length
+    ? `<button type="button" class="tipres-more" data-open-tips-search="${escapeAttr(q)}">還有 ${tips.length - shown.length} 則,查看全部 →</button>`
+    : "";
+  return `
+    <section class="section tips-result">
+      <div class="section-head">
+        <div class="section-title-row">
+          <span class="tipres-spark" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
+          </span>
+          <span class="section-title">小知識</span>
+          <span class="section-count">${tips.length}</span>
+        </div>
+        <button type="button" class="tipres-openall" data-open-tips-search="${escapeAttr(q)}">在小知識搜尋「${escapeHTML(q)}」→</button>
+      </div>
+      <div class="section-body">
+        <div class="tipres-list">${items}${more}</div>
+      </div>
+    </section>
+  `;
 }
 
 function sectionHTML(g, showHeader = true) {
@@ -2380,16 +2437,21 @@ function initTipsPopover() {
   });
 }
 
-function openTipsPopover() {
+function openTipsPopover(prefillQuery) {
   const pop = document.getElementById("tips-popover");
   if (!pop) return;
-  // Start each visit with a clean search.
-  tipQuery = "";
+  // Carry the header-search term in when opened from a 小知識 result,
+  // otherwise start with a clean search.
+  const prefill = typeof prefillQuery === "string" ? prefillQuery.trim() : "";
+  tipQuery = prefill.toLowerCase();
   const search = document.getElementById("tip-search");
-  if (search) search.value = "";
+  if (search) search.value = prefill;
   renderTipsList();
   pop.hidden = false;
-  setTimeout(() => document.getElementById("tip-input")?.focus(), 30);
+  setTimeout(
+    () => document.getElementById(prefill ? "tip-search" : "tip-input")?.focus(),
+    30
+  );
 }
 
 function closeTipsPopover() {
