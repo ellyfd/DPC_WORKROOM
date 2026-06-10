@@ -105,6 +105,10 @@ async function init() {
   });
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#open-tips")?.addEventListener("click", () => openTipsPopover());
+  // 小知識 results shown inside the board (from the header search) → open the popover.
+  $("#sections-area")?.addEventListener("click", (e) => {
+    if (e.target.closest("[data-open-tips]")) openTipsPopover();
+  });
   $("#open-add-cat").addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
   $("#empty-cta").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#expand-all")?.addEventListener("click", () => setAllCollapsed(false));
@@ -738,13 +742,65 @@ function renderSections() {
       .filter((g) => g.tools.length);
   }
 
+  // The header search also looks through 小知識 — surface any matches as a
+  // block above the tool sections so they aren't "missing".
+  const tipMatches = state.query ? matchingTips(state.query) : [];
+  const tipsBlock = tipMatches.length ? tipResultsHTML(tipMatches, state.query) : "";
+
   if (!groups.length) {
-    area.innerHTML = `<div class="section"><div class="section-body"><div class="section-grid"><div class="section-empty">沒有符合條件的工具</div></div></div></div>`;
+    // Found tips but no tools → just show the tips block (no "no tools" noise).
+    area.innerHTML = tipsBlock ||
+      `<div class="section"><div class="section-body"><div class="section-grid"><div class="section-empty">沒有符合條件的工具</div></div></div></div>`;
     return;
   }
 
-  area.innerHTML = groups.map((g) => sectionHTML(g, true)).join("");
+  area.innerHTML = tipsBlock + groups.map((g) => sectionHTML(g, true)).join("");
   wireSections();
+}
+
+// Tips whose text or author matches a query, newest first.
+function matchingTips(q) {
+  const query = String(q || "").toLowerCase();
+  if (!query) return [];
+  const tips = Array.isArray(state.tips) ? state.tips : [];
+  return tips
+    .filter((t) => `${t.text || ""} ${t.author || ""}`.toLowerCase().includes(query))
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+
+// A board section showing 小知識 that match the header search.
+function tipResultsHTML(tips, q) {
+  const ql = String(q || "").toLowerCase();
+  const shown = tips.slice(0, 4);
+  const items = shown.map((tip) => {
+    const who = tip.author
+      ? `<span class="tipres-who"><span class="tipres-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
+      : `<span class="tipres-who tipres-anon">匿名</span>`;
+    return `<button type="button" class="tipres-item" data-open-tips>
+        <span class="tipres-text">${highlightTip(tip.text, ql)}</span>
+        <span class="tipres-meta">${who}<span class="tipres-time">${escapeHTML(formatDate(tip.createdAt))}</span></span>
+      </button>`;
+  }).join("");
+  const more = tips.length > shown.length
+    ? `<button type="button" class="tipres-more" data-open-tips>還有 ${tips.length - shown.length} 則,查看全部 →</button>`
+    : "";
+  return `
+    <section class="section tips-result">
+      <div class="section-head">
+        <div class="section-title-row">
+          <span class="tipres-spark" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
+          </span>
+          <span class="section-title">小知識</span>
+          <span class="section-count">${tips.length}</span>
+        </div>
+        <button type="button" class="tipres-openall" data-open-tips>開啟小知識 →</button>
+      </div>
+      <div class="section-body">
+        <div class="tipres-list">${items}${more}</div>
+      </div>
+    </section>
+  `;
 }
 
 function sectionHTML(g, showHeader = true) {
@@ -2334,8 +2390,9 @@ function pickCreatorAsMe() {
 /* ===== 小知識 (shared free-text tips) =====
    A casual, natural-language knowledge board. Anyone types a one-liner,
    it gets tagged with their name + time and synced with the rest of the
-   state. Newest first. Lives behind the 💡 button in the header. */
-let tipQuery = "";
+   state. Newest first. Lives behind the 💡 button in the header.
+   (Searching happens from the header search box, not in here.) */
+let editingTipId = null;
 
 function initTipsPopover() {
   const pop = document.getElementById("tips-popover");
@@ -2356,23 +2413,25 @@ function initTipsPopover() {
     }
   });
 
-  // Search box — filter the list as you type.
-  const search = document.getElementById("tip-search");
-  search?.addEventListener("input", (e) => {
-    tipQuery = e.target.value.trim().toLowerCase();
-    renderTipsList();
+  // Delegate edit / save / cancel / delete clicks on the list.
+  const list = document.getElementById("tips-list");
+  list?.addEventListener("click", (e) => {
+    const del = e.target.closest("[data-del-tip]");
+    if (del) { deleteTip(del.dataset.delTip); return; }
+    const edit = e.target.closest("[data-edit-tip]");
+    if (edit) { startEditTip(edit.dataset.editTip); return; }
+    const save = e.target.closest("[data-save-tip]");
+    if (save) { saveTipEdit(save.dataset.saveTip); return; }
+    const cancel = e.target.closest("[data-cancel-tip]");
+    if (cancel) { editingTipId = null; renderTipsList(); }
   });
-  document.getElementById("tip-search-clear")?.addEventListener("click", () => {
-    tipQuery = "";
-    if (search) search.value = "";
-    renderTipsList();
-    search?.focus();
-  });
-
-  // Delegate delete clicks on the list.
-  document.getElementById("tips-list")?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-del-tip]");
-    if (btn) deleteTip(btn.dataset.delTip);
+  // Enter saves an edit, Shift+Enter adds a newline.
+  list?.addEventListener("keydown", (e) => {
+    const ta = e.target.closest(".tip-edit-input");
+    if (ta && e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      saveTipEdit(ta.dataset.editId);
+    }
   });
 
   document.addEventListener("keydown", (e) => {
@@ -2383,10 +2442,7 @@ function initTipsPopover() {
 function openTipsPopover() {
   const pop = document.getElementById("tips-popover");
   if (!pop) return;
-  // Start each visit with a clean search.
-  tipQuery = "";
-  const search = document.getElementById("tip-search");
-  if (search) search.value = "";
+  editingTipId = null;
   renderTipsList();
   pop.hidden = false;
   setTimeout(() => document.getElementById("tip-input")?.focus(), 30);
@@ -2395,19 +2451,16 @@ function openTipsPopover() {
 function closeTipsPopover() {
   const pop = document.getElementById("tips-popover");
   if (pop) pop.hidden = true;
+  editingTipId = null;
 }
 
 function renderTipsList() {
   const wrap = document.getElementById("tips-list");
   const countEl = document.getElementById("tips-popover-count");
-  const searchRow = document.getElementById("tips-search-row");
   if (!wrap) return;
 
   const tips = Array.isArray(state.tips) ? state.tips : [];
   if (countEl) countEl.textContent = tips.length;
-
-  // Search row only makes sense once there's something to search.
-  if (searchRow) searchRow.hidden = tips.length === 0;
 
   if (!tips.length) {
     wrap.innerHTML = `<div class="tips-empty">還沒有人分享小知識,你來開第一個 💡</div>`;
@@ -2419,32 +2472,64 @@ function renderTipsList() {
     String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
   );
 
-  // Filter by the search box (matches text or author).
-  const q = tipQuery;
-  const shown = q
-    ? sorted.filter((t) =>
-        `${t.text || ""} ${t.author || ""}`.toLowerCase().includes(q))
-    : sorted;
-
-  if (!shown.length) {
-    wrap.innerHTML = `<div class="tips-empty">找不到符合「${escapeHTML(q)}」的小知識</div>`;
-    return;
-  }
-
-  wrap.innerHTML = shown.map((tip) => {
+  wrap.innerHTML = sorted.map((tip) => {
     const who = tip.author
       ? `<span class="tip-who"><span class="tip-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
       : `<span class="tip-who tip-who-anon">匿名</span>`;
+    const edited = tip.updatedAt ? `<span class="tip-edited">已編輯</span>` : "";
+
+    if (tip.id === editingTipId) {
+      return `<div class="tip-item is-editing">
+          <textarea class="tip-edit-input" data-edit-id="${escapeAttr(tip.id)}" rows="3">${escapeHTML(tip.text)}</textarea>
+          <div class="tip-edit-actions">
+            <button type="button" class="btn btn-secondary btn-sm" data-cancel-tip="${escapeAttr(tip.id)}">取消</button>
+            <button type="button" class="btn btn-primary btn-sm" data-save-tip="${escapeAttr(tip.id)}">儲存</button>
+          </div>
+        </div>`;
+    }
+
     return `<div class="tip-item">
-        <div class="tip-text">${highlightTip(tip.text, q)}</div>
+        <div class="tip-text">${linkifyTip(tip.text)}</div>
         <div class="tip-foot">
-          <span class="tip-meta">${who}<span class="tip-time">${escapeHTML(formatDate(tip.createdAt))}</span></span>
-          <button type="button" class="tip-del" data-del-tip="${escapeAttr(tip.id)}" aria-label="刪除這則" title="刪除">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-          </button>
+          <span class="tip-meta">${who}<span class="tip-time">${escapeHTML(formatDate(tip.createdAt))}</span>${edited}</span>
+          <span class="tip-acts">
+            <button type="button" class="tip-act" data-edit-tip="${escapeAttr(tip.id)}" aria-label="編輯這則" title="編輯">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+            </button>
+            <button type="button" class="tip-act tip-act-del" data-del-tip="${escapeAttr(tip.id)}" aria-label="刪除這則" title="刪除">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
+          </span>
         </div>
       </div>`;
   }).join("");
+}
+
+function startEditTip(id) {
+  editingTipId = id;
+  renderTipsList();
+  const ta = document.querySelector(`.tip-edit-input[data-edit-id="${cssEscape(id)}"]`);
+  if (ta) {
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+}
+
+function saveTipEdit(id) {
+  const tip = state.tips.find((t) => t.id === id);
+  if (!tip) { editingTipId = null; renderTipsList(); return; }
+  const ta = document.querySelector(`.tip-edit-input[data-edit-id="${cssEscape(id)}"]`);
+  const text = (ta ? ta.value : "").trim();
+  if (!text) { toast("內容不能空白"); return; }
+
+  if (text !== tip.text) {
+    tip.text = text;
+    tip.updatedAt = new Date().toISOString();
+    saveTips();
+    toast("已更新");
+  }
+  editingTipId = null;
+  renderTipsList();
 }
 
 // Turn bare URLs in a tip into clickable links (everything else escaped).
@@ -2487,10 +2572,7 @@ async function submitTip() {
   saveTips();
 
   input.value = "";
-  // Drop any active filter so the just-added tip is visible.
-  tipQuery = "";
-  const search = document.getElementById("tip-search");
-  if (search) search.value = "";
+  editingTipId = null;
   renderTipsList();
   updateTipsBadge();
   input.focus();

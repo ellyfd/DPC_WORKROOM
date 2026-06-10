@@ -935,43 +935,99 @@ h1, h2, h3 { margin: 0; }
 }
 .tips-composer .btn { flex-shrink: 0; }
 
-.tips-search-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-2);
-}
-.tips-search-row[hidden] { display: none; }
-.tips-search-ic { color: var(--text-mute); flex-shrink: 0; }
-.tips-search-row input {
-  flex: 1; min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
-  padding: 2px 0;
-}
-.tips-search-row input::placeholder { color: var(--text-mute); }
-.tips-search-row input:focus { outline: none; }
-.tips-search-clear {
-  flex-shrink: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px;
-  border: 0; border-radius: 7px;
-  background: transparent;
-  color: var(--text-mute);
-  cursor: pointer;
-  transition: color 0.14s, background 0.14s;
-}
-.tips-search-clear:hover { color: var(--text); background: var(--surface); }
-
 .tip-hl {
   background: #fef08a;
   color: inherit;
   border-radius: 3px;
   padding: 0 1px;
 }
+
+/* 小知識 results surfaced inside the board by the header search */
+.tips-result {
+  border-color: #fde68a;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(251,191,36,0.10), transparent 60%),
+    var(--surface);
+}
+.tips-result .section-title { color: #b45309; }
+.tipres-spark { color: #f59e0b; display: inline-flex; align-items: center; }
+.tipres-openall {
+  border: 0;
+  background: transparent;
+  color: #b45309;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.tipres-openall:hover { background: #fffbeb; text-decoration: underline; text-underline-offset: 2px; }
+.tipres-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 9px;
+}
+.tipres-item {
+  display: flex; flex-direction: column; gap: 7px;
+  text-align: left;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.14s, box-shadow 0.14s, transform 0.14s;
+}
+.tipres-item:hover {
+  border-color: #fcd34d;
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+.tipres-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tipres-text a { color: var(--accent); }
+.tipres-meta { display: flex; align-items: center; gap: 8px; }
+.tipres-who {
+  display: inline-flex; align-items: center; gap: 5px;
+  flex-shrink: 0;
+  font-size: 11.5px; font-weight: 600;
+  color: var(--text-dim);
+}
+.tipres-anon { color: var(--text-mute); font-weight: 500; }
+.tipres-ava {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #fff;
+  font-size: 9.5px; font-weight: 700;
+  flex-shrink: 0;
+}
+.tipres-time {
+  font-size: 11px;
+  color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
+}
+.tipres-more {
+  display: inline-flex; align-items: center;
+  border: 1px dashed #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
+  font-size: 12.5px; font-weight: 600;
+  border-radius: 13px;
+  padding: 11px 13px;
+  cursor: pointer;
+}
+.tipres-more:hover { background: #fef3c7; }
 
 .tips-list {
   padding: 12px 16px 16px;
@@ -1031,8 +1087,20 @@ h1, h2, h3 { margin: 0; }
   font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.tip-del {
+.tip-edited {
+  font-size: 11px;
+  color: var(--text-mute);
+  font-style: italic;
   flex-shrink: 0;
+}
+.tip-acts {
+  display: inline-flex; align-items: center; gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.14s;
+}
+.tip-item:hover .tip-acts { opacity: 1; }
+.tip-act {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px;
   border: 1px solid transparent;
@@ -1040,19 +1108,48 @@ h1, h2, h3 { margin: 0; }
   background: transparent;
   color: var(--text-mute);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.14s, color 0.14s, background 0.14s, border-color 0.14s;
+  transition: color 0.14s, background 0.14s, border-color 0.14s;
 }
-.tip-item:hover .tip-del { opacity: 1; }
-.tip-del:hover {
+.tip-act:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.tip-act-del:hover {
   color: #dc2626;
   background: #fef2f2;
   border-color: #fecaca;
 }
 
+/* Inline editor */
+.tip-item.is-editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tip-edit-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.tip-edit-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.tip-edit-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin-top: 8px;
+}
+.btn-sm { padding: 5px 12px; font-size: 13px; }
+
 @media (max-width: 640px) {
-  /* No hover on touch — keep the delete button always reachable. */
-  .tip-del { opacity: 1; }
+  /* No hover on touch — keep the actions always reachable. */
+  .tip-acts { opacity: 1; }
 }
 
 /* Form: checkbox row */
