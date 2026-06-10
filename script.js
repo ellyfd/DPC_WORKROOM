@@ -2335,6 +2335,8 @@ function pickCreatorAsMe() {
    A casual, natural-language knowledge board. Anyone types a one-liner,
    it gets tagged with their name + time and synced with the rest of the
    state. Newest first. Lives behind the 💡 button in the header. */
+let tipQuery = "";
+
 function initTipsPopover() {
   const pop = document.getElementById("tips-popover");
   if (!pop) return;
@@ -2354,6 +2356,19 @@ function initTipsPopover() {
     }
   });
 
+  // Search box — filter the list as you type.
+  const search = document.getElementById("tip-search");
+  search?.addEventListener("input", (e) => {
+    tipQuery = e.target.value.trim().toLowerCase();
+    renderTipsList();
+  });
+  document.getElementById("tip-search-clear")?.addEventListener("click", () => {
+    tipQuery = "";
+    if (search) search.value = "";
+    renderTipsList();
+    search?.focus();
+  });
+
   // Delegate delete clicks on the list.
   document.getElementById("tips-list")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-del-tip]");
@@ -2368,6 +2383,10 @@ function initTipsPopover() {
 function openTipsPopover() {
   const pop = document.getElementById("tips-popover");
   if (!pop) return;
+  // Start each visit with a clean search.
+  tipQuery = "";
+  const search = document.getElementById("tip-search");
+  if (search) search.value = "";
   renderTipsList();
   pop.hidden = false;
   setTimeout(() => document.getElementById("tip-input")?.focus(), 30);
@@ -2381,10 +2400,14 @@ function closeTipsPopover() {
 function renderTipsList() {
   const wrap = document.getElementById("tips-list");
   const countEl = document.getElementById("tips-popover-count");
+  const searchRow = document.getElementById("tips-search-row");
   if (!wrap) return;
 
   const tips = Array.isArray(state.tips) ? state.tips : [];
   if (countEl) countEl.textContent = tips.length;
+
+  // Search row only makes sense once there's something to search.
+  if (searchRow) searchRow.hidden = tips.length === 0;
 
   if (!tips.length) {
     wrap.innerHTML = `<div class="tips-empty">還沒有人分享小知識,你來開第一個 💡</div>`;
@@ -2396,12 +2419,24 @@ function renderTipsList() {
     String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
   );
 
-  wrap.innerHTML = sorted.map((tip) => {
+  // Filter by the search box (matches text or author).
+  const q = tipQuery;
+  const shown = q
+    ? sorted.filter((t) =>
+        `${t.text || ""} ${t.author || ""}`.toLowerCase().includes(q))
+    : sorted;
+
+  if (!shown.length) {
+    wrap.innerHTML = `<div class="tips-empty">找不到符合「${escapeHTML(q)}」的小知識</div>`;
+    return;
+  }
+
+  wrap.innerHTML = shown.map((tip) => {
     const who = tip.author
       ? `<span class="tip-who"><span class="tip-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
       : `<span class="tip-who tip-who-anon">匿名</span>`;
     return `<div class="tip-item">
-        <div class="tip-text">${linkifyTip(tip.text)}</div>
+        <div class="tip-text">${highlightTip(tip.text, q)}</div>
         <div class="tip-foot">
           <span class="tip-meta">${who}<span class="tip-time">${escapeHTML(formatDate(tip.createdAt))}</span></span>
           <button type="button" class="tip-del" data-del-tip="${escapeAttr(tip.id)}" aria-label="刪除這則" title="刪除">
@@ -2418,6 +2453,21 @@ function linkifyTip(text) {
   return safe.replace(/https?:\/\/[^\s<]+/g, (url) =>
     `<a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(url)}</a>`
   ).replace(/\n/g, "<br>");
+}
+
+// Linkified tip with the search term wrapped in <mark>. Highlighting only
+// touches text segments, never the generated <a>/<br> tags, so markup stays valid.
+function highlightTip(text, q) {
+  const html = linkifyTip(text);
+  if (!q) return html;
+  const rx = new RegExp("(" + escapeRegex(q) + ")", "gi");
+  return html.replace(/<[^>]+>|[^<]+/g, (seg) =>
+    seg[0] === "<" ? seg : seg.replace(rx, '<mark class="tip-hl">$&</mark>')
+  );
+}
+
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function submitTip() {
@@ -2437,6 +2487,10 @@ async function submitTip() {
   saveTips();
 
   input.value = "";
+  // Drop any active filter so the just-added tip is visible.
+  tipQuery = "";
+  const search = document.getElementById("tip-search");
+  if (search) search.value = "";
   renderTipsList();
   updateTipsBadge();
   input.focus();
