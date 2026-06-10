@@ -2588,19 +2588,28 @@ function imagesFromClipboard(dt) {
   }
   return out;
 }
-async function uploadTipImage(file) {
+async function uploadTipImage(file, name) {
+  const fname = name || file.name || "screenshot.png";
   const res = await fetch("/api/upload", {
     method: "POST",
     headers: {
       "Content-Type": file.type || "application/octet-stream",
       "X-Tool-Id": "tip-image",
-      "X-Filename": encodeURIComponent(file.name || "screenshot.png"),
+      "X-Filename": encodeURIComponent(fname),
       "X-Uploaded-By": encodeURIComponent(state.me || ""),
     },
     body: file,
   });
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
+}
+// Pasted screenshots come through as generic "image.png" / "screenshot.png" —
+// show them simply as "screenshot". Real picked filenames are kept as-is.
+function tipImageName(file) {
+  if (!file.name || /^(image|screenshot)(\s*\(\d+\))?\.\w+$/i.test(file.name)) {
+    return "screenshot";
+  }
+  return file.name;
 }
 async function attachTipImages(fileList, target) {
   const files = [...(fileList || [])].filter(isImageFile);
@@ -2614,8 +2623,9 @@ async function attachTipImages(fileList, target) {
     }
     try {
       toast("上傳截圖中…");
-      const meta = await uploadTipImage(file);
-      const ref = { key: meta.key, name: meta.name };
+      const name = tipImageName(file);
+      const meta = await uploadTipImage(file, name);
+      const ref = { key: meta.key, name };
       if (target === "edit") editingTipImages.push(ref);
       else pendingTipImages.push(ref);
       ok++;
