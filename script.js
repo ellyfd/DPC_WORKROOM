@@ -12,6 +12,8 @@ const state = {
   categories: [],
   creators: [],
   brands: [],
+  // shared free-text knowledge snippets ("小知識")
+  tips: [],
   filter: "all",
   brandFilter: "",
   query: "",
@@ -102,6 +104,7 @@ async function init() {
     renderSections();
   });
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
+  $("#open-tips")?.addEventListener("click", () => openTipsPopover());
   $("#open-add-cat").addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
   $("#empty-cta").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#expand-all")?.addEventListener("click", () => setAllCollapsed(false));
@@ -120,7 +123,10 @@ async function init() {
   initTileContextMenu();
   initTileTooltip();
   initFilePopover();
+  initTipsPopover();
   initShortcuts();
+
+  updateTipsBadge();
 }
 
 function initShortcuts() {
@@ -214,12 +220,14 @@ async function loadRemoteState() {
     state.categories = Array.isArray(data.categories) ? data.categories : [];
     state.creators = Array.isArray(data.creators) ? data.creators : [];
     state.brands = Array.isArray(data.brands) ? data.brands : [];
+    state.tips = Array.isArray(data.tips) ? data.tips : [];
   } catch (e) {
     toast?.("無法載入伺服器資料,先用空白起頭");
     state.localTools = [];
     state.categories = [];
     state.creators = [];
     state.brands = [];
+    state.tips = [];
   }
 }
 
@@ -245,6 +253,7 @@ async function syncStateNow() {
         categories: state.categories,
         creators: state.creators,
         brands: state.brands,
+        tips: state.tips,
       }),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -263,6 +272,7 @@ const saveTools = scheduleSync;
 const saveCats = scheduleSync;
 const saveCreators = scheduleSync;
 const saveBrands = scheduleSync;
+const saveTips = scheduleSync;
 
 /* ===== data helpers ===== */
 function allTools() {
@@ -2319,6 +2329,138 @@ function pickCreatorAsMe() {
       },
     });
   });
+}
+
+/* ===== 小知識 (shared free-text tips) =====
+   A casual, natural-language knowledge board. Anyone types a one-liner,
+   it gets tagged with their name + time and synced with the rest of the
+   state. Newest first. Lives behind the 💡 button in the header. */
+function initTipsPopover() {
+  const pop = document.getElementById("tips-popover");
+  if (!pop) return;
+
+  pop.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", closeTipsPopover)
+  );
+
+  const input = document.getElementById("tip-input");
+  const addBtn = document.getElementById("tip-add");
+  addBtn?.addEventListener("click", () => submitTip());
+  input?.addEventListener("keydown", (e) => {
+    // Enter to send, Shift+Enter for a newline.
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submitTip();
+    }
+  });
+
+  // Delegate delete clicks on the list.
+  document.getElementById("tips-list")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-del-tip]");
+    if (btn) deleteTip(btn.dataset.delTip);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !pop.hidden) closeTipsPopover();
+  });
+}
+
+function openTipsPopover() {
+  const pop = document.getElementById("tips-popover");
+  if (!pop) return;
+  renderTipsList();
+  pop.hidden = false;
+  setTimeout(() => document.getElementById("tip-input")?.focus(), 30);
+}
+
+function closeTipsPopover() {
+  const pop = document.getElementById("tips-popover");
+  if (pop) pop.hidden = true;
+}
+
+function renderTipsList() {
+  const wrap = document.getElementById("tips-list");
+  const countEl = document.getElementById("tips-popover-count");
+  if (!wrap) return;
+
+  const tips = Array.isArray(state.tips) ? state.tips : [];
+  if (countEl) countEl.textContent = tips.length;
+
+  if (!tips.length) {
+    wrap.innerHTML = `<div class="tips-empty">還沒有人分享小知識,你來開第一個 💡</div>`;
+    return;
+  }
+
+  // Newest first.
+  const sorted = [...tips].sort((a, b) =>
+    String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
+  );
+
+  wrap.innerHTML = sorted.map((tip) => {
+    const who = tip.author
+      ? `<span class="tip-who"><span class="tip-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
+      : `<span class="tip-who tip-who-anon">匿名</span>`;
+    return `<div class="tip-item">
+        <div class="tip-text">${linkifyTip(tip.text)}</div>
+        <div class="tip-foot">
+          <span class="tip-meta">${who}<span class="tip-time">${escapeHTML(formatDate(tip.createdAt))}</span></span>
+          <button type="button" class="tip-del" data-del-tip="${escapeAttr(tip.id)}" aria-label="刪除這則" title="刪除">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+// Turn bare URLs in a tip into clickable links (everything else escaped).
+function linkifyTip(text) {
+  const safe = escapeHTML(text || "");
+  return safe.replace(/https?:\/\/[^\s<]+/g, (url) =>
+    `<a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(url)}</a>`
+  ).replace(/\n/g, "<br>");
+}
+
+async function submitTip() {
+  const input = document.getElementById("tip-input");
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) { toast("先寫點什麼吧"); return; }
+
+  const author = await getMe();
+
+  state.tips.push({
+    id: "tip-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+    text,
+    author: author || "",
+    createdAt: new Date().toISOString(),
+  });
+  saveTips();
+
+  input.value = "";
+  renderTipsList();
+  updateTipsBadge();
+  input.focus();
+  toast("已分享小知識");
+}
+
+function deleteTip(id) {
+  const idx = state.tips.findIndex((t) => t.id === id);
+  if (idx < 0) return;
+  if (!confirm("刪除這則小知識?")) return;
+  state.tips.splice(idx, 1);
+  saveTips();
+  renderTipsList();
+  updateTipsBadge();
+  toast("已刪除");
+}
+
+// Reflect tip count on the header button.
+function updateTipsBadge() {
+  const badge = document.getElementById("tips-count");
+  if (!badge) return;
+  const n = Array.isArray(state.tips) ? state.tips.length : 0;
+  badge.textContent = n;
+  badge.hidden = n === 0;
 }
 
 /* ===== category picker (native select; manage via the category chip / popover) ===== */

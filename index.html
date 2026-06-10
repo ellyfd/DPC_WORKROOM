@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260601e" />
+  <link rel="stylesheet" href="styles.css?v=20260610a" />
 </head>
 <body>
   <div class="bg-soft"></div>
@@ -39,6 +39,12 @@
           <option value="">所有客人</option>
         </select>
       </div>
+
+      <button class="btn btn-tips" id="open-tips" aria-label="小知識" title="小知識 — 大家的小撇步">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
+        <span class="btn-text">小知識</span>
+        <span class="tips-count" id="tips-count" hidden>0</span>
+      </button>
 
       <button class="btn btn-primary" id="open-add" aria-label="新增工具">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M12 5v14M5 12h14"/></svg>
@@ -111,6 +117,38 @@
         <button type="button" class="new-popover-dismiss" id="new-popover-dismiss">不再顯示這批</button>
         <button type="button" class="btn btn-primary" data-close>知道了</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 小知識 — shared free-text tips board -->
+  <div class="popover" id="tips-popover" hidden>
+    <div class="popover-backdrop" data-close></div>
+    <div class="tips-popover-panel" role="dialog" aria-modal="true" aria-labelledby="tips-popover-title">
+      <div class="tips-popover-head">
+        <div>
+          <div class="tips-head-title" id="tips-popover-title">
+            <span class="tips-head-spark" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
+            </span>
+            小知識
+            <span class="tips-popover-count" id="tips-popover-count">0</span>
+          </div>
+          <div class="tips-head-sub">大家的小撇步 — 想到什麼隨手寫,像「郵件可以這樣連…」</div>
+        </div>
+        <button class="icon-btn" data-close aria-label="關閉">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="tips-composer">
+        <textarea id="tip-input" rows="2" placeholder="寫下一則小知識…(Enter 送出,Shift+Enter 換行)"></textarea>
+        <button type="button" class="btn btn-primary" id="tip-add">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+          <span>分享</span>
+        </button>
+      </div>
+
+      <div class="tips-list" id="tips-list"></div>
     </div>
   </div>
 
@@ -373,6 +411,6 @@
   <!-- Toast -->
   <div class="toast" id="toast" hidden></div>
 
-  <script src="script.js?v=20260601e"></script>
+  <script src="script.js?v=20260610a"></script>
 </body>
 </html>

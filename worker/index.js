@@ -63,7 +63,7 @@ async function getState(env) {
   const row = await env.DB.prepare("SELECT v FROM kv WHERE k = ?").bind("state").first();
   const state = row
     ? JSON.parse(row.v)
-    : { tools: [], categories: [], creators: [], brands: [] };
+    : { tools: [], categories: [], creators: [], brands: [], tips: [] };
   return json(state);
 }
 
@@ -74,6 +74,7 @@ async function putState(request, env) {
     categories: Array.isArray(body.categories) ? body.categories : [],
     creators: Array.isArray(body.creators) ? body.creators : [],
     brands: Array.isArray(body.brands) ? body.brands : [],
+    tips: Array.isArray(body.tips) ? body.tips : [],
   };
 
   // Diff against old state — anything dropped from a tool's files[] gets
