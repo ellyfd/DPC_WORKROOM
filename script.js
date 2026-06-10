@@ -2396,6 +2396,10 @@ function pickCreatorAsMe() {
    state. Newest first. Lives behind the 💡 button in the header.
    (Searching happens from the header search box, not in here.) */
 let editingTipId = null;
+let editingTipImages = [];      // images buffer for the tip being edited
+let editDraftText = "";         // in-progress edit text (survives image re-renders)
+let pendingTipImages = [];      // images attached to the tip being composed
+let imgTarget = "compose";      // where the shared file input routes its picks
 
 function initTipsPopover() {
   const pop = document.getElementById("tips-popover");
@@ -2416,7 +2420,36 @@ function initTipsPopover() {
     }
   });
 
-  // Delegate edit / save / cancel / delete clicks on the list.
+  // Screenshot attach — button, paste and drag-drop, all into the composer.
+  const imgInput = document.getElementById("tip-image-input");
+  document.getElementById("tip-image-btn")?.addEventListener("click", () => {
+    imgTarget = "compose";
+    imgInput?.click();
+  });
+  imgInput?.addEventListener("change", async (e) => {
+    await attachTipImages(e.target.files, imgTarget);
+    e.target.value = "";
+  });
+  input?.addEventListener("paste", (e) => {
+    const imgs = imagesFromClipboard(e.clipboardData);
+    if (imgs.length) { e.preventDefault(); attachTipImages(imgs, "compose"); }
+  });
+  const composer = pop.querySelector(".tips-composer");
+  composer?.addEventListener("dragover", (e) => { e.preventDefault(); composer.classList.add("dragover"); });
+  composer?.addEventListener("dragleave", () => composer.classList.remove("dragover"));
+  composer?.addEventListener("drop", (e) => {
+    e.preventDefault();
+    composer.classList.remove("dragover");
+    const imgs = [...(e.dataTransfer?.files || [])].filter(isImageFile);
+    if (imgs.length) attachTipImages(imgs, "compose");
+  });
+  // Remove a pending (composer) image.
+  document.getElementById("tip-image-previews")?.addEventListener("click", (e) => {
+    const rm = e.target.closest("[data-rm-pending]");
+    if (rm) { pendingTipImages.splice(+rm.dataset.rmPending, 1); renderPendingTipImages(); }
+  });
+
+  // Delegate edit / save / cancel / delete / image clicks on the list.
   const list = document.getElementById("tips-list");
   list?.addEventListener("click", (e) => {
     const del = e.target.closest("[data-del-tip]");
@@ -2426,7 +2459,13 @@ function initTipsPopover() {
     const save = e.target.closest("[data-save-tip]");
     if (save) { saveTipEdit(save.dataset.saveTip); return; }
     const cancel = e.target.closest("[data-cancel-tip]");
-    if (cancel) { editingTipId = null; renderTipsList(); }
+    if (cancel) { exitTipEdit(); return; }
+    const rmImg = e.target.closest("[data-rm-edit-img]");
+    if (rmImg) { captureEditDraft(); editingTipImages.splice(+rmImg.dataset.rmEditImg, 1); renderTipsList(); refocusEdit(); return; }
+    const addImg = e.target.closest("[data-edit-addimg]");
+    if (addImg) { captureEditDraft(); imgTarget = "edit"; document.getElementById("tip-image-input")?.click(); return; }
+    const thumb = e.target.closest("[data-img-key]");
+    if (thumb) { window.open(fileUrl(thumb.dataset.imgKey), "_blank", "noopener"); }
   });
   // Enter saves an edit, Shift+Enter adds a newline.
   list?.addEventListener("keydown", (e) => {
@@ -2446,6 +2485,8 @@ function openTipsPopover(focusId) {
   const pop = document.getElementById("tips-popover");
   if (!pop) return;
   editingTipId = null;
+  pendingTipImages = [];
+  renderPendingTipImages();
   renderTipsList();
   pop.hidden = false;
   if (focusId) {
@@ -2466,6 +2507,7 @@ function closeTipsPopover() {
   const pop = document.getElementById("tips-popover");
   if (pop) pop.hidden = true;
   editingTipId = null;
+  pendingTipImages = [];
 }
 
 function renderTipsList() {
@@ -2493,17 +2535,25 @@ function renderTipsList() {
     const edited = tip.updatedAt ? `<span class="tip-edited">已編輯</span>` : "";
 
     if (tip.id === editingTipId) {
-      return `<div class="tip-item is-editing">
-          <textarea class="tip-edit-input" data-edit-id="${escapeAttr(tip.id)}" rows="3">${escapeHTML(tip.text)}</textarea>
+      return `<div class="tip-item is-editing" data-tip-id="${escapeAttr(tip.id)}">
+          <textarea class="tip-edit-input" data-edit-id="${escapeAttr(tip.id)}" rows="3">${escapeHTML(editDraftText)}</textarea>
+          ${tipImagesEditHTML(editingTipImages)}
           <div class="tip-edit-actions">
-            <button type="button" class="btn btn-secondary btn-sm" data-cancel-tip="${escapeAttr(tip.id)}">取消</button>
-            <button type="button" class="btn btn-primary btn-sm" data-save-tip="${escapeAttr(tip.id)}">儲存</button>
+            <button type="button" class="tip-attach-btn tip-attach-sm" data-edit-addimg aria-label="加入截圖" title="加入截圖">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+            </button>
+            <span class="tip-edit-actions-right">
+              <button type="button" class="btn btn-secondary btn-sm" data-cancel-tip="${escapeAttr(tip.id)}">取消</button>
+              <button type="button" class="btn btn-primary btn-sm" data-save-tip="${escapeAttr(tip.id)}">儲存</button>
+            </span>
           </div>
         </div>`;
     }
 
+    const textHTML = tip.text ? `<div class="tip-text">${linkifyTip(tip.text)}</div>` : "";
     return `<div class="tip-item" data-tip-id="${escapeAttr(tip.id)}">
-        <div class="tip-text">${linkifyTip(tip.text)}</div>
+        ${textHTML}
+        ${tipImagesDisplayHTML(tip.images)}
         <div class="tip-foot">
           <span class="tip-meta">${who}<span class="tip-time">${escapeHTML(formatDate(tip.createdAt))}</span>${edited}</span>
           <span class="tip-acts">
@@ -2519,31 +2569,135 @@ function renderTipsList() {
   }).join("");
 }
 
-function startEditTip(id) {
-  editingTipId = id;
-  renderTipsList();
-  const ta = document.querySelector(`.tip-edit-input[data-edit-id="${cssEscape(id)}"]`);
-  if (ta) {
-    ta.focus();
-    ta.setSelectionRange(ta.value.length, ta.value.length);
+/* ===== tip image helpers ===== */
+function fileUrl(key) {
+  return "/files/" + String(key || "").split("/").map(encodeURIComponent).join("/");
+}
+function isImageFile(f) {
+  if (!f) return false;
+  return (f.type || "").startsWith("image/") ||
+    /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name || "");
+}
+function imagesFromClipboard(dt) {
+  const out = [];
+  for (const item of dt?.items || []) {
+    if (item.kind === "file" && (item.type || "").startsWith("image/")) {
+      const f = item.getAsFile();
+      if (f) out.push(f);
+    }
   }
+  return out;
+}
+async function uploadTipImage(file) {
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      "X-Tool-Id": "tip-image",
+      "X-Filename": encodeURIComponent(file.name || "screenshot.png"),
+      "X-Uploaded-By": encodeURIComponent(state.me || ""),
+    },
+    body: file,
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+async function attachTipImages(fileList, target) {
+  const files = [...(fileList || [])].filter(isImageFile);
+  if (!files.length) return;
+  if (target === "edit") captureEditDraft();
+  let ok = 0;
+  for (const file of files) {
+    if (file.size > MAX_FILE_BYTES) {
+      toast(`圖片太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_FILE_BYTES)})`);
+      continue;
+    }
+    try {
+      toast("上傳截圖中…");
+      const meta = await uploadTipImage(file);
+      const ref = { key: meta.key, name: meta.name };
+      if (target === "edit") editingTipImages.push(ref);
+      else pendingTipImages.push(ref);
+      ok++;
+    } catch (err) {
+      toast("截圖上傳失敗");
+      console.error(err);
+    }
+  }
+  if (target === "edit") { renderTipsList(); refocusEdit(); }
+  else renderPendingTipImages();
+  if (ok) toast(`已加入 ${ok} 張截圖`);
+}
+function tipImagesDisplayHTML(images) {
+  if (!Array.isArray(images) || !images.length) return "";
+  return `<div class="tip-imgs">` + images.map((img) =>
+    `<button type="button" class="tip-thumb" data-img-key="${escapeAttr(img.key)}" title="點開看大圖">
+       <img src="${fileUrl(img.key)}" alt="${escapeAttr(img.name || "截圖")}" loading="lazy" />
+     </button>`).join("") + `</div>`;
+}
+function tipImagesEditHTML(images) {
+  if (!Array.isArray(images) || !images.length) return "";
+  return `<div class="tip-imgs editing">` + images.map((img, i) =>
+    `<span class="tip-thumb">
+       <img src="${fileUrl(img.key)}" alt="${escapeAttr(img.name || "")}" />
+       <button type="button" class="tip-thumb-rm" data-rm-edit-img="${i}" aria-label="移除截圖">
+         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
+       </button>
+     </span>`).join("") + `</div>`;
+}
+function renderPendingTipImages() {
+  const wrap = document.getElementById("tip-image-previews");
+  if (!wrap) return;
+  wrap.hidden = pendingTipImages.length === 0;
+  wrap.innerHTML = pendingTipImages.map((img, i) =>
+    `<span class="tip-thumb">
+       <img src="${fileUrl(img.key)}" alt="${escapeAttr(img.name || "")}" />
+       <button type="button" class="tip-thumb-rm" data-rm-pending="${i}" aria-label="移除截圖">
+         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
+       </button>
+     </span>`).join("");
+}
+function captureEditDraft() {
+  const ta = document.querySelector(".tip-edit-input");
+  if (ta) editDraftText = ta.value;
+}
+function refocusEdit() {
+  const ta = document.querySelector(".tip-edit-input");
+  if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+function exitTipEdit() {
+  editingTipId = null;
+  editingTipImages = [];
+  editDraftText = "";
+  renderTipsList();
+}
+
+function startEditTip(id) {
+  const tip = state.tips.find((t) => t.id === id);
+  if (!tip) return;
+  editingTipId = id;
+  editDraftText = tip.text || "";
+  editingTipImages = Array.isArray(tip.images) ? tip.images.map((i) => ({ ...i })) : [];
+  renderTipsList();
+  refocusEdit();
 }
 
 function saveTipEdit(id) {
   const tip = state.tips.find((t) => t.id === id);
-  if (!tip) { editingTipId = null; renderTipsList(); return; }
-  const ta = document.querySelector(`.tip-edit-input[data-edit-id="${cssEscape(id)}"]`);
-  const text = (ta ? ta.value : "").trim();
-  if (!text) { toast("內容不能空白"); return; }
+  if (!tip) { exitTipEdit(); return; }
+  captureEditDraft();
+  const text = editDraftText.trim();
+  if (!text && !editingTipImages.length) { toast("內容不能空白"); return; }
 
-  if (text !== tip.text) {
+  const imagesChanged = JSON.stringify(tip.images || []) !== JSON.stringify(editingTipImages);
+  if (text !== tip.text || imagesChanged) {
     tip.text = text;
+    tip.images = editingTipImages.slice();
     tip.updatedAt = new Date().toISOString();
     saveTips();
     toast("已更新");
   }
-  editingTipId = null;
-  renderTipsList();
+  exitTipEdit();
 }
 
 // Turn bare URLs in a tip into clickable links (everything else escaped).
@@ -2573,19 +2727,22 @@ async function submitTip() {
   const input = document.getElementById("tip-input");
   if (!input) return;
   const text = input.value.trim();
-  if (!text) { toast("先寫點什麼吧"); return; }
+  if (!text && !pendingTipImages.length) { toast("寫點什麼,或加張截圖吧"); return; }
 
   const author = await getMe();
 
   state.tips.push({
     id: "tip-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
     text,
+    images: pendingTipImages.slice(),
     author: author || "",
     createdAt: new Date().toISOString(),
   });
   saveTips();
 
   input.value = "";
+  pendingTipImages = [];
+  renderPendingTipImages();
   editingTipId = null;
   renderTipsList();
   updateTipsBadge();

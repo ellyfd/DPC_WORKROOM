@@ -909,12 +909,15 @@ h1, h2, h3 { margin: 0; }
 }
 
 .tips-composer {
-  display: flex; align-items: flex-end; gap: 10px;
+  display: flex; align-items: stretch; gap: 10px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
+  border-radius: 0;
 }
+.tips-composer.dragover { background: #fffbeb; box-shadow: inset 0 0 0 2px #fcd34d; }
+.tips-composer-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .tips-composer textarea {
-  flex: 1; min-width: 0;
+  width: 100%;
   resize: none;
   min-height: 44px;
   padding: 10px 12px;
@@ -933,7 +936,55 @@ h1, h2, h3 { margin: 0; }
   background: var(--surface);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
-.tips-composer .btn { flex-shrink: 0; }
+.tips-composer-actions {
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 8px;
+  flex-shrink: 0;
+}
+.tips-composer-actions .btn { flex-shrink: 0; }
+.tip-attach-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.14s, background 0.14s, border-color 0.14s;
+}
+.tip-attach-btn:hover { color: #b45309; background: #fffbeb; border-color: #fcd34d; }
+.tip-attach-sm { width: 30px; height: 30px; border-radius: 9px; }
+
+/* thumbnail strips — pending (composer) & editing share the look */
+.tip-image-previews { display: flex; flex-wrap: wrap; gap: 8px; }
+.tip-image-previews[hidden] { display: none; }
+.tip-imgs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.tip-imgs.editing { margin-top: 0; }
+.tip-thumb {
+  position: relative;
+  display: inline-flex;
+  padding: 0; border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.tip-image-previews .tip-thumb,
+.tip-imgs.editing .tip-thumb { width: 64px; height: 64px; cursor: default; }
+.tip-image-previews .tip-thumb img,
+.tip-imgs.editing .tip-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.tip-imgs .tip-thumb { max-height: 140px; }
+.tip-imgs .tip-thumb img { max-height: 140px; width: auto; max-width: 100%; display: block; }
+.tip-imgs .tip-thumb:hover { border-color: #fcd34d; }
+.tip-thumb-rm {
+  position: absolute; top: 2px; right: 2px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  border: 0; border-radius: 50%;
+  background: rgba(15, 23, 42, 0.65);
+  color: #fff;
+  cursor: pointer;
+}
+.tip-thumb-rm:hover { background: #dc2626; }
 
 .tip-hl {
   background: #fef08a;
@@ -1149,9 +1200,10 @@ h1, h2, h3 { margin: 0; }
   background: var(--surface);
 }
 .tip-edit-actions {
-  display: flex; justify-content: flex-end; gap: 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
   margin-top: 8px;
 }
+.tip-edit-actions-right { display: flex; gap: 8px; }
 .btn-sm { padding: 5px 12px; font-size: 13px; }
 
 @media (max-width: 640px) {

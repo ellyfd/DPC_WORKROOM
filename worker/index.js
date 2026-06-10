@@ -77,12 +77,12 @@ async function putState(request, env) {
     tips: Array.isArray(body.tips) ? body.tips : [],
   };
 
-  // Diff against old state — anything dropped from a tool's files[] gets
-  // deleted from R2 so the bucket doesn't accumulate orphans.
+  // Diff against old state — anything dropped from a tool's files[] (or a
+  // tip's images[]) gets deleted from R2 so the bucket doesn't accumulate orphans.
   const oldRow = await env.DB.prepare("SELECT v FROM kv WHERE k = ?").bind("state").first();
-  const oldState = oldRow ? JSON.parse(oldRow.v) : { tools: [] };
-  const oldKeys = collectFileKeys(oldState.tools);
-  const newKeys = collectFileKeys(newState.tools);
+  const oldState = oldRow ? JSON.parse(oldRow.v) : { tools: [], tips: [] };
+  const oldKeys = collectFileKeys(oldState.tools, oldState.tips);
+  const newKeys = collectFileKeys(newState.tools, newState.tips);
   const removed = [...oldKeys].filter((k) => !newKeys.has(k));
 
   for (const key of removed) {
@@ -106,11 +106,16 @@ async function putState(request, env) {
   return json({ ok: true });
 }
 
-function collectFileKeys(tools) {
+function collectFileKeys(tools, tips) {
   const set = new Set();
   for (const t of tools || []) {
     if (Array.isArray(t.files)) {
       for (const f of t.files) if (f && f.key) set.add(f.key);
+    }
+  }
+  for (const tip of tips || []) {
+    if (Array.isArray(tip.images)) {
+      for (const img of tip.images) if (img && img.key) set.add(img.key);
     }
   }
   return set;
