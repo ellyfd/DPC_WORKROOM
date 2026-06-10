@@ -2776,13 +2776,32 @@ function deleteTip(id) {
   toast("已刪除");
 }
 
-// Reflect tip count on the header button.
+// Reflect the count of tips ADDED THIS WEEK on the header button — a gentle
+// "what's new" nudge, not the running total. Hidden when there's nothing new.
 function updateTipsBadge() {
   const badge = document.getElementById("tips-count");
   if (!badge) return;
-  const n = Array.isArray(state.tips) ? state.tips.length : 0;
+  const tips = Array.isArray(state.tips) ? state.tips : [];
+  const n = tips.filter((t) => isThisWeek(t.createdAt)).length;
   badge.textContent = n;
   badge.hidden = n === 0;
+  const btn = document.getElementById("open-tips");
+  if (btn) btn.title = n ? `小知識 — 本週新增 ${n} 則` : "小知識 — 大家的小撇步";
+}
+
+// Monday 00:00 (local) of the current week.
+function startOfWeek(ref) {
+  const x = ref ? new Date(ref) : new Date();
+  x.setHours(0, 0, 0, 0);
+  const dow = (x.getDay() + 6) % 7; // Mon=0 … Sun=6
+  x.setDate(x.getDate() - dow);
+  return x;
+}
+function isThisWeek(iso) {
+  if (!iso) return false;
+  const t = new Date(iso);
+  if (isNaN(t.getTime())) return false;
+  return t >= startOfWeek();
 }
 
 /* ===== category picker (native select; manage via the category chip / popover) ===== */
