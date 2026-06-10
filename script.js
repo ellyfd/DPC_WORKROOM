@@ -106,7 +106,10 @@ async function init() {
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#open-tips")?.addEventListener("click", () => openTipsPopover());
   // 小知識 results shown inside the board (from the header search) → open the popover.
+  // A specific tip jumps to & highlights that one; the header / "more" opens the full list.
   $("#sections-area")?.addEventListener("click", (e) => {
+    const one = e.target.closest("[data-open-tip]");
+    if (one) { openTipsPopover(one.dataset.openTip); return; }
     if (e.target.closest("[data-open-tips]")) openTipsPopover();
   });
   $("#open-add-cat").addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
@@ -776,7 +779,7 @@ function tipResultsHTML(tips, q) {
     const who = tip.author
       ? `<span class="tipres-who"><span class="tipres-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
       : `<span class="tipres-who tipres-anon">匿名</span>`;
-    return `<button type="button" class="tipres-item" data-open-tips>
+    return `<button type="button" class="tipres-item" data-open-tip="${escapeAttr(tip.id)}">
         <span class="tipres-text">${highlightTip(tip.text, ql)}</span>
         <span class="tipres-meta">${who}<span class="tipres-time">${escapeHTML(formatDate(tip.createdAt))}</span></span>
       </button>`;
@@ -2439,13 +2442,24 @@ function initTipsPopover() {
   });
 }
 
-function openTipsPopover() {
+function openTipsPopover(focusId) {
   const pop = document.getElementById("tips-popover");
   if (!pop) return;
   editingTipId = null;
   renderTipsList();
   pop.hidden = false;
-  setTimeout(() => document.getElementById("tip-input")?.focus(), 30);
+  if (focusId) {
+    // Opened from a specific 小知識 search result → jump to it and flash.
+    setTimeout(() => {
+      const el = document.querySelector(`.tip-item[data-tip-id="${cssEscape(focusId)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.classList.add("tip-flash");
+      setTimeout(() => el.classList.remove("tip-flash"), 1600);
+    }, 50);
+  } else {
+    setTimeout(() => document.getElementById("tip-input")?.focus(), 30);
+  }
 }
 
 function closeTipsPopover() {
@@ -2488,7 +2502,7 @@ function renderTipsList() {
         </div>`;
     }
 
-    return `<div class="tip-item">
+    return `<div class="tip-item" data-tip-id="${escapeAttr(tip.id)}">
         <div class="tip-text">${linkifyTip(tip.text)}</div>
         <div class="tip-foot">
           <span class="tip-meta">${who}<span class="tip-time">${escapeHTML(formatDate(tip.createdAt))}</span>${edited}</span>
