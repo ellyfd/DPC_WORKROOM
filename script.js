@@ -132,8 +132,40 @@ async function init() {
   initFilePopover();
   initTipsPopover();
   initShortcuts();
+  initOverlayScrollLock();
 
   updateTipsBadge();
+}
+
+/* ===== overlay scroll lock =====
+   While any popover is open, lock the page behind it. Otherwise two live
+   scrollbars show side by side: people scroll the inner list to its end,
+   the wheel stops (overscroll-behavior: contain), and it looks like the
+   page is stuck — they don't realize the outer scrollbar is the page's.
+   Watching the `hidden` attribute covers every open/close code path. */
+function initOverlayScrollLock() {
+  const overlays = Array.from(
+    document.querySelectorAll(".popover, .mini-popover, .modal")
+  );
+  if (!overlays.length) return;
+  const sync = () => {
+    const anyOpen = overlays.some((el) => !el.hidden);
+    const body = document.body;
+    if (anyOpen && !body.classList.contains("overlay-open")) {
+      // Replace the page scrollbar's width so the layout doesn't shift.
+      const comp = window.innerWidth - document.documentElement.clientWidth;
+      body.style.setProperty("--scrollbar-comp", `${comp}px`);
+      body.classList.add("overlay-open");
+    } else if (!anyOpen && body.classList.contains("overlay-open")) {
+      body.classList.remove("overlay-open");
+      body.style.removeProperty("--scrollbar-comp");
+    }
+  };
+  const mo = new MutationObserver(sync);
+  overlays.forEach((el) =>
+    mo.observe(el, { attributes: true, attributeFilter: ["hidden"] })
+  );
+  sync();
 }
 
 function initShortcuts() {

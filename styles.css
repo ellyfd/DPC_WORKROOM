@@ -642,6 +642,7 @@ h1, h2, h3 { margin: 0; }
   transform-origin: center;
   width: 760px;
   max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 48px); /* fallback — browsers without dvh drop the next line */
   max-height: calc(100dvh - 48px);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -863,6 +864,7 @@ h1, h2, h3 { margin: 0; }
   transform-origin: center;
   width: 540px;
   max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 48px); /* fallback — browsers without dvh drop the next line */
   max-height: calc(100dvh - 48px);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1368,6 +1370,12 @@ h1, h2, h3 { margin: 0; }
    ============================================================ */
 .popover { position: fixed; inset: 0; z-index: 100; }
 .popover[hidden] { display: none; }
+
+/* While any popover is open the page behind must not scroll — with two live
+   scrollbars, people hit the bottom of the inner list and thought the page
+   was stuck, not realizing the outer one was the page's. --scrollbar-comp
+   (set in JS) replaces the page scrollbar's width so content doesn't shift. */
+body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px); }
 .popover-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.22); }
 .popover-panel {
   position: absolute;
@@ -1375,6 +1383,7 @@ h1, h2, h3 { margin: 0; }
   left: var(--pop-left, 80px);
   width: 480px;
   max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 60px); /* fallback — browsers without dvh drop the next line */
   max-height: calc(100dvh - 60px);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2513,6 +2522,7 @@ h1, h2, h3 { margin: 0; }
     right: 8px !important;
     width: auto !important;
     top: 8px !important;
+    max-height: calc(100vh - 16px); /* fallback — browsers without dvh drop the next line */
     max-height: calc(100dvh - 16px);
     border-radius: 16px;
   }
