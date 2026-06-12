@@ -873,6 +873,12 @@ function sectionHTML(g, showHeader = true) {
   const isSystem = g.system;
   const cards = g.tools.map((t) => cardHTML(t, cv)).join("");
 
+  const addBtn = `
+    <button class="section-action section-action-add" title="在「${escapeAttr(g.name)}」新增工具" data-add-tool="${escapeAttr(isSystem ? "" : g.name)}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+      <span>新增</span>
+    </button>`;
+
   const header = !showHeader ? "" : `
     <div class="section-head">
       <div class="section-title-row">
@@ -880,16 +886,17 @@ function sectionHTML(g, showHeader = true) {
         <span class="section-title">${escapeHTML(g.name)}</span>
         <span class="section-count">${g.tools.length}</span>
       </div>
-      ${isSystem ? "" : `
-        <div class="section-actions">
+      <div class="section-actions">
+        ${addBtn}
+        ${isSystem ? "" : `
           <button class="section-action" title="編輯分類" data-edit-cat="${escapeAttr(g.name)}">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
           </button>
           <button class="section-action danger" title="刪除分類" data-del-cat="${escapeAttr(g.name)}">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           </button>
-        </div>
-      `}
+        `}
+      </div>
     </div>
   `;
 
@@ -957,6 +964,14 @@ function wireSections() {
     card.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       openTileContextMenu(card.dataset.id, e.clientX, e.clientY);
+    });
+  });
+  // "+ 新增" in a section header → new-tool popover with that category preselected
+  $$("#sections-area [data-add-tool]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.prefillCategory = btn.dataset.addTool || null;
+      openToolPopover(null, btn);
     });
   });
   $$("#sections-area [data-edit-cat]").forEach((btn) => {

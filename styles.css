@@ -354,6 +354,16 @@ h1, h2, h3 { margin: 0; }
 }
 .section-action:hover { color: var(--accent); background: var(--accent-soft); }
 .section-action.danger:hover { color: var(--danger); background: var(--danger-soft); }
+/* "+ 新增" — adds a tool straight into this category */
+.section-action-add {
+  width: auto;
+  padding: 0 10px 0 8px;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
 
 /* hidden in this layout but the JS still emits these wrappers */
 .section-chevron { display: none; }
