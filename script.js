@@ -17,6 +17,8 @@ const state = {
   filter: "all",
   brandFilter: "",
   query: "",
+  // header search scope — "" 全部 | "tips" 小知識 | "tools" 工具
+  searchScope: "",
   editingId: null,
   editingCat: null,
   prefillCategory: null,
@@ -103,14 +105,27 @@ async function init() {
     state.brandFilter = e.target.value || "";
     renderSections();
   });
+  $("#search-scope")?.addEventListener("change", (e) => {
+    state.searchScope = e.target.value || "";
+    renderSections();
+  });
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#open-tips")?.addEventListener("click", () => openTipsPopover());
-  // 小知識 results shown inside the board (from the header search) → open the popover.
-  // A specific tip jumps to & highlights that one; the header / "more" opens the full list.
+  // 小知識 posts shown inside the board (from the header search) → open the popover.
+  // Links / screenshots inside a post act on their own; anywhere else on the
+  // post jumps to & highlights that one, the header opens the full list.
   $("#sections-area")?.addEventListener("click", (e) => {
+    if (e.target.closest("a")) return;
+    const thumb = e.target.closest("[data-img-key]");
+    if (thumb) { window.open(fileUrl(thumb.dataset.imgKey), "_blank", "noopener"); return; }
     const one = e.target.closest("[data-open-tip]");
     if (one) { openTipsPopover(one.dataset.openTip); return; }
     if (e.target.closest("[data-open-tips]")) openTipsPopover();
+  });
+  $("#sections-area")?.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const one = e.target.closest("[data-open-tip]");
+    if (one && e.target === one) { e.preventDefault(); openTipsPopover(one.dataset.openTip); }
   });
   $("#open-add-cat").addEventListener("click", (e) => openCatPopover(null, e.currentTarget));
   $("#empty-cta").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
@@ -762,6 +777,23 @@ function renderSections() {
   }
   empty.hidden = true;
 
+  // The header search also looks through 小知識 — every match shows as its
+  // own post above the tool sections. The scope filter narrows the search:
+  // 「小知識」shows only tips (the whole wall when there's no query yet),
+  // 「工具」skips them entirely.
+  const scope = state.searchScope;
+  let tipsBlock = "";
+  if (scope !== "tools" && (state.query || scope === "tips")) {
+    const tipMatches = matchingTips(state.query);
+    tipsBlock = tipMatches.length ? tipResultsHTML(tipMatches, state.query) : "";
+  }
+
+  if (scope === "tips") {
+    area.innerHTML = tipsBlock ||
+      `<div class="section"><div class="section-body"><div class="section-grid"><div class="section-empty">沒有符合條件的小知識</div></div></div></div>`;
+    return;
+  }
+
   let groups = groupedTools();
   if (state.filter !== "all") {
     groups = groups.filter((g) => g.name === state.filter);
@@ -777,11 +809,6 @@ function renderSections() {
       .filter((g) => g.tools.length);
   }
 
-  // The header search also looks through 小知識 — surface any matches as a
-  // block above the tool sections so they aren't "missing".
-  const tipMatches = state.query ? matchingTips(state.query) : [];
-  const tipsBlock = tipMatches.length ? tipResultsHTML(tipMatches, state.query) : "";
-
   if (!groups.length) {
     // Found tips but no tools → just show the tips block (no "no tools" noise).
     area.innerHTML = tipsBlock ||
@@ -794,31 +821,34 @@ function renderSections() {
 }
 
 // Tips whose text or author matches a query, newest first.
+// An empty query matches everything (used by the「小知識」search scope).
 function matchingTips(q) {
   const query = String(q || "").toLowerCase();
-  if (!query) return [];
   const tips = Array.isArray(state.tips) ? state.tips : [];
   return tips
-    .filter((t) => `${t.text || ""} ${t.author || ""}`.toLowerCase().includes(query))
+    .filter((t) => !query || `${t.text || ""} ${t.author || ""}`.toLowerCase().includes(query))
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 }
 
 // A board section showing 小知識 that match the header search.
+// Every matching tip is its own full post — complete text, screenshots and
+// author, same as the popover wall. Clicking a post jumps to it there.
 function tipResultsHTML(tips, q) {
   const ql = String(q || "").toLowerCase();
-  const shown = tips.slice(0, 4);
-  const items = shown.map((tip) => {
+  const posts = tips.map((tip) => {
     const who = tip.author
-      ? `<span class="tipres-who"><span class="tipres-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
-      : `<span class="tipres-who tipres-anon">匿名</span>`;
-    return `<button type="button" class="tipres-item" data-open-tip="${escapeAttr(tip.id)}">
-        <span class="tipres-text">${highlightTip(tip.text, ql)}</span>
-        <span class="tipres-meta">${who}<span class="tipres-time">${escapeHTML(formatDate(tip.createdAt))}</span></span>
-      </button>`;
+      ? `<span class="tip-who"><span class="tip-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
+      : `<span class="tip-who tip-who-anon">匿名</span>`;
+    const edited = tip.updatedAt ? `<span class="tip-edited">已編輯</span>` : "";
+    const textHTML = tip.text ? `<div class="tip-text">${highlightTip(tip.text, ql)}</div>` : "";
+    return `<article class="tipres-post" data-open-tip="${escapeAttr(tip.id)}" role="button" tabindex="0">
+        ${textHTML}
+        ${tipImagesDisplayHTML(tip.images)}
+        <div class="tip-foot">
+          <span class="tip-meta">${who}<span class="tip-time">${escapeHTML(formatDate(tip.createdAt))}</span>${edited}</span>
+        </div>
+      </article>`;
   }).join("");
-  const more = tips.length > shown.length
-    ? `<button type="button" class="tipres-more" data-open-tips>還有 ${tips.length - shown.length} 則,查看全部 →</button>`
-    : "";
   return `
     <section class="section tips-result">
       <div class="section-head">
@@ -832,7 +862,7 @@ function tipResultsHTML(tips, q) {
         <button type="button" class="tipres-openall" data-open-tips>開啟小知識 →</button>
       </div>
       <div class="section-body">
-        <div class="tipres-list">${items}${more}</div>
+        <div class="tipres-list">${posts}</div>
       </div>
     </section>
   `;
