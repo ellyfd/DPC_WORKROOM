@@ -652,11 +652,18 @@ function renderNewArrivalsNotice(tools, sig) {
   );
 }
 
+// Multi-keyword search: split the query on spaces and require every keyword
+// to appear somewhere (any order) —「Cowork 本機」hits "Cowork 在本機做事情".
+function queryTokens(q) {
+  return String(q || "").toLowerCase().split(/\s+/).filter(Boolean);
+}
+
 function matchesQuery(t) {
-  if (!state.query) return true;
+  const tokens = queryTokens(state.query);
+  if (!tokens.length) return true;
   const hay = [t.name, t.creator, t.description, t.category, t.brand]
     .join(" ").toLowerCase();
-  return hay.includes(state.query);
+  return tokens.every((tk) => hay.includes(tk));
 }
 
 /* ===== render ===== */
@@ -820,58 +827,63 @@ function renderSections() {
   wireSections();
 }
 
-// Tips whose text or author matches a query, newest first.
+// Tips whose text or author matches every search keyword, newest first.
 // An empty query matches everything (used by the「小知識」search scope).
 function matchingTips(q) {
-  const query = String(q || "").toLowerCase();
+  const tokens = queryTokens(q);
   const tips = Array.isArray(state.tips) ? state.tips : [];
   return tips
-    .filter((t) => !query || `${t.text || ""} ${t.author || ""}`.toLowerCase().includes(query))
+    .filter((t) => {
+      const hay = `${t.text || ""} ${t.author || ""}`.toLowerCase();
+      return tokens.every((tk) => hay.includes(tk));
+    })
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 }
 
-// A board section showing 小知識 that match the header search.
-// Every matching tip is its own full post — complete text, screenshots and
-// author, same as the popover wall. Clicking a post jumps to it there.
+// 小知識 matches surfaced on the board by the header search.
+// Every matching tip is its own standalone card in the board grid — complete
+// text, screenshots and author, same anatomy as the popover wall. A slim
+// full-width header row sits above them. Clicking a card jumps to that tip.
 function tipResultsHTML(tips, q) {
   const ql = String(q || "").toLowerCase();
+  const head = `
+    <div class="tipres-head">
+      <div class="tipres-head-title">
+        <span class="tipres-spark" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
+        </span>
+        <span>小知識</span>
+        <span class="section-count">${tips.length}</span>
+      </div>
+      <button type="button" class="tipres-openall" data-open-tips>開啟小知識 →</button>
+    </div>`;
   const posts = tips.map((tip) => {
     const who = tip.author
       ? `<span class="tip-who"><span class="tip-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
       : `<span class="tip-who tip-who-anon">匿名</span>`;
     const edited = tip.updatedAt ? `<span class="tip-edited">已編輯</span>` : "";
     const textHTML = tip.text ? `<div class="tip-text">${highlightTip(tip.text, ql)}</div>` : "";
-    return `<article class="tipres-post" data-open-tip="${escapeAttr(tip.id)}" role="button" tabindex="0">
+    return `<section class="section tips-result tipres-post" data-open-tip="${escapeAttr(tip.id)}" role="button" tabindex="0">
         ${textHTML}
         ${tipImagesDisplayHTML(tip.images)}
         <div class="tip-foot">
           <span class="tip-meta">${who}<span class="tip-time">${escapeHTML(formatDate(tip.createdAt))}</span>${edited}</span>
         </div>
-      </article>`;
+      </section>`;
   }).join("");
-  return `
-    <section class="section tips-result">
-      <div class="section-head">
-        <div class="section-title-row">
-          <span class="tipres-spark" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
-          </span>
-          <span class="section-title">小知識</span>
-          <span class="section-count">${tips.length}</span>
-        </div>
-        <button type="button" class="tipres-openall" data-open-tips>開啟小知識 →</button>
-      </div>
-      <div class="section-body">
-        <div class="tipres-list">${posts}</div>
-      </div>
-    </section>
-  `;
+  return head + posts;
 }
 
 function sectionHTML(g, showHeader = true) {
   const cv = g.color;
   const isSystem = g.system;
   const cards = g.tools.map((t) => cardHTML(t, cv)).join("");
+
+  const addBtn = `
+    <button class="section-action section-action-add" title="在「${escapeAttr(g.name)}」新增工具" data-add-tool="${escapeAttr(isSystem ? "" : g.name)}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+      <span>新增</span>
+    </button>`;
 
   const header = !showHeader ? "" : `
     <div class="section-head">
@@ -880,16 +892,17 @@ function sectionHTML(g, showHeader = true) {
         <span class="section-title">${escapeHTML(g.name)}</span>
         <span class="section-count">${g.tools.length}</span>
       </div>
-      ${isSystem ? "" : `
-        <div class="section-actions">
+      <div class="section-actions">
+        ${addBtn}
+        ${isSystem ? "" : `
           <button class="section-action" title="編輯分類" data-edit-cat="${escapeAttr(g.name)}">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
           </button>
           <button class="section-action danger" title="刪除分類" data-del-cat="${escapeAttr(g.name)}">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           </button>
-        </div>
-      `}
+        `}
+      </div>
     </div>
   `;
 
@@ -957,6 +970,14 @@ function wireSections() {
     card.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       openTileContextMenu(card.dataset.id, e.clientX, e.clientY);
+    });
+  });
+  // "+ 新增" in a section header → new-tool popover with that category preselected
+  $$("#sections-area [data-add-tool]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.prefillCategory = btn.dataset.addTool || null;
+      openToolPopover(null, btn);
     });
   });
   $$("#sections-area [data-edit-cat]").forEach((btn) => {
@@ -2789,8 +2810,9 @@ function linkifyTip(text) {
 // touches text segments, never the generated <a>/<br> tags, so markup stays valid.
 function highlightTip(text, q) {
   const html = linkifyTip(text);
-  if (!q) return html;
-  const rx = new RegExp("(" + escapeRegex(q) + ")", "gi");
+  const tokens = queryTokens(q);
+  if (!tokens.length) return html;
+  const rx = new RegExp("(" + tokens.map(escapeRegex).join("|") + ")", "gi");
   return html.replace(/<[^>]+>|[^<]+/g, (seg) =>
     seg[0] === "<" ? seg : seg.replace(rx, '<mark class="tip-hl">$&</mark>')
   );

@@ -354,6 +354,16 @@ h1, h2, h3 { margin: 0; }
 }
 .section-action:hover { color: var(--accent); background: var(--accent-soft); }
 .section-action.danger:hover { color: var(--danger); background: var(--danger-soft); }
+/* "+ 新增" — adds a tool straight into this category */
+.section-action-add {
+  width: auto;
+  padding: 0 10px 0 8px;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
 
 /* hidden in this layout but the JS still emits these wrappers */
 .section-chevron { display: none; }
@@ -1073,23 +1083,30 @@ h1, h2, h3 { margin: 0; }
   white-space: nowrap;
 }
 .tipres-openall:hover { background: #fffbeb; text-decoration: underline; text-underline-offset: 2px; }
-/* Each matching tip is a full post card, one per row — same anatomy as the
-   popover wall (.tip-text / .tip-imgs / .tip-foot). */
-.tipres-list {
-  display: flex; flex-direction: column;
-  gap: 10px;
+/* Slim full-width header row above the tip cards */
+.tipres-head {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px;
 }
+.tipres-head-title {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #b45309;
+}
+.tipres-head-title .tipres-spark { align-self: center; }
+/* Each matching tip is its own standalone card in the board grid — same
+   anatomy as the popover wall (.tip-text / .tip-imgs / .tip-foot). */
 .tipres-post {
-  padding: 11px 13px;
-  border: 1px solid var(--border);
-  border-radius: 13px;
-  background: var(--surface);
   cursor: pointer;
-  transition: border-color 0.14s, box-shadow 0.14s;
+  transition: border-color 0.14s, box-shadow 0.14s, transform 0.14s;
 }
 .tipres-post:hover {
   border-color: #fcd34d;
   box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 .tipres-post:focus-visible {
   outline: 2px solid #f59e0b;
