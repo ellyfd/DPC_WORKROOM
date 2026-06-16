@@ -35,7 +35,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; min-height: 100%; }
+html, body { margin: 0; padding: 0; min-height: 100%; overflow-x: hidden; }
 body {
   font-family: var(--font-sans);
   font-size: 15px;
@@ -2500,17 +2500,22 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
     gap: 22px;
   }
 
-  /* Hero collapses to 2 rows: brand + (search wrapped with button) */
+  /* Hero → brand + action buttons on the top row, full-width search below.
+     Keeps everything inside the viewport (no horizontal overflow). */
   .hero {
     display: grid;
     grid-template-columns: 1fr auto auto auto;
     grid-template-areas:
-      "brand brand brand brand"
-      "search wish tips add";
-    gap: 12px;
+      "brand wish tips add"
+      "search search search search";
+    gap: 12px 8px;
     align-items: center;
   }
-  .brand { grid-area: brand; }
+  .brand { grid-area: brand; min-width: 0; gap: 10px; }
+  .logo { width: 40px; height: 40px; font-size: 19px; border-radius: 12px; }
+  .brand-name { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Desktop-only hint (mentions right-click) — hide on touch to save space */
+  .brand-sub { display: none; }
   .search { grid-area: search; max-width: none; height: 44px; }
   .hero .btn-wish { grid-area: wish; }
   .hero .btn-tips { grid-area: tips; }
@@ -2544,8 +2549,6 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
     margin: 0;
     border: 2px solid var(--surface);
   }
-
-  .brand-sub { font-size: 12.5px; }
 
   /* Sections: smaller titles, action buttons always visible (no hover on touch) */
   .section-title { font-size: 19px; }
