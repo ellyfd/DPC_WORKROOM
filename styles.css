@@ -293,6 +293,13 @@ h1, h2, h3 { margin: 0; }
   background: var(--accent-soft);
   border-style: solid;
 }
+/* Icon-only variant — circular "+" with no label */
+.ghost-pill-icon {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
 
 /* ============================================================
    Board (vertical stack of category sections)
@@ -2557,6 +2564,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   /* Page footer pill */
   .page-foot { padding-top: 4px; }
   .ghost-pill { height: 40px; padding: 0 18px; font-size: 14.5px; }
+  .ghost-pill-icon { width: 40px; padding: 0; }
 
   /* Popovers go full-screen-ish. Use dvh so 100vh doesn't include the iOS
      Safari URL bar — that bug is what was pushing 刪除/儲存 off-screen. */
