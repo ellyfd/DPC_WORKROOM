@@ -2554,7 +2554,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
      Action group is pulled flush so the last icon lines up with the search box. */
   .section-title { font-size: 17px; }
   .section-head { padding: 0; margin-bottom: 8px; gap: 8px; }
-  .section-actions { opacity: 1; gap: 0; margin-right: -4px; }
+  .section-actions { opacity: 1; gap: 2px; }
   .section-action { width: 30px; height: 30px; border-radius: 8px; }
   .section-action svg { width: 15px; height: 15px; }
 
