@@ -2481,7 +2481,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
     gap: 14px;
   }
   .brand-filter { display: none; }
-  .board { grid-template-columns: 1fr; gap: 16px; }
+  .board { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .section-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
   .card-top { width: 72px; height: 72px; }
   .card-icon { width: 72px; height: 72px; font-size: 30px; border-radius: 16px; }
@@ -2561,7 +2561,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   /* Icon grid: 4 columns on phones */
   .section { padding: 14px 14px; border-radius: 16px; }
   .section-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px 4px;
   }
   .card { padding: 4px 2px 8px; gap: 6px; border-radius: 12px; }

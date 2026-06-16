@@ -1,13 +1,13 @@
 /* DPC Hub — service worker (PWA offline shell).
    Bump CACHE when shipping new assets; old caches are purged on activate. */
-const CACHE = "dpc-hub-v20260616h";
+const CACHE = "dpc-hub-v20260616i";
 
 // App shell precached on install. Versioned query strings match index.html so
 // a bump fetches fresh copies; the no-store routes below are never cached.
 const SHELL = [
   "/",
   "/index.html",
-  "/styles.css?v=20260616h",
+  "/styles.css?v=20260616i",
   "/script.js?v=20260616d",
   "/manifest.webmanifest",
   "/icon-192.png?v=20260616a",
