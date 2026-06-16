@@ -972,9 +972,8 @@ function sectionHTML(g, showHeader = true) {
   const cards = g.tools.map((t) => cardHTML(t, cv)).join("");
 
   const addBtn = `
-    <button class="section-action section-action-add" title="在「${escapeAttr(g.name)}」新增工具" data-add-tool="${escapeAttr(isSystem ? "" : g.name)}">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
-      <span>新增</span>
+    <button class="section-action section-action-add" title="在「${escapeAttr(g.name)}」新增工具" aria-label="在「${escapeAttr(g.name)}」新增工具" data-add-tool="${escapeAttr(isSystem ? "" : g.name)}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
     </button>`;
 
   const header = !showHeader ? "" : `
