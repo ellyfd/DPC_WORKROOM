@@ -76,6 +76,16 @@ h1, h2, h3 { margin: 0; }
   gap: 36px;
 }
 
+/* Installed PWA (standalone) — respect iOS notch / home-indicator safe areas */
+@media (display-mode: standalone) {
+  .page {
+    padding-top: max(40px, env(safe-area-inset-top));
+    padding-left: max(32px, env(safe-area-inset-left));
+    padding-right: max(32px, env(safe-area-inset-right));
+    padding-bottom: max(60px, env(safe-area-inset-bottom));
+  }
+}
+
 /* ============================================================
    Hero header (brand + search + one button)
    ============================================================ */
@@ -2448,7 +2458,14 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 /* phones — stacked compact layout */
 @media (max-width: 640px) {
   body { font-size: 15px; }
-  .page { padding: 16px 14px 40px; gap: 22px; }
+  .page {
+    padding:
+      max(16px, env(safe-area-inset-top))
+      max(14px, env(safe-area-inset-right))
+      max(40px, env(safe-area-inset-bottom))
+      max(14px, env(safe-area-inset-left));
+    gap: 22px;
+  }
 
   /* Hero collapses to 2 rows: brand + (search wrapped with button) */
   .hero {
