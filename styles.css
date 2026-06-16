@@ -2508,12 +2508,12 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
     grid-template-areas:
       "brand wish tips add"
       "search search search search";
-    gap: 12px 8px;
+    gap: 12px 6px;
     align-items: center;
   }
-  .brand { grid-area: brand; min-width: 0; gap: 10px; }
-  .logo { width: 40px; height: 40px; font-size: 19px; border-radius: 12px; }
-  .brand-name { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand { grid-area: brand; min-width: 0; gap: 9px; }
+  .logo { width: 34px; height: 34px; font-size: 16px; border-radius: 10px; }
+  .brand-name { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Desktop-only hint (mentions right-click) — hide on touch to save space */
   .brand-sub { display: none; }
   .search { grid-area: search; max-width: none; height: 44px; }
@@ -2521,8 +2521,8 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   .hero .btn-tips { grid-area: tips; }
   .hero .btn-primary {
     grid-area: add;
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     padding: 0;
     border-radius: 12px;
     gap: 0;
@@ -2530,8 +2530,8 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   .hero .btn-tips,
   .hero .btn-wish {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     padding: 0;
     border-radius: 12px;
     gap: 0;
