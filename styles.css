@@ -293,6 +293,13 @@ h1, h2, h3 { margin: 0; }
   background: var(--accent-soft);
   border-style: solid;
 }
+/* Icon-only variant — circular "+" with no label */
+.ghost-pill-icon {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
 
 /* ============================================================
    Board (vertical stack of category sections)
@@ -2398,6 +2405,36 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 .modal-panel iframe { border: 0; flex: 1; background: #fff; }
 
 /* ============================================================
+   Pull-to-refresh indicator (mobile / installed PWA)
+   ============================================================ */
+.ptr {
+  position: fixed;
+  top: 0; left: 50%;
+  margin-top: max(8px, env(safe-area-inset-top));
+  transform: translate(-50%, calc(var(--ptr, 0px) - 52px));
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  color: var(--text-mute);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 300;
+}
+.ptr.visible { opacity: 1; }
+.ptr.ready { color: var(--accent); border-color: var(--accent); }
+.ptr-spinner { width: 19px; height: 19px; display: flex; }
+.ptr-spinner svg {
+  width: 19px; height: 19px;
+  transform: rotate(calc(var(--ptr, 0px) * 2.6deg));
+}
+.ptr.refreshing { color: var(--accent); }
+.ptr.refreshing .ptr-spinner { animation: ptr-spin 0.7s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
    Toast
    ============================================================ */
 .toast {
@@ -2557,6 +2594,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   /* Page footer pill */
   .page-foot { padding-top: 4px; }
   .ghost-pill { height: 40px; padding: 0 18px; font-size: 14.5px; }
+  .ghost-pill-icon { width: 40px; padding: 0; }
 
   /* Popovers go full-screen-ish. Use dvh so 100vh doesn't include the iOS
      Safari URL bar — that bug is what was pushing 刪除/儲存 off-screen. */

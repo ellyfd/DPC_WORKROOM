@@ -94,6 +94,9 @@ async function init() {
 
   render();
 
+  // Pull-to-refresh (mobile / installed PWA) — reload server data on pull-down.
+  setupPullToRefresh();
+
   // After the board is up, surface a dismissable "本週上新" notice (once per batch).
   maybeShowNewArrivalsNotice();
 
@@ -283,6 +286,95 @@ async function loadRemoteState() {
     state.brands = [];
     state.tips = [];
   }
+}
+
+/* Re-fetch server state and repaint. Used by pull-to-refresh (and anywhere
+   we want to pick up edits made on another device). */
+async function refreshFromServer() {
+  await loadRemoteState();
+  migrateToolsSchema();
+  ensureCategoriesFromTools();
+  ensureCreatorsFromTools();
+  ensureBrandsFromTools();
+  render();
+  // Also nudge the service worker to look for a newer app shell.
+  try { (await navigator.serviceWorker?.getRegistration())?.update(); } catch {}
+  toast?.("已更新");
+}
+
+/* Pull-to-refresh — the browser's native gesture is gone once the app is
+   installed (standalone), so we recreate it: pull down from the very top to
+   reload data from the server. */
+function setupPullToRefresh() {
+  if (!("ontouchstart" in window)) return; // touch devices only
+
+  const THRESHOLD = 70;  // px of pull needed to trigger
+  const MAX = 120;       // clamp the visual travel
+
+  const ind = document.createElement("div");
+  ind.className = "ptr";
+  ind.innerHTML =
+    '<div class="ptr-spinner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></div>';
+  document.body.appendChild(ind);
+
+  let startY = 0, dist = 0, pulling = false, refreshing = false;
+
+  const atTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+  const overlayOpen = () => document.body.classList.contains("overlay-open");
+
+  function reset() {
+    ind.style.transition = "";
+    ind.style.setProperty("--ptr", "0px");
+    ind.classList.remove("visible", "ready");
+    dist = 0;
+  }
+
+  window.addEventListener("touchstart", (e) => {
+    if (refreshing || overlayOpen() || !atTop() || e.touches.length !== 1) {
+      pulling = false;
+      return;
+    }
+    startY = e.touches[0].clientY;
+    pulling = true;
+    dist = 0;
+    ind.style.transition = "none"; // follow the finger 1:1 while pulling
+  }, { passive: true });
+
+  window.addEventListener("touchmove", (e) => {
+    if (!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { pulling = false; reset(); return; } // moving up → cancel
+    dist = Math.min(MAX, dy * 0.5); // resistance
+    ind.classList.add("visible");
+    ind.classList.toggle("ready", dist >= THRESHOLD);
+    ind.style.setProperty("--ptr", dist + "px");
+    if (e.cancelable) e.preventDefault(); // suppress native overscroll
+  }, { passive: false });
+
+  async function trigger() {
+    refreshing = true;
+    ind.style.transition = "transform .2s ease";
+    ind.classList.remove("ready");
+    ind.classList.add("visible", "refreshing");
+    ind.style.setProperty("--ptr", THRESHOLD + "px");
+    try {
+      await refreshFromServer();
+    } finally {
+      setTimeout(() => {
+        ind.classList.remove("refreshing");
+        reset();
+        refreshing = false;
+      }, 400);
+    }
+  }
+
+  window.addEventListener("touchend", () => {
+    if (!pulling) return;
+    pulling = false;
+    ind.style.transition = "transform .2s ease, opacity .2s ease";
+    if (dist >= THRESHOLD && !refreshing) trigger();
+    else reset();
+  }, { passive: true });
 }
 
 let _syncTimer = null;
