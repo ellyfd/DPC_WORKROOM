@@ -81,7 +81,7 @@ h1, h2, h3 { margin: 0; }
    ============================================================ */
 .hero {
   display: grid;
-  grid-template-columns: auto 1fr auto auto auto;
+  grid-template-columns: auto 1fr auto auto auto auto;
   align-items: center;
   gap: 16px;
 }
@@ -873,6 +873,22 @@ h1, h2, h3 { margin: 0; }
 @media (max-width: 640px) {
   .new-popover-body { column-count: 1; }
 }
+
+/* ============================================================
+   許願池 — external wish-pool link (⭐ header button)
+   ============================================================ */
+.btn-wish {
+  background: var(--surface);
+  color: var(--text-dim);
+  border-color: var(--border);
+  text-decoration: none;
+}
+.btn-wish:hover {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-color: #c4b5fd;
+}
+.btn-wish svg { color: #8b5cf6; }
 
 /* ============================================================
    小知識 — shared free-text tips board (💡 header button + popover)
@@ -2418,7 +2434,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 @media (max-width: 880px) {
   .page { padding: 28px 22px 48px; gap: 28px; }
   .hero {
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: auto 1fr auto auto auto;
     gap: 14px;
   }
   .brand-filter { display: none; }
@@ -2437,15 +2453,16 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   /* Hero collapses to 2 rows: brand + (search wrapped with button) */
   .hero {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 1fr auto auto auto;
     grid-template-areas:
-      "brand brand brand"
-      "search tips add";
+      "brand brand brand brand"
+      "search wish tips add";
     gap: 12px;
     align-items: center;
   }
   .brand { grid-area: brand; }
   .search { grid-area: search; max-width: none; height: 44px; }
+  .hero .btn-wish { grid-area: wish; }
   .hero .btn-tips { grid-area: tips; }
   .hero .btn-primary {
     grid-area: add;
@@ -2455,7 +2472,8 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
     border-radius: 12px;
     gap: 0;
   }
-  .hero .btn-tips {
+  .hero .btn-tips,
+  .hero .btn-wish {
     position: relative;
     width: 44px;
     height: 44px;
@@ -2464,8 +2482,10 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
     gap: 0;
   }
   .hero .btn-tips .btn-text { display: none; }
+  .hero .btn-wish .btn-text { display: none; }
   .hero .btn-primary .btn-text { display: none; }
   .hero .btn-primary svg,
+  .hero .btn-wish svg,
   .hero .btn-tips svg { width: 18px; height: 18px; }
   /* count badge floats to the corner when the label is hidden */
   .hero .btn-tips .tips-count {
