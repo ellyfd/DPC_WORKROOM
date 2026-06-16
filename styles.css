@@ -2550,13 +2550,16 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
     border: 2px solid var(--surface);
   }
 
-  /* Sections: smaller titles, action buttons always visible (no hover on touch) */
-  .section-title { font-size: 19px; }
-  .section-actions { opacity: 1; }
-  .section-action { width: 36px; height: 36px; }
+  /* Sections: smaller titles + compact action buttons (always visible on touch).
+     Action group is pulled flush so the last icon lines up with the search box. */
+  .section-title { font-size: 17px; }
+  .section-head { padding: 0; margin-bottom: 8px; gap: 8px; }
+  .section-actions { opacity: 1; gap: 2px; }
+  .section-action { width: 30px; height: 30px; border-radius: 8px; }
+  .section-action svg { width: 15px; height: 15px; }
 
   /* Icon grid: 4 columns on phones */
-  .section { padding: 14px 12px; border-radius: 16px; }
+  .section { padding: 14px 14px; border-radius: 16px; }
   .section-grid {
     grid-template-columns: repeat(4, 1fr);
     gap: 14px 4px;
