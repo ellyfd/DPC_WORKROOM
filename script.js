@@ -119,9 +119,9 @@ async function init() {
   document.addEventListener("visibilitychange", async () => {
     if (document.visibilityState !== "visible") return;
     if (document.body.classList.contains("overlay-open")) return; // mid-edit
-    if (_syncing || _syncTimer) return; // local changes in flight
+    if (_syncing || _syncTimer || _dirty) return; // unconfirmed local edits
     if (Date.now() - _lastLoadedAt < 30 * 1000) return;
-    await loadRemoteState();
+    if (!(await quietRefresh())) return; // offline / error → keep what we have
     migrateToolsSchema();
     ensureCategoriesFromTools();
     ensureCreatorsFromTools();
@@ -339,10 +339,35 @@ function adoptServerState(data) {
   state.rev = Number.isFinite(data.rev) ? data.rev : 0;
 }
 
+/* Non-destructive server re-fetch: on any failure the current in-memory
+   state is left untouched (unlike loadRemoteState, whose blank-slate
+   fallback is only right at initial load). */
+async function quietRefresh() {
+  try {
+    const res = await fetch("/api/state", { cache: "no-cache" });
+    if (!res.ok) return false;
+    adoptServerState(await res.json());
+    _lastLoadedAt = Date.now();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /* Re-fetch server state and repaint. Used by pull-to-refresh (and anywhere
    we want to pick up edits made on another device). */
 async function refreshFromServer() {
-  await loadRemoteState();
+  // Unconfirmed local edits first — push them up so the refresh can't
+  // silently replace them with the server copy.
+  if (_dirty || _syncTimer || _syncing) await syncStateNow();
+  if (_dirty || _syncTimer || _syncing) {
+    toast?.("尚未同步完成,稍後再試");
+    return;
+  }
+  if (!(await quietRefresh())) {
+    toast?.("更新失敗,請檢查網路");
+    return;
+  }
   migrateToolsSchema();
   ensureCategoriesFromTools();
   ensureCreatorsFromTools();
@@ -431,8 +456,12 @@ function setupPullToRefresh() {
 let _syncTimer = null;
 let _syncing = false;
 let _syncPending = false;
+// true while local edits exist that the server hasn't confirmed — background
+// refreshes must not replace local state while this is set.
+let _dirty = false;
 
 function scheduleSync() {
+  _dirty = true;
   if (_syncTimer) clearTimeout(_syncTimer);
   _syncTimer = setTimeout(syncStateNow, 250);
 }
@@ -460,8 +489,9 @@ async function syncStateNow() {
     if (out && out.merged && out.state) {
       // We were stale — the server merged our changes with someone else's.
       // Adopt the merged result, unless more local edits are already queued
-      // (then stay marked stale; the follow-up sync merges again).
-      if (_syncPending) {
+      // (either mid-sync via _syncPending or debounce-queued via _syncTimer)
+      // — then stay marked stale; the follow-up sync merges again.
+      if (_syncPending || _syncTimer) {
         state.rev = 0;
       } else {
         adoptServerState(out.state);
@@ -470,8 +500,12 @@ async function syncStateNow() {
     } else if (out && Number.isFinite(out.rev)) {
       state.rev = out.rev;
     }
+    if (!_syncPending && !_syncTimer) _dirty = false;
   } catch (e) {
     toast?.("同步到伺服器失敗,稍後再試");
+    // Keep the unsent edits marked dirty and retry shortly — the _syncTimer
+    // also blocks the background refreshes from clobbering them meanwhile.
+    if (!_syncTimer) _syncTimer = setTimeout(syncStateNow, 5000);
   } finally {
     _syncing = false;
     if (_syncPending) {
@@ -500,7 +534,12 @@ function ensureCategoriesFromTools() {
   let changed = false;
   for (const name of used) {
     if (!state.categories.find((c) => c.name === name)) {
-      state.categories.push({ name, color: state.categories.length % NUM_COLORS });
+      state.categories.push({
+        name,
+        color: state.categories.length % NUM_COLORS,
+        updated: new Date().toISOString(),
+      });
+      clearTombstone("categories", name);
       changed = true;
     }
   }
@@ -561,12 +600,35 @@ async function maybeImportFromHash() {
       Array.isArray(data.creators) ? `${data.creators.length} 位製作人` : null,
       Array.isArray(data.brands) ? `${data.brands.length} 個品牌` : null,
     ].filter(Boolean).join("、");
-    const ok = confirm(`從網址讀到一份分享資料(${counts})。要匯入嗎?\n(會覆蓋目前裝置上的資料)`);
+    const ok = confirm(`從網址讀到一份分享資料(${counts})。要匯入嗎?\n(只會新增缺少的項目,不會刪除現有資料)`);
     if (ok) {
-      if (Array.isArray(data.tools)) state.localTools = data.tools;
-      if (Array.isArray(data.categories)) state.categories = data.categories;
-      if (Array.isArray(data.creators)) state.creators = data.creators;
-      if (Array.isArray(data.brands)) state.brands = data.brands;
+      // Additive merge — never replace/remove what's already on the server.
+      // A wholesale replace here would delete every tool missing from the
+      // legacy blob (with no tombstones, and their uploaded files with them).
+      if (Array.isArray(data.tools)) {
+        for (const t of data.tools) {
+          if (t && t.id && !state.localTools.some((x) => x.id === t.id)) {
+            state.localTools.push(t);
+          }
+        }
+      }
+      if (Array.isArray(data.categories)) {
+        for (const c of data.categories) {
+          if (c && c.name && !state.categories.some((x) => x.name === c.name)) {
+            state.categories.push({ ...c, updated: new Date().toISOString() });
+          }
+        }
+      }
+      if (Array.isArray(data.creators)) {
+        for (const n of data.creators) {
+          if (n && !state.creators.includes(n)) state.creators.push(n);
+        }
+      }
+      if (Array.isArray(data.brands)) {
+        for (const n of data.brands) {
+          if (n && !state.brands.includes(n)) state.brands.push(n);
+        }
+      }
       migrateToolsSchema();
       saveTools();
       saveCats();
@@ -586,6 +648,7 @@ function ensureBrandsFromTools() {
   for (const name of used) {
     if (!state.brands.includes(name)) {
       state.brands.push(name);
+      clearTombstone("brands", name);
       changed = true;
     }
   }
@@ -628,6 +691,7 @@ function ensureCreatorsFromTools() {
   for (const name of used) {
     if (!state.creators.includes(name)) {
       state.creators.push(name);
+      clearTombstone("creators", name);
       changed = true;
     }
   }

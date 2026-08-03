@@ -61,6 +61,7 @@ function jsonError(message, status = 500) {
 
 const EMPTY_TOMBSTONES = () => ({ tools: {}, tips: {}, categories: {}, creators: {}, brands: {} });
 const TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // purge delete-markers after 30 days
+const TRASH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // grace period before R2 objects are really deleted
 
 function normalizeState(raw) {
   const s = raw && typeof raw === "object" ? raw : {};
@@ -80,6 +81,10 @@ function normalizeState(raw) {
     tips: Array.isArray(s.tips) ? s.tips : [],
     tombstones: tomb,
     rev: Number.isFinite(s.rev) ? s.rev : 0,
+    // Server-managed only: file keys no longer referenced anywhere, kept in
+    // R2 for a grace period so a merge that re-references them can rescue
+    // them. Clients never send this — it's carried across writes below.
+    trash: s.trash && typeof s.trash === "object" ? { ...s.trash } : {},
   };
 }
 
@@ -113,6 +118,13 @@ async function putState(request, env) {
     finalState.rev = oldState.rev + 1;
     purgeTombstones(finalState.tombstones);
 
+    // File-key trash: unreferenced keys get a grace period instead of an
+    // immediate R2 delete; re-referencing a trashed key rescues it. Expired
+    // keys are dropped from the stored state now but only physically deleted
+    // after the write succeeds (a lost write must not lose files).
+    const { trash, expired } = computeTrash(oldState, finalState);
+    finalState.trash = trash;
+
     const written = oldRow
       ? await env.DB.prepare(
           "UPDATE kv SET v = ?, updated_at = ? WHERE k = 'state' AND json_extract(v, '$.rev') IS ?"
@@ -124,14 +136,36 @@ async function putState(request, env) {
         )
           .bind(JSON.stringify(finalState), Date.now())
           .run();
-    if (!written.meta || written.meta.changes > 0) {
-      await cleanupRemovedFiles(env, oldState, finalState);
+    if (written.meta && written.meta.changes > 0) {
+      await deleteFiles(env, expired);
       return upToDate
         ? json({ ok: true, rev: finalState.rev })
         : json({ ok: true, rev: finalState.rev, merged: true, state: finalState });
     }
   }
   return jsonError("write conflict, please retry", 409);
+}
+
+function computeTrash(oldState, finalState) {
+  const oldKeys = collectFileKeys(oldState.tools, oldState.tips);
+  const newKeys = collectFileKeys(finalState.tools, finalState.tips);
+  const trash = { ...oldState.trash };
+  for (const key of Object.keys(trash)) {
+    if (newKeys.has(key)) delete trash[key]; // re-referenced → rescued
+  }
+  for (const key of oldKeys) {
+    if (!newKeys.has(key) && !trash[key]) trash[key] = new Date().toISOString();
+  }
+  const cutoff = Date.now() - TRASH_TTL_MS;
+  const expired = [];
+  for (const [key, at] of Object.entries(trash)) {
+    const t = Date.parse(at);
+    if (!Number.isFinite(t) || t < cutoff) {
+      expired.push(key);
+      delete trash[key];
+    }
+  }
+  return { trash, expired };
 }
 
 /* Merge a (possibly stale) client state into the stored one.
@@ -145,15 +179,32 @@ function mergeStates(oldS, inc) {
     tombstones[kind] = mergeTombstoneMap(oldS.tombstones[kind], inc.tombstones[kind]);
   }
 
-  const tools = mergeEntities(oldS.tools, inc.tools, (t) => t && t.id, entityTime, tombstones.tools);
-  const tips = mergeEntities(oldS.tips, inc.tips, (t) => t && t.id, entityTime, tombstones.tips);
+  const tools = mergeEntities(
+    oldS.tools, inc.tools, (t) => t && t.id, entityTime, tombstones.tools,
+    (winner, loser) => unionAttachments(winner, loser, "files")
+  );
+  const tips = mergeEntities(
+    oldS.tips, inc.tips, (t) => t && t.id, entityTime, tombstones.tips,
+    (winner, loser) => unionAttachments(winner, loser, "images")
+  );
   const categories = mergeEntities(
     oldS.categories, inc.categories, (c) => c && c.name, entityTime, tombstones.categories
   );
   const creators = mergeNames(oldS.creators, inc.creators, tombstones.creators);
   const brands = mergeNames(oldS.brands, inc.brands, tombstones.brands);
 
-  return { tools, categories, creators, brands, tips, tombstones, rev: 0 };
+  return { tools, categories, creators, brands, tips, tombstones, rev: 0, trash: {} };
+}
+
+/* When both sides hold a copy of the same tool/tip, the newer copy wins the
+   fields — but attachments are unioned by key so a concurrent edit from a
+   stale device can't silently drop a file someone else just uploaded. */
+function unionAttachments(winner, loser, field) {
+  const wFiles = Array.isArray(winner[field]) ? winner[field] : [];
+  const lFiles = Array.isArray(loser?.[field]) ? loser[field] : [];
+  const known = new Set(wFiles.map((f) => f && f.key).filter(Boolean));
+  const extra = lFiles.filter((f) => f && f.key && !known.has(f.key));
+  return extra.length ? { ...winner, [field]: [...wFiles, ...extra] } : winner;
 }
 
 function entityTime(e) {
@@ -169,7 +220,7 @@ function mergeTombstoneMap(a, b) {
   return out;
 }
 
-function mergeEntities(oldArr, incArr, keyFn, timeFn, tombMap) {
+function mergeEntities(oldArr, incArr, keyFn, timeFn, tombMap, combine) {
   const oldByKey = new Map();
   for (const e of oldArr) if (keyFn(e)) oldByKey.set(keyFn(e), e);
   const out = [];
@@ -180,7 +231,10 @@ function mergeEntities(oldArr, incArr, keyFn, timeFn, tombMap) {
     if (!key || seen.has(key)) continue;
     seen.add(key);
     const old = oldByKey.get(key);
-    out.push(old && timeFn(old) > timeFn(e) ? old : e);
+    if (!old) { out.push(e); continue; }
+    const winner = timeFn(old) > timeFn(e) ? old : e;
+    const loser = winner === old ? e : old;
+    out.push(combine ? combine(winner, loser) : winner);
   }
   // …then anything only the server knows about (added by someone else).
   for (const e of oldArr) {
@@ -207,33 +261,32 @@ function mergeNames(oldArr, incArr, tombMap) {
 }
 
 function purgeTombstones(tombstones) {
-  const cutoff = Date.now() - TOMBSTONE_TTL_MS;
+  const now = Date.now();
+  const cutoff = now - TOMBSTONE_TTL_MS;
   for (const kind of Object.keys(tombstones)) {
     for (const [key, at] of Object.entries(tombstones[kind])) {
       const t = Date.parse(at);
       if (!Number.isFinite(t) || t < cutoff) delete tombstones[kind][key];
+      // A device with a fast clock must not write a future-dated delete
+      // marker that swallows other devices' genuine edits for hours.
+      else if (t > now) tombstones[kind][key] = new Date(now).toISOString();
     }
   }
 }
 
-/* Anything dropped from a tool's files[] (or a tip's images[]) gets deleted
-   from R2 so the bucket doesn't accumulate orphans. */
-async function cleanupRemovedFiles(env, oldState, newState) {
-  const oldKeys = collectFileKeys(oldState.tools, oldState.tips);
-  const newKeys = collectFileKeys(newState.tools, newState.tips);
-  const removed = [...oldKeys].filter((k) => !newKeys.has(k));
-
-  for (const key of removed) {
+/* Physically delete R2 objects (and their metadata rows) whose trash grace
+   period has expired — so the bucket doesn't accumulate orphans forever. */
+async function deleteFiles(env, keys) {
+  if (!keys.length) return;
+  for (const key of keys) {
     try {
       await env.FILES.delete(key);
     } catch {}
   }
-  if (removed.length) {
-    const placeholders = removed.map(() => "?").join(",");
-    await env.DB.prepare(`DELETE FROM files WHERE key IN (${placeholders})`)
-      .bind(...removed)
-      .run();
-  }
+  const placeholders = keys.map(() => "?").join(",");
+  await env.DB.prepare(`DELETE FROM files WHERE key IN (${placeholders})`)
+    .bind(...keys)
+    .run();
 }
 
 function collectFileKeys(tools, tips) {
