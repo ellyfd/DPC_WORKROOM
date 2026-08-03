@@ -6,6 +6,10 @@ compatibility_date = "2024-12-01"
 directory = "./"
 binding = "ASSETS"
 
+# Daily state snapshot to R2 (02:00 台灣時間), pruned after 30 days.
+[triggers]
+crons = ["0 18 * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "dpc-hub"
