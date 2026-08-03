@@ -59,28 +59,166 @@ function jsonError(message, status = 500) {
   return json({ error: message }, status);
 }
 
+const EMPTY_TOMBSTONES = () => ({ tools: {}, tips: {}, categories: {}, creators: {}, brands: {} });
+const TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // purge delete-markers after 30 days
+
+function normalizeState(raw) {
+  const s = raw && typeof raw === "object" ? raw : {};
+  const tomb = EMPTY_TOMBSTONES();
+  if (s.tombstones && typeof s.tombstones === "object") {
+    for (const kind of Object.keys(tomb)) {
+      if (s.tombstones[kind] && typeof s.tombstones[kind] === "object") {
+        tomb[kind] = { ...s.tombstones[kind] };
+      }
+    }
+  }
+  return {
+    tools: Array.isArray(s.tools) ? s.tools : [],
+    categories: Array.isArray(s.categories) ? s.categories : [],
+    creators: Array.isArray(s.creators) ? s.creators : [],
+    brands: Array.isArray(s.brands) ? s.brands : [],
+    tips: Array.isArray(s.tips) ? s.tips : [],
+    tombstones: tomb,
+    rev: Number.isFinite(s.rev) ? s.rev : 0,
+  };
+}
+
 async function getState(env) {
   const row = await env.DB.prepare("SELECT v FROM kv WHERE k = ?").bind("state").first();
-  const state = row
-    ? JSON.parse(row.v)
-    : { tools: [], categories: [], creators: [], brands: [], tips: [] };
-  return json(state);
+  return json(normalizeState(row ? JSON.parse(row.v) : null));
 }
 
 async function putState(request, env) {
   const body = await request.json();
-  const newState = {
-    tools: Array.isArray(body.tools) ? body.tools : [],
-    categories: Array.isArray(body.categories) ? body.categories : [],
-    creators: Array.isArray(body.creators) ? body.creators : [],
-    brands: Array.isArray(body.brands) ? body.brands : [],
-    tips: Array.isArray(body.tips) ? body.tips : [],
-  };
+  const incoming = normalizeState(body);
+  const baseRev = Number.isFinite(body.baseRev) ? body.baseRev : null;
 
-  // Diff against old state — anything dropped from a tool's files[] (or a
-  // tip's images[]) gets deleted from R2 so the bucket doesn't accumulate orphans.
-  const oldRow = await env.DB.prepare("SELECT v FROM kv WHERE k = ?").bind("state").first();
-  const oldState = oldRow ? JSON.parse(oldRow.v) : { tools: [], tips: [] };
+  // Optimistic-concurrency loop: read → merge → conditional write. If another
+  // request lands in between (rev moved), re-read and merge again.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const oldRow = await env.DB.prepare("SELECT v FROM kv WHERE k = ?").bind("state").first();
+    const oldRaw = oldRow ? JSON.parse(oldRow.v) : null;
+    // Raw rev as stored (null when the row predates revs) — used in the
+    // conditional UPDATE below, where json_extract also yields NULL for it.
+    const oldRawRev = Number.isFinite(oldRaw?.rev) ? oldRaw.rev : null;
+    const oldState = normalizeState(oldRaw);
+
+    // A client that loaded the current rev is up to date — take its state
+    // wholesale (reorders, renames and deletions all apply exactly).
+    // Anything else (stale tab, old cached script.js with no baseRev) gets
+    // MERGED into the stored state so it can't wipe newer tools or resurrect
+    // deleted ones.
+    const upToDate = baseRev !== null && baseRev === oldState.rev;
+    const finalState = upToDate ? { ...incoming } : mergeStates(oldState, incoming);
+    finalState.rev = oldState.rev + 1;
+    purgeTombstones(finalState.tombstones);
+
+    const written = oldRow
+      ? await env.DB.prepare(
+          "UPDATE kv SET v = ?, updated_at = ? WHERE k = 'state' AND json_extract(v, '$.rev') IS ?"
+        )
+          .bind(JSON.stringify(finalState), Date.now(), oldRawRev)
+          .run()
+      : await env.DB.prepare(
+          "INSERT OR IGNORE INTO kv (k, v, updated_at) VALUES ('state', ?, ?)"
+        )
+          .bind(JSON.stringify(finalState), Date.now())
+          .run();
+    if (!written.meta || written.meta.changes > 0) {
+      await cleanupRemovedFiles(env, oldState, finalState);
+      return upToDate
+        ? json({ ok: true, rev: finalState.rev })
+        : json({ ok: true, rev: finalState.rev, merged: true, state: finalState });
+    }
+  }
+  return jsonError("write conflict, please retry", 409);
+}
+
+/* Merge a (possibly stale) client state into the stored one.
+   Principles: absence is NOT deletion — only an explicit tombstone deletes.
+   Tools / tips merge per-entity by id with newest-`updated` wins, so a stale
+   tab can never wipe a tool someone else just added, and a deleted tool only
+   comes back if it was genuinely re-created after the deletion. */
+function mergeStates(oldS, inc) {
+  const tombstones = EMPTY_TOMBSTONES();
+  for (const kind of Object.keys(tombstones)) {
+    tombstones[kind] = mergeTombstoneMap(oldS.tombstones[kind], inc.tombstones[kind]);
+  }
+
+  const tools = mergeEntities(oldS.tools, inc.tools, (t) => t && t.id, entityTime, tombstones.tools);
+  const tips = mergeEntities(oldS.tips, inc.tips, (t) => t && t.id, entityTime, tombstones.tips);
+  const categories = mergeEntities(
+    oldS.categories, inc.categories, (c) => c && c.name, entityTime, tombstones.categories
+  );
+  const creators = mergeNames(oldS.creators, inc.creators, tombstones.creators);
+  const brands = mergeNames(oldS.brands, inc.brands, tombstones.brands);
+
+  return { tools, categories, creators, brands, tips, tombstones, rev: 0 };
+}
+
+function entityTime(e) {
+  const t = Date.parse(e?.updated || e?.updatedAt || e?.createdAt || "");
+  return Number.isFinite(t) ? t : 0;
+}
+
+function mergeTombstoneMap(a, b) {
+  const out = { ...(a || {}) };
+  for (const [key, at] of Object.entries(b || {})) {
+    if (!out[key] || Date.parse(at) > Date.parse(out[key])) out[key] = at;
+  }
+  return out;
+}
+
+function mergeEntities(oldArr, incArr, keyFn, timeFn, tombMap) {
+  const oldByKey = new Map();
+  for (const e of oldArr) if (keyFn(e)) oldByKey.set(keyFn(e), e);
+  const out = [];
+  const seen = new Set();
+  // Incoming order first (preserves the writing client's sort intent)…
+  for (const e of incArr) {
+    const key = keyFn(e);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const old = oldByKey.get(key);
+    out.push(old && timeFn(old) > timeFn(e) ? old : e);
+  }
+  // …then anything only the server knows about (added by someone else).
+  for (const e of oldArr) {
+    const key = keyFn(e);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  // Tombstones win unless the entity was touched after the deletion.
+  return out.filter((e) => {
+    const at = tombMap[keyFn(e)];
+    return !at || timeFn(e) > Date.parse(at);
+  });
+}
+
+function mergeNames(oldArr, incArr, tombMap) {
+  const out = [];
+  for (const name of [...incArr, ...oldArr]) {
+    if (typeof name !== "string" || !name || out.includes(name)) continue;
+    if (tombMap[name]) continue;
+    out.push(name);
+  }
+  return out;
+}
+
+function purgeTombstones(tombstones) {
+  const cutoff = Date.now() - TOMBSTONE_TTL_MS;
+  for (const kind of Object.keys(tombstones)) {
+    for (const [key, at] of Object.entries(tombstones[kind])) {
+      const t = Date.parse(at);
+      if (!Number.isFinite(t) || t < cutoff) delete tombstones[kind][key];
+    }
+  }
+}
+
+/* Anything dropped from a tool's files[] (or a tip's images[]) gets deleted
+   from R2 so the bucket doesn't accumulate orphans. */
+async function cleanupRemovedFiles(env, oldState, newState) {
   const oldKeys = collectFileKeys(oldState.tools, oldState.tips);
   const newKeys = collectFileKeys(newState.tools, newState.tips);
   const removed = [...oldKeys].filter((k) => !newKeys.has(k));
@@ -96,14 +234,6 @@ async function putState(request, env) {
       .bind(...removed)
       .run();
   }
-
-  await env.DB.prepare(
-    "INSERT INTO kv (k, v, updated_at) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at"
-  )
-    .bind("state", JSON.stringify(newState), Date.now())
-    .run();
-
-  return json({ ok: true });
 }
 
 function collectFileKeys(tools, tips) {

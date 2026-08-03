@@ -32,7 +32,23 @@ const state = {
   draggingToolId: null,
   // name of the category currently being dragged for reordering
   draggingCategoryName: null,
+  // delete-markers synced with the server: { kind: { key: ISO time } }.
+  // A plain "missing from the array" is NOT a deletion on the server any
+  // more — only these tombstones delete, so a stale tab can't resurrect
+  // removed tools or wipe ones it never saw.
+  tombstones: { tools: {}, tips: {}, categories: {}, creators: {}, brands: {} },
+  // server state revision we last loaded — sent with each sync so the
+  // server knows whether we're up to date (replace) or stale (merge).
+  rev: 0,
 };
+
+function addTombstone(kind, key) {
+  if (!key) return;
+  state.tombstones[kind][key] = new Date().toISOString();
+}
+function clearTombstone(kind, key) {
+  if (key) delete state.tombstones[kind][key];
+}
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -96,6 +112,22 @@ async function init() {
 
   // Pull-to-refresh (mobile / installed PWA) — reload server data on pull-down.
   setupPullToRefresh();
+
+  // Stale-tab guard: a tab/PWA that comes back to the foreground quietly
+  // re-pulls server data, so edits made on other devices show up without a
+  // manual reload and we never keep working on top of hours-old state.
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState !== "visible") return;
+    if (document.body.classList.contains("overlay-open")) return; // mid-edit
+    if (_syncing || _syncTimer) return; // local changes in flight
+    if (Date.now() - _lastLoadedAt < 30 * 1000) return;
+    await loadRemoteState();
+    migrateToolsSchema();
+    ensureCategoriesFromTools();
+    ensureCreatorsFromTools();
+    ensureBrandsFromTools();
+    render();
+  });
 
   // After the board is up, surface a dismissable "本週上新" notice (once per batch).
   maybeShowNewArrivalsNotice();
@@ -268,16 +300,15 @@ function loadJSON(key, fallback) {
 }
 function saveJSON(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
 
+let _lastLoadedAt = 0;
+
 async function loadRemoteState() {
   try {
     const res = await fetch("/api/state", { cache: "no-cache" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    state.localTools = Array.isArray(data.tools) ? data.tools : [];
-    state.categories = Array.isArray(data.categories) ? data.categories : [];
-    state.creators = Array.isArray(data.creators) ? data.creators : [];
-    state.brands = Array.isArray(data.brands) ? data.brands : [];
-    state.tips = Array.isArray(data.tips) ? data.tips : [];
+    adoptServerState(data);
+    _lastLoadedAt = Date.now();
   } catch (e) {
     toast?.("無法載入伺服器資料,先用空白起頭");
     state.localTools = [];
@@ -285,7 +316,27 @@ async function loadRemoteState() {
     state.creators = [];
     state.brands = [];
     state.tips = [];
+    state.tombstones = { tools: {}, tips: {}, categories: {}, creators: {}, brands: {} };
+    state.rev = 0;
   }
+}
+
+function adoptServerState(data) {
+  state.localTools = Array.isArray(data.tools) ? data.tools : [];
+  state.categories = Array.isArray(data.categories) ? data.categories : [];
+  state.creators = Array.isArray(data.creators) ? data.creators : [];
+  state.brands = Array.isArray(data.brands) ? data.brands : [];
+  state.tips = Array.isArray(data.tips) ? data.tips : [];
+  const tomb = { tools: {}, tips: {}, categories: {}, creators: {}, brands: {} };
+  if (data.tombstones && typeof data.tombstones === "object") {
+    for (const kind of Object.keys(tomb)) {
+      if (data.tombstones[kind] && typeof data.tombstones[kind] === "object") {
+        tomb[kind] = { ...data.tombstones[kind] };
+      }
+    }
+  }
+  state.tombstones = tomb;
+  state.rev = Number.isFinite(data.rev) ? data.rev : 0;
 }
 
 /* Re-fetch server state and repaint. Used by pull-to-refresh (and anywhere
@@ -400,9 +451,25 @@ async function syncStateNow() {
         creators: state.creators,
         brands: state.brands,
         tips: state.tips,
+        tombstones: state.tombstones,
+        baseRev: state.rev,
       }),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
+    const out = await res.json().catch(() => null);
+    if (out && out.merged && out.state) {
+      // We were stale — the server merged our changes with someone else's.
+      // Adopt the merged result, unless more local edits are already queued
+      // (then stay marked stale; the follow-up sync merges again).
+      if (_syncPending) {
+        state.rev = 0;
+      } else {
+        adoptServerState(out.state);
+        if (!document.body.classList.contains("overlay-open")) render();
+      }
+    } else if (out && Number.isFinite(out.rev)) {
+      state.rev = out.rev;
+    }
   } catch (e) {
     toast?.("同步到伺服器失敗,稍後再試");
   } finally {
@@ -529,6 +596,7 @@ function ensureBrand(name) {
   if (!name) return;
   if (!state.brands.includes(name)) {
     state.brands.push(name);
+    clearTombstone("brands", name);
     saveBrands();
   }
 }
@@ -570,6 +638,7 @@ function ensureCreator(name) {
   if (!name) return;
   if (!state.creators.includes(name)) {
     state.creators.push(name);
+    clearTombstone("creators", name);
     saveCreators();
   }
 }
@@ -599,11 +668,20 @@ function ensureCategory(name, color) {
   if (!name) return;
   const existing = state.categories.find((c) => c.name === name);
   if (existing) {
-    if (typeof color === "number") { existing.color = color; saveCats(); }
+    if (typeof color === "number") {
+      existing.color = color;
+      existing.updated = new Date().toISOString();
+      saveCats();
+    }
     return existing;
   }
-  const next = { name, color: typeof color === "number" ? color : state.categories.length % NUM_COLORS };
+  const next = {
+    name,
+    color: typeof color === "number" ? color : state.categories.length % NUM_COLORS,
+    updated: new Date().toISOString(),
+  };
   state.categories.push(next);
+  clearTombstone("categories", name);
   saveCats();
   return next;
 }
@@ -1682,14 +1760,20 @@ function renameCreator(oldName, newName) {
     return;
   }
   state.creators = state.creators.map((c) => c === oldName ? newName : c);
+  addTombstone("creators", oldName);
+  clearTombstone("creators", newName);
   state.localTools = state.localTools.map((t) => {
     const next = { ...t };
-    if (t.creator === oldName) next.creator = newName;
+    let changed = false;
+    if (t.creator === oldName) { next.creator = newName; changed = true; }
     if (Array.isArray(t.files)) {
-      next.files = t.files.map((f) =>
-        f.uploadedBy === oldName ? { ...f, uploadedBy: newName } : f
-      );
+      next.files = t.files.map((f) => {
+        if (f.uploadedBy !== oldName) return f;
+        changed = true;
+        return { ...f, uploadedBy: newName };
+      });
     }
+    if (changed) next.updated = new Date().toISOString();
     return next;
   });
   if (state.me === oldName) {
@@ -1712,8 +1796,10 @@ function renameBrand(oldName, newName) {
     return;
   }
   state.brands = state.brands.map((b) => b === oldName ? newName : b);
+  addTombstone("brands", oldName);
+  clearTombstone("brands", newName);
   state.localTools = state.localTools.map((t) =>
-    t.brand === oldName ? { ...t, brand: newName } : t
+    t.brand === oldName ? { ...t, brand: newName, updated: new Date().toISOString() } : t
   );
   saveBrands();
   saveTools();
@@ -1730,9 +1816,10 @@ function deleteCreator(name) {
     ? `「${name}」目前是 ${using.length} 個工具的製作人,刪了之後這些工具會變成「沒製作人」(必填,要重新指定)。確定刪除?`
     : `確定刪除製作人「${name}」?`;
   if (!confirm(msg)) return;
+  addTombstone("creators", name);
   state.creators = state.creators.filter((c) => c !== name);
   state.localTools = state.localTools.map((t) =>
-    t.creator === name ? { ...t, creator: "" } : t
+    t.creator === name ? { ...t, creator: "", updated: new Date().toISOString() } : t
   );
   saveCreators();
   saveTools();
@@ -1749,9 +1836,10 @@ function deleteBrand(name) {
     ? `「${name}」目前綁在 ${using.length} 個工具上,刪了之後這些工具的品牌會清空。確定刪除?`
     : `確定刪除品牌「${name}」?`;
   if (!confirm(msg)) return;
+  addTombstone("brands", name);
   state.brands = state.brands.filter((b) => b !== name);
   state.localTools = state.localTools.map((t) =>
-    t.brand === name ? { ...t, brand: "" } : t
+    t.brand === name ? { ...t, brand: "", updated: new Date().toISOString() } : t
   );
   saveBrands();
   saveTools();
@@ -2944,6 +3032,7 @@ function deleteTip(id) {
   const idx = state.tips.findIndex((t) => t.id === id);
   if (idx < 0) return;
   if (!confirm("刪除這則小知識?")) return;
+  addTombstone("tips", id);
   state.tips.splice(idx, 1);
   saveTips();
   renderTipsList();
@@ -3321,6 +3410,7 @@ function saveTool() {
   const idx = state.localTools.findIndex((t) => t.id === id);
   if (idx >= 0) state.localTools[idx] = record;
   else state.localTools.push(record);
+  clearTombstone("tools", id);
 
   if (d.category) ensureCategory(d.category);
   ensureCreator(d.creator);
@@ -3352,6 +3442,7 @@ function deleteTool() {
     return;
   }
   if (!confirm("確定要刪除這個工具?")) return;
+  addTombstone("tools", state.editingId);
   state.localTools = state.localTools.filter((t) => t.id !== state.editingId);
   saveTools();
   closeToolPopover();
@@ -3560,16 +3651,18 @@ function saveCategory() {
         toast("已有同名分類"); return;
       }
       state.categories = state.categories.map((c) =>
-        c.name === original ? { name, color } : c
+        c.name === original ? { name, color, updated: new Date().toISOString() } : c
       );
+      addTombstone("categories", original);
+      clearTombstone("categories", name);
       state.localTools = state.localTools.map((t) =>
-        t.category === original ? { ...t, category: name } : t
+        t.category === original ? { ...t, category: name, updated: new Date().toISOString() } : t
       );
       if (state.filter === original) state.filter = name;
       saveTools();
     } else {
       const c = state.categories.find((x) => x.name === name);
-      if (c) c.color = color;
+      if (c) { c.color = color; c.updated = new Date().toISOString(); }
     }
     saveCats();
     toast("已更新");
@@ -3577,7 +3670,8 @@ function saveCategory() {
     if (state.categories.find((c) => c.name === name)) {
       toast("已有同名分類"); return;
     }
-    state.categories.push({ name, color });
+    state.categories.push({ name, color, updated: new Date().toISOString() });
+    clearTombstone("categories", name);
     saveCats();
     toast("已新增分類");
   }
@@ -3592,9 +3686,10 @@ function deleteCategory(name, fromPopover = false) {
     ? `「${name}」內的工具會變成「未分類」,確定刪除分類?`
     : `確定刪除分類「${name}」?`;
   if (!confirm(msg)) return;
+  addTombstone("categories", name);
   state.categories = state.categories.filter((c) => c.name !== name);
   state.localTools = state.localTools.map((t) =>
-    t.category === name ? { ...t, category: "" } : t
+    t.category === name ? { ...t, category: "", updated: new Date().toISOString() } : t
   );
   if (state.filter === name) state.filter = "all";
   saveCats();
