@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260616i" />
+  <link rel="stylesheet" href="styles.css?v=20260803d" />
 </head>
 <body>
   <div class="bg-soft"></div>
@@ -63,6 +63,11 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.09 4.26L19 8.27l-3.5 3.4.83 4.83L12 14.77l-4.33 1.73.83-4.83L5 8.27l4.91-1.01L12 3z"/></svg>
         <span class="btn-text">許願池</span>
       </a>
+
+      <button class="btn btn-tips" id="open-history" aria-label="紀錄" title="紀錄 — 回收桶與最近異動">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/></svg>
+        <span class="btn-text">紀錄</span>
+      </button>
 
       <button class="btn btn-tips" id="open-tips" aria-label="小知識" title="小知識 — 大家的小撇步">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
@@ -144,6 +149,34 @@
   </div>
 
   <!-- 小知識 — shared free-text tips board -->
+  <!-- History popover: recycle bin + recent changes -->
+  <div class="popover" id="history-popover" hidden>
+    <div class="popover-backdrop" data-close></div>
+    <div class="tips-popover-panel" role="dialog" aria-modal="true" aria-labelledby="history-popover-title">
+      <div class="tips-popover-head">
+        <div>
+          <div class="tips-head-title" id="history-popover-title">
+            <span class="tips-head-spark" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/></svg>
+            </span>
+            紀錄
+          </div>
+          <div class="tips-head-sub">刪掉的工具 30 天內可還原;下面是大家最近的異動</div>
+        </div>
+        <button class="icon-btn" data-close aria-label="關閉">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="history-body">
+        <div class="history-section-title">🗑️ 回收桶</div>
+        <div id="recycle-list" class="history-list"></div>
+        <div class="history-section-title">🕒 最近異動</div>
+        <div id="activity-list" class="history-list"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="popover" id="tips-popover" hidden>
     <div class="popover-backdrop" data-close></div>
     <div class="tips-popover-panel" role="dialog" aria-modal="true" aria-labelledby="tips-popover-title">
@@ -443,7 +476,7 @@
   <!-- Toast -->
   <div class="toast" id="toast" hidden></div>
 
-  <script src="script.js?v=20260803c"></script>
+  <script src="script.js?v=20260803d"></script>
 
   <!-- PWA service worker registration -->
   <script>

@@ -19,10 +19,14 @@ export default {
     try {
       if (url.pathname === "/api/state") {
         if (request.method === "GET") return await getState(env);
-        if (request.method === "PUT") return await putState(request, env);
+        if (request.method === "PUT") {
+          if (!writeOriginAllowed(request)) return jsonError("origin not allowed", 403);
+          return await putState(request, env);
+        }
         return jsonError("method not allowed", 405);
       }
       if (url.pathname === "/api/upload" && request.method === "POST") {
+        if (!writeOriginAllowed(request)) return jsonError("origin not allowed", 403);
         return await uploadFile(request, env);
       }
       if (url.pathname.startsWith("/files/")) {
@@ -47,7 +51,52 @@ export default {
     }
     return res;
   },
+
+  // Daily cron (wrangler.toml [triggers]): snapshot the whole state blob to
+  // R2 so a bad write or bug can never lose data permanently.
+  async scheduled(_event, env) {
+    await backupState(env);
+  },
 };
+
+/* Writes must come from the app itself (same-origin), local dev, or
+   non-browser tools (no Origin header). Sandboxed /p/ pages send
+   Origin: "null" and are rejected — an uploaded HTML page must not be able
+   to rewrite the shared state or upload files. */
+function writeOriginAllowed(request) {
+  const origin = request.headers.get("Origin");
+  if (!origin) return true;
+  if (origin === "https://dpcwork.ellyfd.workers.dev") return true;
+  try {
+    const host = new URL(origin).hostname;
+    return host === "localhost" || host.startsWith("127.");
+  } catch {
+    return false;
+  }
+}
+
+const BACKUP_PREFIX = "_backups/";
+const BACKUP_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function backupState(env) {
+  const row = await env.DB.prepare("SELECT v FROM kv WHERE k = ?").bind("state").first();
+  if (!row) return;
+  const day = new Date().toISOString().slice(0, 10);
+  await env.FILES.put(`${BACKUP_PREFIX}state-${day}.json`, row.v, {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+  });
+  // Prune snapshots older than the retention window.
+  const cutoff = Date.now() - BACKUP_KEEP_MS;
+  const listing = await env.FILES.list({ prefix: BACKUP_PREFIX });
+  for (const obj of listing.objects || []) {
+    const uploaded = obj.uploaded ? new Date(obj.uploaded).getTime() : NaN;
+    if (Number.isFinite(uploaded) && uploaded < cutoff) {
+      try {
+        await env.FILES.delete(obj.key);
+      } catch {}
+    }
+  }
+}
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -61,7 +110,11 @@ function jsonError(message, status = 500) {
 
 const EMPTY_TOMBSTONES = () => ({ tools: {}, tips: {}, categories: {}, creators: {}, brands: {} });
 const TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // purge delete-markers after 30 days
-const TRASH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // grace period before R2 objects are really deleted
+// Aligned with the tombstone TTL so a tool restored from the recycle bin
+// still has its uploaded files.
+const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const ACTIVITY_CAP = 300;
+const DELETED_TOOLS_CAP = 100;
 
 function normalizeState(raw) {
   const s = raw && typeof raw === "object" ? raw : {};
@@ -85,6 +138,10 @@ function normalizeState(raw) {
     // R2 for a grace period so a merge that re-references them can rescue
     // them. Clients never send this — it's carried across writes below.
     trash: s.trash && typeof s.trash === "object" ? { ...s.trash } : {},
+    // Server-managed: full copies of deleted tools (the recycle bin) and the
+    // recent-changes feed. Clients read these but never send them.
+    deletedTools: Array.isArray(s.deletedTools) ? s.deletedTools : [],
+    activity: Array.isArray(s.activity) ? s.activity : [],
   };
 }
 
@@ -97,6 +154,7 @@ async function putState(request, env) {
   const body = await request.json();
   const incoming = normalizeState(body);
   const baseRev = Number.isFinite(body.baseRev) ? body.baseRev : null;
+  const actor = typeof body.actor === "string" ? body.actor.trim().slice(0, 40) : "";
 
   // Optimistic-concurrency loop: read → merge → conditional write. If another
   // request lands in between (rev moved), re-read and merge again.
@@ -124,6 +182,8 @@ async function putState(request, env) {
     // after the write succeeds (a lost write must not lose files).
     const { trash, expired } = computeTrash(oldState, finalState);
     finalState.trash = trash;
+    finalState.deletedTools = computeDeletedTools(oldState, finalState);
+    finalState.activity = appendActivity(oldState, finalState, actor);
 
     const written = oldRow
       ? await env.DB.prepare(
@@ -166,6 +226,69 @@ function computeTrash(oldState, finalState) {
     }
   }
   return { trash, expired };
+}
+
+/* Recycle bin: whenever a live tool becomes tombstoned, its full object is
+   parked here so it can be restored with one click. Entries leave when the
+   tool comes back to life or the tombstone expires (30 days). */
+function computeDeletedTools(oldState, finalState) {
+  const tomb = finalState.tombstones.tools;
+  const liveIds = new Set(finalState.tools.map((t) => t && t.id).filter(Boolean));
+  const out = [];
+  for (const e of oldState.deletedTools) {
+    const id = e && e.tool && e.tool.id;
+    if (!id || liveIds.has(id) || !tomb[id]) continue;
+    out.push(e);
+  }
+  const kept = new Set(out.map((e) => e.tool.id));
+  const oldById = new Map(oldState.tools.map((t) => [t && t.id, t]));
+  for (const [id, at] of Object.entries(tomb)) {
+    if (liveIds.has(id) || kept.has(id)) continue;
+    const tool = oldById.get(id);
+    if (tool) out.push({ tool, deletedAt: at });
+  }
+  return out.slice(-DELETED_TOOLS_CAP);
+}
+
+/* Recent-changes feed, derived from the diff between the stored state and
+   what this write produced. Tools and tips only — enough to answer "who
+   changed what, when" without drowning in noise. */
+function appendActivity(oldState, finalState, actor) {
+  const ts = new Date().toISOString();
+  const acts = [];
+  const push = (action, target) =>
+    acts.push({ ts, actor, action, target: String(target || "").slice(0, 60) });
+
+  const wasDeleted = new Set(
+    oldState.deletedTools.map((e) => e && e.tool && e.tool.id).filter(Boolean)
+  );
+  const oldTools = new Map(oldState.tools.map((t) => [t && t.id, t]));
+  const newTools = new Map(finalState.tools.map((t) => [t && t.id, t]));
+  for (const [id, t] of newTools) {
+    if (!id) continue;
+    const o = oldTools.get(id);
+    if (!o) push(wasDeleted.has(id) ? "還原工具" : "新增工具", t.name || id);
+    else if ((t.updated || "") !== (o.updated || "")) push("更新工具", t.name || id);
+  }
+  for (const [id, o] of oldTools) {
+    if (id && !newTools.has(id)) push("刪除工具", o.name || id);
+  }
+
+  const oldTips = new Map(oldState.tips.map((t) => [t && t.id, t]));
+  const newTips = new Map(finalState.tips.map((t) => [t && t.id, t]));
+  const tipLabel = (t) => (t.text || "").slice(0, 24) || "(圖片)";
+  for (const [id, t] of newTips) {
+    if (!id) continue;
+    const o = oldTips.get(id);
+    if (!o) push("新增小知識", tipLabel(t));
+    else if ((t.updatedAt || "") !== (o.updatedAt || "")) push("更新小知識", tipLabel(t));
+  }
+  for (const [id, o] of oldTips) {
+    if (id && !newTips.has(id)) push("刪除小知識", tipLabel(o));
+  }
+
+  if (!acts.length) return oldState.activity;
+  return [...oldState.activity, ...acts].slice(-ACTIVITY_CAP);
 }
 
 /* Merge a (possibly stale) client state into the stored one.
@@ -375,6 +498,13 @@ async function servePage(env, url) {
   headers.set("Cache-Control", "no-cache, must-revalidate");
   headers.set("X-Tool-Id", toolId);
   headers.set("X-Page-Version", String(idx));
+  // Uploaded pages run in an opaque origin: scripts work, but they get no
+  // cookies/storage and their writes to /api/* are rejected by the Origin
+  // check (they send Origin: "null").
+  headers.set(
+    "Content-Security-Policy",
+    "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads"
+  );
   return new Response(obj.body, { headers });
 }
 
@@ -418,3 +548,18 @@ function decodeMaybe(s) {
     return s;
   }
 }
+
+// Named exports for tests/merge.test.mjs — the Workers runtime ignores them.
+export {
+  normalizeState,
+  mergeStates,
+  mergeEntities,
+  mergeNames,
+  mergeTombstoneMap,
+  unionAttachments,
+  purgeTombstones,
+  computeTrash,
+  computeDeletedTools,
+  appendActivity,
+  writeOriginAllowed,
+};

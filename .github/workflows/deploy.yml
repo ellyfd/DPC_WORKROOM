@@ -12,6 +12,28 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 紅燈不部署:先語法檢查,再跑同步合併邏輯的回歸測試。
+      - name: Syntax check
+        run: |
+          node --check script.js
+          node --check sw.js
+          node --check worker/index.js
+      - name: Run merge-logic tests
+        run: node tests/merge.test.mjs
+
+      # 用 commit SHA 自動蓋版本號,不再依賴手動改 ?v= 字串——
+      # 每次部署都會讓所有用戶端拿到新版 script/styles 與 Service Worker。
+      - name: Stamp asset versions with commit SHA
+        run: |
+          V="${GITHUB_SHA:0:8}"
+          sed -i -E "s/(script\.js\?v=)[0-9a-z]+/\1${V}/g; s/(styles\.css\?v=)[0-9a-z]+/\1${V}/g" index.html sw.js
+          sed -i -E "s/(dpc-hub-v)[0-9a-z]+/\1${V}/g" sw.js
+          grep -H "v=${V}" index.html && grep -H "dpc-hub-v${V}" sw.js
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:

@@ -40,6 +40,10 @@ const state = {
   // server state revision we last loaded — sent with each sync so the
   // server knows whether we're up to date (replace) or stale (merge).
   rev: 0,
+  // server-managed, read-only on the client: the recycle bin (full copies
+  // of deleted tools, restorable for 30 days) and the recent-changes feed.
+  deletedTools: [],
+  activity: [],
 };
 
 function addTombstone(kind, key) {
@@ -146,6 +150,7 @@ async function init() {
   });
   $("#open-add").addEventListener("click", (e) => openToolPopover(null, e.currentTarget));
   $("#open-tips")?.addEventListener("click", () => openTipsPopover());
+  $("#open-history")?.addEventListener("click", () => openHistoryPopover());
   // 小知識 posts shown inside the board (from the header search) → open the popover.
   // Links / screenshots inside a post act on their own; anywhere else on the
   // post jumps to & highlights that one, the header opens the full list.
@@ -181,6 +186,7 @@ async function init() {
   initTileTooltip();
   initFilePopover();
   initTipsPopover();
+  initHistoryPopover();
   initShortcuts();
   initOverlayScrollLock();
 
@@ -318,6 +324,8 @@ async function loadRemoteState() {
     state.tips = [];
     state.tombstones = { tools: {}, tips: {}, categories: {}, creators: {}, brands: {} };
     state.rev = 0;
+    state.deletedTools = [];
+    state.activity = [];
   }
 }
 
@@ -337,6 +345,9 @@ function adoptServerState(data) {
   }
   state.tombstones = tomb;
   state.rev = Number.isFinite(data.rev) ? data.rev : 0;
+  // Server-managed extras: the recycle bin and the recent-changes feed.
+  state.deletedTools = Array.isArray(data.deletedTools) ? data.deletedTools : [];
+  state.activity = Array.isArray(data.activity) ? data.activity : [];
 }
 
 /* Non-destructive server re-fetch: on any failure the current in-memory
@@ -482,6 +493,8 @@ async function syncStateNow() {
         tips: state.tips,
         tombstones: state.tombstones,
         baseRev: state.rev,
+        // Who is making this change — shown in the 最近異動 feed.
+        actor: state.me,
       }),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -2726,6 +2739,101 @@ let editingTipImages = [];      // images buffer for the tip being edited
 let editDraftText = "";         // in-progress edit text (survives image re-renders)
 let pendingTipImages = [];      // images attached to the tip being composed
 let imgTarget = "compose";      // where the shared file input routes its picks
+
+/* ===== history popover (recycle bin + recent changes) ===== */
+function initHistoryPopover() {
+  const pop = document.getElementById("history-popover");
+  if (!pop) return;
+  pop.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", () => { pop.hidden = true; })
+  );
+  document.getElementById("recycle-list")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-restore]");
+    if (btn) restoreTool(btn.dataset.restore);
+  });
+}
+
+async function openHistoryPopover() {
+  const pop = document.getElementById("history-popover");
+  if (!pop) return;
+  // Pull fresh server data first — the bin and the feed live server-side.
+  if (!_dirty && !_syncTimer && !_syncing) await quietRefresh();
+  renderHistoryLists();
+  pop.hidden = false;
+}
+
+function renderHistoryLists() {
+  const recycle = document.getElementById("recycle-list");
+  const activity = document.getElementById("activity-list");
+  if (!recycle || !activity) return;
+
+  const bin = Array.isArray(state.deletedTools) ? state.deletedTools.slice() : [];
+  bin.sort((a, b) => (b.deletedAt || "").localeCompare(a.deletedAt || ""));
+  recycle.innerHTML = bin.length
+    ? bin.map((e) => {
+        const t = e.tool || {};
+        const files = Array.isArray(t.files) && t.files.length
+          ? `<span class="history-meta">${t.files.length} 個檔案</span>` : "";
+        return `
+          <div class="history-row">
+            <div class="history-row-main">
+              <div class="history-row-title">${escapeHTML(t.name || t.id || "")}</div>
+              <div class="history-row-sub">
+                ${t.category ? `<span class="history-meta">${escapeHTML(t.category)}</span>` : ""}
+                ${files}
+                <span class="history-meta">刪於 ${formatWhen(e.deletedAt)}</span>
+              </div>
+            </div>
+            <button type="button" class="btn btn-secondary btn-restore" data-restore="${escapeAttr(t.id || "")}">還原</button>
+          </div>`;
+      }).join("")
+    : `<div class="history-empty">回收桶是空的</div>`;
+
+  const feed = Array.isArray(state.activity) ? state.activity.slice().reverse() : [];
+  activity.innerHTML = feed.length
+    ? feed.slice(0, 60).map((a) => `
+        <div class="history-row history-row-plain">
+          <div class="history-row-main">
+            <div class="history-row-title">
+              <span class="history-actor">${escapeHTML(a.actor || "未具名")}</span>
+              ${escapeHTML(a.action || "")}「${escapeHTML(a.target || "")}」
+            </div>
+            <div class="history-row-sub"><span class="history-meta">${formatWhen(a.ts)}</span></div>
+          </div>
+        </div>`).join("")
+    : `<div class="history-empty">還沒有異動紀錄</div>`;
+}
+
+function formatWhen(iso) {
+  const t = Date.parse(iso || "");
+  if (!Number.isFinite(t)) return "—";
+  const d = new Date(t);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function restoreTool(id) {
+  if (!id) return;
+  const entry = (state.deletedTools || []).find((e) => e && e.tool && e.tool.id === id);
+  if (!entry) return;
+  if (state.localTools.some((t) => t.id === id)) {
+    toast("這個工具已經在架上了");
+    return;
+  }
+  // A fresh `updated` beats the delete-marker in server merges, so the
+  // restore sticks even if a stale tab syncs afterwards.
+  const tool = { ...entry.tool, updated: new Date().toISOString() };
+  state.localTools.push(tool);
+  clearTombstone("tools", id);
+  state.deletedTools = state.deletedTools.filter((e) => e !== entry);
+  if (tool.category) ensureCategory(tool.category);
+  if (tool.creator) ensureCreator(tool.creator);
+  if (tool.brand) ensureBrand(tool.brand);
+  saveTools();
+  renderHistoryLists();
+  render();
+  toast(`已還原「${tool.name || id}」`);
+}
 
 function initTipsPopover() {
   const pop = document.getElementById("tips-popover");

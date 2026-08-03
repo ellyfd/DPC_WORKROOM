@@ -171,6 +171,48 @@ DPC_WORKROOM/
 
 ---
 
+## 🔧 維運手冊(2026-08 起的雲端架構)
+
+> 註:上面的「30 秒上線 / 技術棧」章節描述的是舊的 GitHub Pages 版本。
+> 目前正式站跑在 Cloudflare Workers(`dpcwork.ellyfd.workers.dev`),
+> 資料存 D1(狀態)+ R2(上傳檔案),前端仍是零依賴的三個檔案。
+
+### 部署
+
+Push 到 `main` 自動部署(`.github/workflows/deploy.yml`):
+
+1. 語法檢查 + `tests/merge.test.mjs` 回歸測試,**紅燈不部署**
+2. 用 commit SHA 自動蓋 `?v=` 版本號與 Service Worker 快取名(不用手動改)
+3. `wrangler-action` 部署 Worker + 靜態資產
+
+### 資料安全
+
+- **多人同步**:伺服器端逐筆合併 + 刪除標記(tombstone,30 天),
+  過期分頁不會蓋掉別人的新工具、也不能復活已刪除的項目
+- **回收桶**:刪掉的工具保留完整內容 30 天,前端「紀錄」按鈕可一鍵還原
+- **檔案緩刪**:失去引用的 R2 檔案先進回收暫存 30 天,重新引用自動救回
+- **每日備份**:cron(台灣時間 02:00)把整包狀態快照存到 R2 的
+  `_backups/state-YYYY-MM-DD.json`,保留 30 天
+
+### 從備份還原(最後手段)
+
+```bash
+# 1. 找出要還原的快照
+npx wrangler r2 object get dpc-hub-files/_backups/state-2026-08-03.json --file=snapshot.json
+# 2. 檢查內容無誤後,把它寫回 D1 的 kv 表
+npx wrangler d1 execute dpc-hub --command \
+  "UPDATE kv SET v = (內容), updated_at = strftime('%s','now')*1000 WHERE k = 'state'"
+```
+
+### 建議開啟:Cloudflare Access(登入牆)
+
+API 目前沒有身分驗證,建議在 Cloudflare Zero Trust 加一層登入
+(50 人以下免費、不用改程式):Zero Trust → Access → Applications →
+Add application → Self-hosted → 網域填 `dpcwork.ellyfd.workers.dev`,
+Policy 設定允許的公司信箱網域即可。
+
+---
+
 ## 📄 License
 
 MIT — 自家工作室、設計團隊、工廠、接案窗口、行銷分頁,通通拿去用。
