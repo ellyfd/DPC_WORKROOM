@@ -1948,9 +1948,9 @@ function applyTypeMode(type) {
       ? "上傳 HTML 即發佈為 /p/<工具> 頁面。再次上傳會覆蓋上一份,單檔上限 25 MB。"
       : "每次上傳自動記錄時間 / 上傳人,最新一筆是目前版本。最多保留 5 個版本,單檔上限 25 MB。";
   }
-  if (type === "file") {
-    renderBrandSelect(document.getElementById("brand-select")?.value || "");
-  }
+  // Brand applies to every type — keep the dropdown populated when the user
+  // switches type inside the popover.
+  renderBrandSelect(document.getElementById("brand-select")?.value || "");
   if (type === "file" || type === "page") {
     renderFileList();
   }
@@ -3450,7 +3450,9 @@ function saveTool() {
     type: d.type,
     url: d.type === "link" ? d.url : "",
     icon: d.icon || "",
-    brand: d.type === "file" ? d.brand : "",
+    // The form offers 品牌/客制 for every type (link, page, file) — keep
+    // whatever was picked instead of silently dropping it for non-file tools.
+    brand: d.brand,
     files: (d.type === "file" || d.type === "page")
       ? state.editingFiles.map((f) => ({
           key: f.key,
