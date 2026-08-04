@@ -2918,3 +2918,10 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 .history-pane {
   min-height: 0;
 }
+
+/* Long-press on tiles must not trigger iOS text selection / link callout. */
+.card, .card * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

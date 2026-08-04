@@ -1284,20 +1284,58 @@ function canEditTool(t) {
   return t.lockedBy === state.me;
 }
 
+/* Long-press (~550ms without moving) on touch devices — the mobile stand-in
+   for right-click. Sets _longPressFired so the trailing click is swallowed. */
+let _longPressFired = false;
+
+function attachLongPress(el, fn) {
+  if (!("ontouchstart" in window)) return;
+  let timer = null, startX = 0, startY = 0;
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) { cancel(); return; }
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    timer = setTimeout(() => {
+      timer = null;
+      _longPressFired = true;
+      // Failsafe: if no click follows (e.g. finger slides off), don't let the
+      // suppression leak onto the next genuine tap.
+      setTimeout(() => { _longPressFired = false; }, 700);
+      fn(startX, startY);
+    }, 550);
+  }, { passive: true });
+  el.addEventListener("touchmove", (e) => {
+    const t = e.touches[0];
+    if (!t || Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10) cancel();
+  }, { passive: true });
+  el.addEventListener("touchend", cancel, { passive: true });
+  el.addEventListener("touchcancel", cancel, { passive: true });
+}
+
 function wireSections() {
   // Main tile click = open the tool
   $$("#sections-area [data-open]").forEach((tile) => {
     tile.addEventListener("click", (e) => {
+      // The click that follows a completed long-press must not open the tool.
+      if (_longPressFired) { _longPressFired = false; return; }
       const id = tile.dataset.open;
       const tool = allTools().find((t) => t.id === id);
       if (tool) openTool(tool, e.currentTarget);
     });
   });
-  // Right-click on a tile opens the context menu (edit / copy / download)
+  // Right-click on a tile opens the context menu (edit / copy / download).
+  // On touch devices the same menu opens with a long-press — iOS never
+  // fires contextmenu on plain elements, so without this, phones can't
+  // edit tools at all.
   $$("#sections-area .card[data-id]").forEach((card) => {
     card.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       openTileContextMenu(card.dataset.id, e.clientX, e.clientY);
+    });
+    attachLongPress(card, (x, y) => {
+      try { navigator.vibrate?.(10); } catch {}
+      openTileContextMenu(card.dataset.id, x, y);
     });
   });
   // "+ 新增" in a section header → new-tool popover with that category preselected
