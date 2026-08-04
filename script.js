@@ -1125,7 +1125,11 @@ function renderSections() {
   const showFav = !state.query && !state.brandFilter && state.filter === "all";
   const favBlock = showFav ? favoritesSectionHTML() : "";
 
-  area.innerHTML = tipsBlock + favBlock + groups.map((g) => sectionHTML(g, true)).join("");
+  // Category sections flow in a masonry wrapper so a one-tool category only
+  // takes the height it needs instead of stretching to its row's tallest.
+  area.innerHTML =
+    tipsBlock + favBlock +
+    `<div class="board-cols">${groups.map((g) => sectionHTML(g, true)).join("")}</div>`;
   wireSections();
 }
 

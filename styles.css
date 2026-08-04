@@ -2879,3 +2879,25 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   cursor: pointer;
 }
 .toast-act:hover { background: rgba(255, 255, 255, 0.3); }
+
+/* ===== masonry board — small categories keep their natural height ===== */
+.board-cols {
+  grid-column: 1 / -1;   /* one full-width cell inside the .board grid */
+  columns: 3;
+  column-gap: 18px;
+}
+.board-cols .section {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  display: inline-block;  /* webkit needs this to honor break-inside */
+  width: 100%;
+  vertical-align: top;
+  margin-bottom: 18px;    /* replaces the grid gap between rows */
+}
+@media (max-width: 1200px) {
+  .board-cols { columns: 2; }
+}
+@media (max-width: 880px) {
+  .board-cols { columns: 1; }
+  .board-cols .section { margin-bottom: 16px; }
+}
