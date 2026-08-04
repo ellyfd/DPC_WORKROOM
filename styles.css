@@ -2840,6 +2840,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   color: #fff;
   font-size: 11px; font-weight: 800;
 }
+.htab-count[hidden] { display: none; }
 .history-hint {
   font-size: 12px;
   color: var(--text-mute);
@@ -2900,4 +2901,20 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 @media (max-width: 880px) {
   .board-cols { columns: 1; }
   .board-cols .section { margin-bottom: 16px; }
+}
+
+/* 紀錄 panel: fixed size regardless of which tab is active or how little
+   data it holds yet — sized for the volumes it will grow into (300 筆異動、
+   全部工具的統計、多筆回收桶)。Panes scroll inside. */
+.history-panel {
+  width: 640px;
+  height: min(720px, calc(100vh - 48px)); /* fallback — browsers without dvh drop the next line */
+  height: min(720px, calc(100dvh - 48px));
+}
+.history-panel .history-body {
+  flex: 1;
+  min-height: 0;
+}
+.history-pane {
+  min-height: 0;
 }
