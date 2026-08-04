@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260804a" />
+  <link rel="stylesheet" href="styles.css?v=20260804b" />
 </head>
 <body>
   <div class="bg-soft"></div>
@@ -168,13 +168,22 @@
         </button>
       </div>
 
+      <div class="history-tabs" role="tablist">
+        <button type="button" class="history-tab" data-htab="recycle" role="tab">🗑️ 回收桶<span class="htab-count" id="htab-recycle-count" hidden>0</span></button>
+        <button type="button" class="history-tab" data-htab="stats" role="tab">📊 使用統計</button>
+        <button type="button" class="history-tab" data-htab="activity" role="tab">🕒 最近異動</button>
+      </div>
       <div class="history-body">
-        <div class="history-section-title">🗑️ 回收桶</div>
-        <div id="recycle-list" class="history-list"></div>
-        <div class="history-section-title">📊 使用統計</div>
-        <div id="stats-list" class="history-list"></div>
-        <div class="history-section-title">🕒 最近異動</div>
-        <div id="activity-list" class="history-list"></div>
+        <div class="history-pane" data-hpane="recycle">
+          <div id="recycle-list" class="history-list"></div>
+        </div>
+        <div class="history-pane" data-hpane="stats" hidden>
+          <div class="history-hint">📈 統計為全團隊合計,累積 2–3 週後的數據較具淘汰參考價值</div>
+          <div id="stats-list" class="history-list"></div>
+        </div>
+        <div class="history-pane" data-hpane="activity" hidden>
+          <div id="activity-list" class="history-list"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -478,7 +487,7 @@
   <!-- Toast -->
   <div class="toast" id="toast" hidden></div>
 
-  <script src="script.js?v=20260804a"></script>
+  <script src="script.js?v=20260804b"></script>
 
   <!-- PWA service worker registration -->
   <script>
