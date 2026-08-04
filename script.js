@@ -44,6 +44,8 @@ const state = {
   // of deleted tools, restorable for 30 days) and the recent-changes feed.
   deletedTools: [],
   activity: [],
+  // per-tool usage counters from the server: { toolId: {opens, downloads, lastAt} }
+  stats: {},
 };
 
 function addTombstone(kind, key) {
@@ -348,6 +350,21 @@ function adoptServerState(data) {
   // Server-managed extras: the recycle bin and the recent-changes feed.
   state.deletedTools = Array.isArray(data.deletedTools) ? data.deletedTools : [];
   state.activity = Array.isArray(data.activity) ? data.activity : [];
+  state.stats = data.stats && typeof data.stats === "object" ? data.stats : {};
+}
+
+/* Fire-and-forget usage counter — a click/download should never block or
+   error the UI, and it deliberately bypasses the state-sync machinery. */
+function trackHit(toolId, kind) {
+  if (!toolId) return;
+  try {
+    fetch("/api/hit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ toolId, kind }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {}
 }
 
 /* Non-destructive server re-fetch: on any failure the current in-memory
@@ -1519,6 +1536,7 @@ function openTool(t, anchor) {
       }
       return;
     }
+    trackHit(t.id, "open");
     window.open(pageUrl(t.id), "_blank", "noopener");
     return;
   }
@@ -1532,7 +1550,7 @@ function openTool(t, anchor) {
       }
       return;
     }
-    downloadFile(latest);
+    downloadFile(latest, t.id);
     toast(`下載 ${latest.name}`);
     return;
   }
@@ -1542,6 +1560,7 @@ function openTool(t, anchor) {
     }
     return;
   }
+  trackHit(t.id, "open");
   window.open(t.url, "_blank", "noopener");
 }
 
@@ -2141,7 +2160,7 @@ function renderFileList() {
     btn.addEventListener("click", () => {
       const idx = parseInt(btn.dataset.version, 10);
       const action = btn.dataset.action;
-      if (action === "download") downloadFile(state.editingFiles[idx]);
+      if (action === "download") downloadFile(state.editingFiles[idx], state.editingId);
       else if (action === "delete") {
         if (confirm("刪掉這個版本?(無法復原)")) {
           state.editingFiles.splice(idx, 1);
@@ -2175,11 +2194,12 @@ function formatBytes(n) {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function downloadFile(fileObj) {
+function downloadFile(fileObj, toolId) {
   if (!fileObj?.key) {
     toast("找不到這版的檔案");
     return;
   }
+  if (toolId) trackHit(toolId, "download");
   const a = document.createElement("a");
   a.href = "/files/" + fileObj.key.split("/").map(encodeURIComponent).join("/");
   a.download = fileObj.name || "download";
@@ -2229,7 +2249,7 @@ function initTileFileMenu() {
         const tool = allTools().find((t) => t.id === id);
         const latest = tool?.files?.[0];
         if (latest?.key) {
-          downloadFile(latest);
+          downloadFile(latest, id);
           toast(`下載 ${latest.name}`);
         } else {
           toast("找不到這版的檔案");
@@ -2240,11 +2260,15 @@ function initTileFileMenu() {
       } else if (action === "page") {
         const toolId = id;
         closeTileFileMenu();
+        trackHit(toolId, "open");
         window.open(pageUrl(toolId), "_blank", "noopener");
       } else if (action === "history") {
         const toolId = id;
         closeTileFileMenu();
-        openHistoryPopover(toolId);
+        // Pre-existing dangling name: this used to call the never-defined
+        // openHistoryPopover(toolId) and threw. The version-history panel
+        // is openFilePopover.
+        openFilePopover(toolId);
       }
     });
   });
@@ -2338,7 +2362,7 @@ function initTileContextMenu() {
       } else if (action === "download") {
         const latest = tool?.files?.[0];
         if (latest?.key) {
-          downloadFile(latest);
+          downloadFile(latest, id);
           toast(`下載 ${latest.name}`);
         } else {
           toast("找不到檔案");
@@ -2591,9 +2615,10 @@ function openFilePopover(toolId) {
         const f = files[i];
         if (!f) return;
         if (btn.dataset.act === "download") {
-          downloadFile(f);
+          downloadFile(f, tool.id);
           toast(`下載 ${f.name}`);
         } else if (btn.dataset.act === "preview") {
+          trackHit(tool.id, "open");
           window.open(pageUrl(tool.id, i), "_blank", "noopener");
         }
       });
@@ -2789,6 +2814,8 @@ function renderHistoryLists() {
       }).join("")
     : `<div class="history-empty">回收桶是空的</div>`;
 
+  renderStatsList();
+
   const feed = Array.isArray(state.activity) ? state.activity.slice().reverse() : [];
   activity.innerHTML = feed.length
     ? feed.slice(0, 60).map((a) => `
@@ -2810,6 +2837,39 @@ function formatWhen(iso) {
   const d = new Date(t);
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/* 使用統計 — every tool ranked by total use; untouched ones sink to the
+   bottom with a「從未使用」tag so退役 candidates are obvious. */
+function renderStatsList() {
+  const el = document.getElementById("stats-list");
+  if (!el) return;
+  const stats = state.stats || {};
+  const rows = allTools().map((t) => {
+    const s = stats[t.id] || {};
+    const opens = s.opens || 0;
+    const downloads = s.downloads || 0;
+    return { t, opens, downloads, total: opens + downloads, lastAt: s.lastAt || 0 };
+  });
+  if (!rows.length) {
+    el.innerHTML = `<div class="history-empty">還沒有工具</div>`;
+    return;
+  }
+  rows.sort((a, b) => b.total - a.total || b.lastAt - a.lastAt);
+  el.innerHTML = rows.map((r) => `
+    <div class="history-row history-row-plain">
+      <div class="history-row-main">
+        <div class="history-row-title">${escapeHTML(r.t.name || r.t.id)}</div>
+        <div class="history-row-sub">
+          ${r.total === 0
+            ? `<span class="history-meta history-unused">從未使用</span>`
+            : `<span class="history-meta">開啟 ${r.opens} 次</span>
+               <span class="history-meta">下載 ${r.downloads} 次</span>
+               <span class="history-meta">最近 ${r.lastAt ? formatWhen(new Date(r.lastAt).toISOString()) : "—"}</span>`}
+        </div>
+      </div>
+      <span class="history-count${r.total === 0 ? " history-count-zero" : ""}">${r.total}</span>
+    </div>`).join("");
 }
 
 function restoreTool(id) {

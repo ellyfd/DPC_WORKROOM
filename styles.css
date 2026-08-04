@@ -91,7 +91,8 @@ h1, h2, h3 { margin: 0; }
    ============================================================ */
 .hero {
   display: grid;
-  grid-template-columns: auto 1fr auto auto auto auto;
+  /* brand | search | 客人篩選 | 許願池 | 紀錄 | 小知識 | 新增 */
+  grid-template-columns: auto 1fr auto auto auto auto auto;
   align-items: center;
   gap: 16px;
 }
@@ -2473,11 +2474,28 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* mid-width desktop — the header row is tight with four buttons, so the
+   secondary ones (許願池/紀錄/小知識) shrink to icon-only. The primary
+   新增工具 keeps its label. */
+@media (max-width: 1360px) {
+  .hero .btn-wish .btn-text,
+  .hero .btn-tips .btn-text { display: none; }
+  .hero .btn-wish,
+  .hero .btn-tips { padding-left: 11px; padding-right: 11px; }
+  .hero .btn-tips { position: relative; }
+  .hero .btn-tips .tips-count {
+    position: absolute;
+    top: -5px; right: -5px;
+    margin: 0;
+    border: 2px solid var(--surface);
+  }
+}
+
 /* tablet / narrow desktop — board collapses to single column */
 @media (max-width: 880px) {
   .page { padding: 28px 22px 48px; gap: 28px; }
   .hero {
-    grid-template-columns: auto 1fr auto auto auto;
+    grid-template-columns: auto 1fr auto auto auto auto;
     gap: 14px;
   }
   .brand-filter { display: none; }
@@ -2504,13 +2522,14 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
      Keeps everything inside the viewport (no horizontal overflow). */
   .hero {
     display: grid;
-    grid-template-columns: 1fr auto auto auto;
+    grid-template-columns: 1fr auto auto auto auto;
     grid-template-areas:
-      "brand wish tips add"
-      "search search search search";
+      "brand wish hist tips add"
+      "search search search search search";
     gap: 12px 6px;
     align-items: center;
   }
+  .hero #open-history { grid-area: hist; }
   .brand { grid-area: brand; min-width: 0; gap: 9px; }
   .logo { width: 34px; height: 34px; font-size: 16px; border-radius: 10px; }
   .brand-name { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2747,3 +2766,16 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   padding: 10px 4px;
 }
 .btn-restore { flex-shrink: 0; padding: 6px 12px; font-size: 12.5px; }
+.history-count {
+  flex-shrink: 0;
+  min-width: 34px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+.history-count-zero { color: var(--text-mute); background: var(--surface-2); }
+.history-unused { color: var(--danger); font-weight: 600; }
