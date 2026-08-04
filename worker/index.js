@@ -222,7 +222,7 @@ async function putState(request, env) {
     // after the write succeeds (a lost write must not lose files).
     const { trash, expired } = computeTrash(oldState, finalState);
     finalState.trash = trash;
-    finalState.deletedTools = computeDeletedTools(oldState, finalState);
+    finalState.deletedTools = computeDeletedTools(oldState, finalState, actor);
     finalState.activity = appendActivity(oldState, finalState, actor);
 
     const written = oldRow
@@ -271,7 +271,7 @@ function computeTrash(oldState, finalState) {
 /* Recycle bin: whenever a live tool becomes tombstoned, its full object is
    parked here so it can be restored with one click. Entries leave when the
    tool comes back to life or the tombstone expires (30 days). */
-function computeDeletedTools(oldState, finalState) {
+function computeDeletedTools(oldState, finalState, actor) {
   const tomb = finalState.tombstones.tools;
   const liveIds = new Set(finalState.tools.map((t) => t && t.id).filter(Boolean));
   const out = [];
@@ -285,7 +285,7 @@ function computeDeletedTools(oldState, finalState) {
   for (const [id, at] of Object.entries(tomb)) {
     if (liveIds.has(id) || kept.has(id)) continue;
     const tool = oldById.get(id);
-    if (tool) out.push({ tool, deletedAt: at });
+    if (tool) out.push({ tool, deletedAt: at, deletedBy: actor || "" });
   }
   return out.slice(-DELETED_TOOLS_CAP);
 }

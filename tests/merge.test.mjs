@@ -100,8 +100,9 @@ const binFinal = normalizeState({
   tools: [{ id: "b", name: "B", updated: iso(0) }], // b 被還原
   tombstones: { tools: { a: iso(0) }, tips: {}, categories: {}, creators: {}, brands: {} }, // a 被刪除
 });
-const bin = computeDeletedTools(binOld, binFinal);
+const bin = computeDeletedTools(binOld, binFinal, "Elly");
 assert(bin.some((e) => e.tool.id === "a"), "剛刪除的工具進回收桶(含完整內容)");
+assert(bin.find((e) => e.tool.id === "a")?.deletedBy === "Elly", "回收桶記錄刪除人");
 assert(!bin.some((e) => e.tool.id === "b"), "還原後離開回收桶");
 
 /* ---- 異動紀錄 ---- */

@@ -2828,7 +2828,7 @@ let editDraftText = "";         // in-progress edit text (survives image re-rend
 let pendingTipImages = [];      // images attached to the tip being composed
 let imgTarget = "compose";      // where the shared file input routes its picks
 
-/* ===== history popover (recycle bin + recent changes) ===== */
+/* ===== history popover (recycle bin / stats / recent changes) ===== */
 function initHistoryPopover() {
   const pop = document.getElementById("history-popover");
   if (!pop) return;
@@ -2839,6 +2839,20 @@ function initHistoryPopover() {
     const btn = e.target.closest("[data-restore]");
     if (btn) restoreTool(btn.dataset.restore);
   });
+  pop.querySelectorAll(".history-tab").forEach((tab) =>
+    tab.addEventListener("click", () => selectHistoryTab(tab.dataset.htab))
+  );
+}
+
+function selectHistoryTab(name) {
+  const pop = document.getElementById("history-popover");
+  if (!pop) return;
+  pop.querySelectorAll(".history-tab").forEach((t) =>
+    t.classList.toggle("active", t.dataset.htab === name)
+  );
+  pop.querySelectorAll(".history-pane").forEach((p) => {
+    p.hidden = p.dataset.hpane !== name;
+  });
 }
 
 async function openHistoryPopover() {
@@ -2847,6 +2861,8 @@ async function openHistoryPopover() {
   // Pull fresh server data first — the bin and the feed live server-side.
   if (!_dirty && !_syncTimer && !_syncing) await quietRefresh();
   renderHistoryLists();
+  // Land on the bin when there's something to restore, otherwise on stats.
+  selectHistoryTab(state.deletedTools?.length ? "recycle" : "stats");
   pop.hidden = false;
 }
 
@@ -2862,6 +2878,10 @@ function renderHistoryLists() {
         const t = e.tool || {};
         const files = Array.isArray(t.files) && t.files.length
           ? `<span class="history-meta">${t.files.length} 個檔案</span>` : "";
+        const daysLeft = binDaysLeft(e.deletedAt);
+        const by = e.deletedBy
+          ? `<span class="history-meta">${escapeHTML(e.deletedBy)} 刪於 ${formatWhen(e.deletedAt)}</span>`
+          : `<span class="history-meta">刪於 ${formatWhen(e.deletedAt)}</span>`;
         return `
           <div class="history-row">
             <div class="history-row-main">
@@ -2869,29 +2889,95 @@ function renderHistoryLists() {
               <div class="history-row-sub">
                 ${t.category ? `<span class="history-meta">${escapeHTML(t.category)}</span>` : ""}
                 ${files}
-                <span class="history-meta">刪於 ${formatWhen(e.deletedAt)}</span>
+                ${by}
+                <span class="history-meta history-days-left">還剩 ${daysLeft} 天</span>
               </div>
             </div>
             <button type="button" class="btn btn-secondary btn-restore" data-restore="${escapeAttr(t.id || "")}">還原</button>
           </div>`;
       }).join("")
-    : `<div class="history-empty">回收桶是空的</div>`;
+    : `<div class="history-empty">回收桶是空的 — 刪掉的工具會在這裡保留 30 天</div>`;
+
+  const badge = document.getElementById("htab-recycle-count");
+  if (badge) {
+    badge.textContent = String(bin.length);
+    badge.hidden = !bin.length;
+  }
 
   renderStatsList();
+  renderActivityFeed(activity);
+}
 
+function binDaysLeft(deletedAt) {
+  const t = Date.parse(deletedAt || "");
+  if (!Number.isFinite(t)) return "?";
+  return Math.max(0, Math.ceil(30 - (Date.now() - t) / 86400000));
+}
+
+/* 最近異動 — grouped by day, with consecutive same-actor/same-action runs
+   collapsed into one line ("Elly 更新工具 ×3") so the feed reads like a
+   timeline instead of a raw log. */
+function renderActivityFeed(el) {
   const feed = Array.isArray(state.activity) ? state.activity.slice().reverse() : [];
-  activity.innerHTML = feed.length
-    ? feed.slice(0, 60).map((a) => `
-        <div class="history-row history-row-plain">
-          <div class="history-row-main">
-            <div class="history-row-title">
-              <span class="history-actor">${escapeHTML(a.actor || "未具名")}</span>
-              ${escapeHTML(a.action || "")}「${escapeHTML(a.target || "")}」
-            </div>
-            <div class="history-row-sub"><span class="history-meta">${formatWhen(a.ts)}</span></div>
+  if (!feed.length) {
+    el.innerHTML = `<div class="history-empty">還沒有異動紀錄</div>`;
+    return;
+  }
+
+  // Collapse consecutive entries by the same person doing the same action.
+  const runs = [];
+  for (const a of feed.slice(0, 120)) {
+    const last = runs[runs.length - 1];
+    if (last && last.actor === (a.actor || "") && last.action === (a.action || "") &&
+        dayLabel(last.ts) === dayLabel(a.ts)) {
+      last.targets.push(a.target || "");
+    } else {
+      runs.push({ actor: a.actor || "", action: a.action || "", ts: a.ts, targets: [a.target || ""] });
+    }
+  }
+
+  let currentDay = null;
+  const parts = [];
+  for (const r of runs) {
+    const day = dayLabel(r.ts);
+    if (day !== currentDay) {
+      currentDay = day;
+      parts.push(`<div class="history-day">${escapeHTML(day)}</div>`);
+    }
+    const shown = r.targets.slice(0, 3).map((t) => `「${escapeHTML(t)}」`).join("、");
+    const more = r.targets.length > 3 ? ` 等 ${r.targets.length} 項` : "";
+    parts.push(`
+      <div class="history-row history-row-plain">
+        <div class="history-row-main">
+          <div class="history-row-title">
+            <span class="history-actor">${escapeHTML(r.actor || "未具名")}</span>
+            ${escapeHTML(r.action)} ${shown}${more}
           </div>
-        </div>`).join("")
-    : `<div class="history-empty">還沒有異動紀錄</div>`;
+          <div class="history-row-sub"><span class="history-meta">${timeOnly(r.ts)}</span></div>
+        </div>
+      </div>`);
+  }
+  el.innerHTML = parts.join("");
+}
+
+function dayLabel(iso) {
+  const t = Date.parse(iso || "");
+  if (!Number.isFinite(t)) return "更早";
+  const d = new Date(t);
+  const today = new Date();
+  const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOf(today) - startOf(d)) / 86400000);
+  if (diffDays === 0) return "今天";
+  if (diffDays === 1) return "昨天";
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function timeOnly(iso) {
+  const t = Date.parse(iso || "");
+  if (!Number.isFinite(t)) return "—";
+  const d = new Date(t);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function formatWhen(iso) {
@@ -2902,8 +2988,8 @@ function formatWhen(iso) {
   return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/* 使用統計 — every tool ranked by total use; untouched ones sink to the
-   bottom with a「從未使用」tag so退役 candidates are obvious. */
+/* 使用統計 — used tools ranked on top; untouched ones live in a collapsed
+   neutral-gray group (zero is "no data yet", not an alarm). */
 function renderStatsList() {
   const el = document.getElementById("stats-list");
   if (!el) return;
@@ -2918,21 +3004,40 @@ function renderStatsList() {
     el.innerHTML = `<div class="history-empty">還沒有工具</div>`;
     return;
   }
-  rows.sort((a, b) => b.total - a.total || b.lastAt - a.lastAt);
-  el.innerHTML = rows.map((r) => `
-    <div class="history-row history-row-plain">
-      <div class="history-row-main">
-        <div class="history-row-title">${escapeHTML(r.t.name || r.t.id)}</div>
-        <div class="history-row-sub">
-          ${r.total === 0
-            ? `<span class="history-meta history-unused">從未使用</span>`
-            : `<span class="history-meta">開啟 ${r.opens} 次</span>
-               <span class="history-meta">下載 ${r.downloads} 次</span>
-               <span class="history-meta">最近 ${r.lastAt ? formatWhen(new Date(r.lastAt).toISOString()) : "—"}</span>`}
-        </div>
-      </div>
-      <span class="history-count${r.total === 0 ? " history-count-zero" : ""}">${r.total}</span>
-    </div>`).join("");
+  const used = rows.filter((r) => r.total > 0).sort((a, b) => b.total - a.total || b.lastAt - a.lastAt);
+  const unused = rows.filter((r) => r.total === 0).sort((a, b) =>
+    (a.t.name || a.t.id).localeCompare(b.t.name || b.t.id, "zh-Hant"));
+
+  const usedHTML = used.length
+    ? used.map((r) => `
+        <div class="history-row history-row-plain">
+          <div class="history-row-main">
+            <div class="history-row-title">${escapeHTML(r.t.name || r.t.id)}</div>
+            <div class="history-row-sub">
+              <span class="history-meta">開啟 ${r.opens} 次</span>
+              <span class="history-meta">下載 ${r.downloads} 次</span>
+              <span class="history-meta">最近 ${r.lastAt ? formatWhen(new Date(r.lastAt).toISOString()) : "—"}</span>
+            </div>
+          </div>
+          <span class="history-count">${r.total}</span>
+        </div>`).join("")
+    : `<div class="history-empty">還沒有使用紀錄 — 大家開始點工具後會出現在這裡</div>`;
+
+  const unusedHTML = unused.length
+    ? `<details class="stats-unused">
+        <summary>尚無使用紀錄的工具 (${unused.length})</summary>
+        ${unused.map((r) => `
+          <div class="history-row history-row-plain history-row-muted">
+            <div class="history-row-main">
+              <div class="history-row-title">${escapeHTML(r.t.name || r.t.id)}</div>
+              ${r.t.category ? `<div class="history-row-sub"><span class="history-meta">${escapeHTML(r.t.category)}</span></div>` : ""}
+            </div>
+            <span class="history-count history-count-zero">0</span>
+          </div>`).join("")}
+      </details>`
+    : "";
+
+  el.innerHTML = usedHTML + unusedHTML;
 }
 
 function restoreTool(id) {
@@ -3739,12 +3844,23 @@ function deleteTool() {
     return;
   }
   if (!confirm("確定要刪除這個工具?")) return;
-  addTombstone("tools", state.editingId);
-  state.localTools = state.localTools.filter((t) => t.id !== state.editingId);
+  const deletedTool = state.localTools.find((x) => x.id === state.editingId) || t;
+  const deletedId = state.editingId;
+  addTombstone("tools", deletedId);
+  state.localTools = state.localTools.filter((x) => x.id !== deletedId);
   saveTools();
   closeToolPopover();
   render();
-  toast("已刪除");
+  // Gmail-style escape hatch: most accidental deletes are noticed instantly,
+  // so offer an in-place undo before the user has to find the recycle bin.
+  toastUndo(`已刪除「${deletedTool?.name || deletedId}」`, "復原", () => {
+    if (state.localTools.some((x) => x.id === deletedId)) return;
+    state.localTools.push({ ...deletedTool, updated: new Date().toISOString() });
+    clearTombstone("tools", deletedId);
+    saveTools();
+    render();
+    toast("已復原");
+  });
 }
 
 /* ===== auto-fetch ===== */
@@ -4022,6 +4138,28 @@ function toast(msg) {
   t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
+}
+
+/* Toast with an inline action button (e.g. 「已刪除 — 復原」). Stays up
+   longer than a plain toast so there's time to react. */
+function toastUndo(msg, label, fn) {
+  const t = $("#toast");
+  t.textContent = "";
+  const span = document.createElement("span");
+  span.textContent = msg;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "toast-act";
+  btn.textContent = label;
+  btn.addEventListener("click", () => {
+    t.hidden = true;
+    clearTimeout(toastTimer);
+    fn();
+  });
+  t.append(span, btn);
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 6000);
 }
 
 /* ===== utils ===== */

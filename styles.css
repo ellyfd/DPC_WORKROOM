@@ -2800,3 +2800,82 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 @media (max-width: 640px) {
   .fav-hint { display: none; }
 }
+
+/* ===== history popover v2: tabs / day groups / neutral zero states ===== */
+.history-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 18px 0;
+  flex-shrink: 0;
+}
+.history-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.history-tab:hover { color: var(--text); }
+.history-tab.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.htab-count {
+  min-width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #fff;
+  font-size: 11px; font-weight: 800;
+}
+.history-hint {
+  font-size: 12px;
+  color: var(--text-mute);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+}
+.history-day {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-mute);
+  letter-spacing: 0.03em;
+  margin: 8px 2px 0;
+}
+.history-days-left { color: #b45309; font-weight: 600; }
+.history-row-muted { opacity: 0.75; }
+.stats-unused { margin-top: 6px; }
+.stats-unused summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-mute);
+  padding: 8px 4px;
+  user-select: none;
+}
+.stats-unused summary:hover { color: var(--text); }
+.stats-unused .history-row { margin-top: 6px; }
+.toast-act {
+  margin-left: 12px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.toast-act:hover { background: rgba(255, 255, 255, 0.3); }
