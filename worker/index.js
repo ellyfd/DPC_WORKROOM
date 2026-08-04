@@ -29,6 +29,10 @@ export default {
         if (!writeOriginAllowed(request)) return jsonError("origin not allowed", 403);
         return await uploadFile(request, env);
       }
+      if (url.pathname === "/api/hit" && request.method === "POST") {
+        if (!writeOriginAllowed(request)) return jsonError("origin not allowed", 403);
+        return await recordHit(request, env);
+      }
       if (url.pathname.startsWith("/files/")) {
         const key = decodeURIComponent(url.pathname.slice("/files/".length));
         return await downloadFile(env, key);
@@ -147,7 +151,43 @@ function normalizeState(raw) {
 
 async function getState(env) {
   const row = await env.DB.prepare("SELECT v FROM kv WHERE k = ?").bind("state").first();
-  return json(normalizeState(row ? JSON.parse(row.v) : null));
+  const state = normalizeState(row ? JSON.parse(row.v) : null);
+  // Usage counters live in their own table (not the merged blob) so a click
+  // never triggers a state write; missing table just means no stats yet.
+  state.stats = {};
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT tool_id, opens, downloads, last_at FROM hits"
+    ).all();
+    for (const r of results || []) {
+      state.stats[r.tool_id] = {
+        opens: r.opens || 0,
+        downloads: r.downloads || 0,
+        lastAt: r.last_at || 0,
+      };
+    }
+  } catch {}
+  return json(state);
+}
+
+/* Per-tool usage counters — POST /api/hit {toolId, kind: "open"|"download"}.
+   Fire-and-forget from the client; kept out of the state blob so counting a
+   click can never conflict with (or spam) the merge machinery. */
+async function recordHit(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const toolId = typeof body.toolId === "string" ? body.toolId.slice(0, 80) : "";
+  const kind = body.kind === "download" ? "download" : body.kind === "open" ? "open" : "";
+  if (!toolId || !kind) return jsonError("bad hit", 400);
+  await env.DB.batch([
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS hits (tool_id TEXT PRIMARY KEY, opens INTEGER DEFAULT 0, downloads INTEGER DEFAULT 0, last_at INTEGER)"
+    ),
+    env.DB.prepare(
+      "INSERT INTO hits (tool_id, opens, downloads, last_at) VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT(tool_id) DO UPDATE SET opens = opens + excluded.opens, downloads = downloads + excluded.downloads, last_at = excluded.last_at"
+    ).bind(toolId, kind === "open" ? 1 : 0, kind === "download" ? 1 : 0, Date.now()),
+  ]);
+  return json({ ok: true });
 }
 
 async function putState(request, env) {

@@ -2747,3 +2747,16 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   padding: 10px 4px;
 }
 .btn-restore { flex-shrink: 0; padding: 6px 12px; font-size: 12.5px; }
+.history-count {
+  flex-shrink: 0;
+  min-width: 34px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+.history-count-zero { color: var(--text-mute); background: var(--surface-2); }
+.history-unused { color: var(--danger); font-weight: 600; }
