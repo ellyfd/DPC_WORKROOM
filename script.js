@@ -357,6 +357,7 @@ function adoptServerState(data) {
    error the UI, and it deliberately bypasses the state-sync machinery. */
 function trackHit(toolId, kind) {
   if (!toolId) return;
+  bumpLocalUsage(toolId);
   try {
     fetch("/api/hit", {
       method: "POST",
@@ -365,6 +366,38 @@ function trackHit(toolId, kind) {
       keepalive: true,
     }).catch(() => {});
   } catch {}
+}
+
+/* ===== 我的常用 — per-device favorites row =====
+   Usage lives only in this browser's localStorage: everyone sees their own
+   row, shaped by their own habits on this device. */
+const LS_USAGE_KEY = "dpcHub.usage.v1";
+const FAV_MAX = 8;            // show at most this many tools
+const FAV_MIN = 3;            // hide the row until it has this many
+const FAV_MIN_USES = 2;       // a single stray click doesn't make a favorite
+const FAV_WINDOW_MS = 60 * 24 * 60 * 60 * 1000; // forget usage older than 60 days
+
+function bumpLocalUsage(toolId) {
+  try {
+    const usage = loadJSON(LS_USAGE_KEY, {});
+    const u = usage[toolId] || { n: 0, last: 0 };
+    u.n += 1;
+    u.last = Date.now();
+    usage[toolId] = u;
+    saveJSON(LS_USAGE_KEY, usage);
+  } catch {}
+}
+
+function favoriteTools() {
+  const usage = loadJSON(LS_USAGE_KEY, {});
+  const cutoff = Date.now() - FAV_WINDOW_MS;
+  const byId = new Map(allTools().map((t) => [t.id, t]));
+  const picked = Object.entries(usage)
+    .filter(([id, u]) => byId.has(id) && u && u.n >= FAV_MIN_USES && (u.last || 0) >= cutoff)
+    .sort((a, b) => b[1].n - a[1].n || (b[1].last || 0) - (a[1].last || 0))
+    .slice(0, FAV_MAX)
+    .map(([id]) => byId.get(id));
+  return picked.length >= FAV_MIN ? picked : [];
 }
 
 /* Non-destructive server re-fetch: on any failure the current in-memory
@@ -1087,8 +1120,36 @@ function renderSections() {
     return;
   }
 
-  area.innerHTML = tipsBlock + groups.map((g) => sectionHTML(g, true)).join("");
+  // 我的常用 — only on the unfiltered board (searches/filters answer a
+  // different question, and the row would just duplicate results there).
+  const showFav = !state.query && !state.brandFilter && state.filter === "all";
+  const favBlock = showFav ? favoritesSectionHTML() : "";
+
+  area.innerHTML = tipsBlock + favBlock + groups.map((g) => sectionHTML(g, true)).join("");
   wireSections();
+}
+
+function favoritesSectionHTML() {
+  const tools = favoriteTools();
+  if (!tools.length) return "";
+  const catColor = new Map(state.categories.map((c) => [c.name, c.color]));
+  // Favorites are shortcuts, not a category — no dragging in or out.
+  const cards = tools
+    .map((t) => cardHTML(t, catColor.get(t.category) ?? 0).replace('draggable="true"', 'draggable="false"'))
+    .join("");
+  return `
+    <section class="section section-fav" data-fav="1">
+      <div class="section-head">
+        <div class="section-title-row">
+          <span class="fav-star" aria-hidden="true">⭐</span>
+          <span class="section-title">我的常用</span>
+          <span class="section-count">${tools.length}</span>
+        </div>
+        <span class="fav-hint">依你在這台裝置的使用習慣自動排序</span>
+      </div>
+      <div class="section-body"><div class="section-grid">${cards}</div></div>
+    </section>
+  `;
 }
 
 // Tips whose text or author matches every search keyword, newest first.
@@ -1288,6 +1349,8 @@ function wireCardDrag() {
   });
 
   $$("#sections-area .section").forEach((sec) => {
+    // 我的常用 is a read-only shortcut row — never a drag source or target.
+    if (sec.dataset.fav === "1") return;
     const isSystem = sec.dataset.system === "1";
     const head = sec.querySelector(".section-head");
 
