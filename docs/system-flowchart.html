@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智慧做工判別系統藍圖</title>
+<style>
+  :root{
+    --ground:#F5F6F5;
+    --surface:#FFFFFF;
+    --node:#F1F3F2;
+    --ink:#20242C;
+    --muted:#5D6472;
+    --line:#DFE2E1;
+    --edge:#AEB6B9;
+    --arrow:#525B68;
+    --use:#0E7C74;
+    --use-bg:#E2F1EE;
+    --train:#5254BE;
+    --train-bg:#E9E9F8;
+    --gap:#96690B;
+    --gap-bg:#F5ECD8;
+    --ok:#2E7D4F;
+    --ok-bg:#E1F0E6;
+    --dot:#D8DCDA;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#13161B;
+      --surface:#1C2027;
+      --node:#252A33;
+      --ink:#E8EAEE;
+      --muted:#9AA2AF;
+      --line:#323844;
+      --edge:#525B6B;
+      --arrow:#98A1B0;
+      --use:#4CC2B5;
+      --use-bg:#0F3733;
+      --train:#9FA1F0;
+      --train-bg:#272A4D;
+      --gap:#E0AC4A;
+      --gap-bg:#3B2F14;
+      --ok:#63BE8D;
+      --ok-bg:#173826;
+      --dot:#262B33;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#13161B;
+    --surface:#1C2027;
+    --node:#252A33;
+    --ink:#E8EAEE;
+    --muted:#9AA2AF;
+    --line:#323844;
+    --edge:#525B6B;
+    --arrow:#98A1B0;
+    --use:#4CC2B5;
+    --use-bg:#0F3733;
+    --train:#9FA1F0;
+    --train-bg:#272A4D;
+    --gap:#E0AC4A;
+    --gap-bg:#3B2F14;
+    --ok:#63BE8D;
+    --ok-bg:#173826;
+    --dot:#262B33;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--ground);
+    background-image:radial-gradient(var(--dot) 1px, transparent 1px);
+    background-size:26px 26px;
+    color:var(--ink);
+    font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Helvetica Neue",Arial,sans-serif;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  main{max-width:1040px;margin:0 auto;padding:48px 20px 72px}
+
+  /* ── header ── */
+  header.doc{margin-bottom:40px}
+  .kicker{font-size:12px;letter-spacing:.22em;color:var(--use);font-weight:700;margin:0 0 10px}
+  h1{font-size:clamp(26px,4.5vw,40px);font-weight:800;letter-spacing:.02em;margin:0 0 10px;text-wrap:balance}
+  .subtitle{font-size:15px;color:var(--muted);max-width:42em;margin:0 0 18px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px}
+  .meta span{
+    font-size:12px;color:var(--muted);background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:3px 12px;
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* ── legend ── */
+  .legend{
+    display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:12px 18px;margin-bottom:44px;font-size:12.5px;color:var(--muted);
+  }
+  .legend b{color:var(--ink);font-weight:600;margin-right:2px}
+  .lg{display:inline-flex;align-items:center;gap:7px}
+  .sw{display:inline-block;width:26px;height:0;border-top:3px solid}
+  .sw-use{border-color:var(--use)}
+  .sw-train{border-color:var(--train)}
+  .sw-dash{border-top-style:dashed;border-color:var(--arrow)}
+  .sw-gap{width:12px;height:12px;border:none;border-radius:3px;background:var(--gap-bg);outline:1.5px solid var(--gap);outline-offset:-1.5px}
+
+  /* ── sections ── */
+  section{margin-bottom:56px}
+  .sechead{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+  .secno{
+    font-size:13px;font-weight:700;color:var(--use);
+    border:1.5px solid var(--use);border-radius:8px;
+    min-width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;
+    font-variant-numeric:tabular-nums;transform:translateY(3px);
+  }
+  h2{font-size:21px;font-weight:750;margin:0;letter-spacing:.02em}
+  .lead{color:var(--muted);font-size:14px;max-width:46em;margin:4px 0 18px}
+
+  /* ── figures ── */
+  figure{
+    margin:0;background:var(--surface);border:1px solid var(--line);
+    border-radius:14px;padding:22px 18px 10px;
+  }
+  .scroller{overflow-x:auto}
+  .scroller svg{display:block;height:auto;margin:0 auto}
+  .svg-wide{min-width:880px;max-width:100%}
+  .svg-mid{min-width:760px;max-width:100%}
+  .svg-tall{width:100%;max-width:680px;min-width:560px}
+  figcaption{
+    font-size:12.5px;color:var(--muted);padding:12px 6px 10px;
+    border-top:1px dashed var(--line);margin-top:12px;
+  }
+  svg text{fill:var(--ink)}
+  .tt{font-size:12.5px;font-weight:600}
+  .ts{font-size:11px;fill:var(--muted)}
+  .lab{font-size:11px;fill:var(--muted)}
+  .tu{fill:var(--use)}.tv{fill:var(--train)}.tg{fill:var(--gap)}
+  .d-box{fill:var(--node);stroke:var(--edge);stroke-width:1.2}
+  .d-use{fill:var(--use-bg);stroke:var(--use);stroke-width:1.6}
+  .d-train{fill:var(--train-bg);stroke:var(--train);stroke-width:1.4}
+  .d-ghost{fill:none;stroke:var(--gap);stroke-width:1.3;stroke-dasharray:5 4}
+  .d-frame{fill:none;stroke:var(--edge);stroke-width:1;stroke-dasharray:3 4}
+  .d-chip{fill:var(--ground);stroke:var(--edge);stroke-width:1}
+  .fl{fill:none;stroke:var(--arrow);stroke-width:1.4}
+  .fl-v{stroke:var(--train)}
+  .fl-g{stroke:var(--gap)}
+  .fl-u{stroke:var(--use)}
+  .dash{stroke-dasharray:5 4}
+
+  /* ── judgment cards ── */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+  @media (max-width:760px){.cards{grid-template-columns:1fr}}
+  .jcard{
+    background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px;display:flex;flex-direction:column;gap:6px;
+  }
+  .jcard h3{margin:0;font-size:15px;font-weight:700}
+  .jnum{
+    font-size:40px;font-weight:800;line-height:1.1;
+    font-variant-numeric:tabular-nums;letter-spacing:-.01em;
+  }
+  .jnum small{font-size:15px;font-weight:600;color:var(--muted);margin-left:2px}
+  .meter{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:2px 0 8px}
+  .meter i{display:block;height:100%;border-radius:3px;background:var(--use)}
+  .jcard p{margin:0;font-size:12.5px;color:var(--muted)}
+  .jcard p b{color:var(--ink);font-weight:600}
+
+  /* ── tables ── */
+  .twrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+  table{border-collapse:collapse;width:100%;min-width:780px;font-size:13px}
+  th{
+    text-align:left;font-size:11.5px;letter-spacing:.08em;color:var(--muted);
+    font-weight:700;padding:12px 16px;border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  td{padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:600;white-space:nowrap}
+  .pill{
+    display:inline-block;font-size:11.5px;font-weight:600;border-radius:999px;
+    padding:2px 10px;white-space:nowrap;
+  }
+  .p-ok{background:var(--ok-bg);color:var(--ok)}
+  .p-gap{background:var(--gap-bg);color:var(--gap)}
+  .p-mid{background:var(--node);color:var(--muted)}
+  .gaptext{color:var(--gap);font-weight:600}
+
+  /* ── MIS list ── */
+  .mis{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:700px){.mis{grid-template-columns:1fr}}
+  .mcard{
+    background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:16px 20px;
+  }
+  .mcard h3{margin:0 0 8px;font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .mtag{
+    font-size:11px;font-weight:700;color:var(--train);border:1.5px solid var(--train);
+    border-radius:6px;padding:0 6px;line-height:1.7;font-variant-numeric:tabular-nums;
+  }
+  .mcard ul{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}
+  .mcard li{margin:4px 0}
+  .mcard li::marker{color:var(--edge)}
+
+  /* ── deliverables ── */
+  .deliv{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px 20px}
+  .deliv ol{margin:10px 0;padding-left:0;list-style:none;counter-reset:d}
+  .deliv li{
+    counter-increment:d;display:flex;gap:12px;align-items:baseline;
+    padding:10px 0;border-bottom:1px dashed var(--line);font-size:14px;
+  }
+  .deliv li:last-child{border-bottom:none}
+  .deliv li::before{
+    content:counter(d);font-size:12px;font-weight:700;color:var(--muted);
+    border:1px solid var(--edge);border-radius:6px;min-width:22px;height:22px;
+    display:inline-flex;align-items:center;justify-content:center;flex:none;
+    transform:translateY(2px);font-variant-numeric:tabular-nums;
+  }
+  .deliv .where{margin-left:auto;font-size:12px;color:var(--ok);font-weight:600;white-space:nowrap}
+  .deliv b{font-weight:650}
+
+  footer{
+    margin-top:48px;padding-top:16px;border-top:1px solid var(--line);
+    font-size:12px;color:var(--muted);
+  }
+  @media (prefers-reduced-motion: no-preference){
+    section{scroll-margin-top:24px}
+  }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+      <path d="M0,0 L9,4 L0,8 Z" fill="var(--arrow)"/>
+    </marker>
+    <marker id="ar-v" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+      <path d="M0,0 L9,4 L0,8 Z" fill="var(--train)"/>
+    </marker>
+    <marker id="ar-u" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+      <path d="M0,0 L9,4 L0,8 Z" fill="var(--use)"/>
+    </marker>
+    <marker id="ar-g" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+      <path d="M0,0 L9,4 L0,8 Z" fill="var(--gap)"/>
+    </marker>
+  </defs>
+</svg>
+
+<main>
+<header class="doc">
+  <p class="kicker">SYSTEM BLUEPRINT · 會議討論稿</p>
+  <h1>智慧做工判別系統藍圖</h1>
+  <p class="subtitle">整體系統流程圖 — 使用流 × 訓練流。給 MIS 看的是整體系統架構:資料從哪裡來、系統怎麼判斷、結果怎麼回流,以及哪裡缺資料、誰要補。</p>
+  <div class="meta">
+    <span>草案 v1</span>
+    <span>2026-08-16</span>
+    <span>下次會議:與 MIS review 流程與架構</span>
+  </div>
+</header>
+
+<div class="legend" role="note">
+  <b>圖例</b>
+  <span class="lg"><span class="sw sw-use"></span>使用流(即時推論)</span>
+  <span class="lg"><span class="sw sw-train"></span>訓練流(標準答案與回流)</span>
+  <span class="lg"><span class="sw sw-dash"></span>虛線=規劃中/未來機制</span>
+  <span class="lg"><span class="sw sw-gap"></span>缺口/待確認</span>
+</div>
+
+<!-- ═══════════ 1. 系統總覽 ═══════════ -->
+<section id="s1">
+  <div class="sechead"><span class="secno">1</span><h2>系統總覽</h2></div>
+  <p class="lead">一張圖看完整條路:資料來源 → 解析 → 三大判別 → 加權裁決 → 使用者輸出;人工修正沿底部紫色軌道回流訓練資料庫,再回頭更新模型 — 系統會越用越準。</p>
+  <figure>
+    <div class="scroller">
+      <svg class="svg-wide" viewBox="0 0 980 520" role="img" aria-label="系統總覽圖:上傳與既有資料來源經資料解析後進入三大判別(圖像辨識、做工翻譯、信心指數),由加權裁決輸出推薦做工、尺寸表與 PDF,人工調整結果回流訓練資料庫並更新模型;未來規劃新款入庫自動觸發。">
+        <!-- future trigger -->
+        <rect class="d-ghost" x="24" y="20" width="210" height="44" rx="8"/>
+        <text class="ts tg" x="129" y="47" text-anchor="middle">未來:新款入庫自動 Trigger</text>
+        <line class="fl fl-g dash" x1="129" y1="64" x2="129" y2="112" marker-end="url(#ar-g)"/>
+        <!-- input -->
+        <rect class="d-use" x="24" y="120" width="170" height="64" rx="10"/>
+        <text class="tt" x="109" y="147" text-anchor="middle">業務/設計師</text>
+        <text class="ts" x="109" y="166" text-anchor="middle">上傳圖片+款式資料</text>
+        <!-- sources -->
+        <text class="ts" x="24" y="197" style="letter-spacing:.12em">既有資料來源</text>
+        <rect class="d-box" x="24" y="204" width="170" height="34" rx="8"/>
+        <text class="ts" x="109" y="226" text-anchor="middle">KPAC/Judy 翻譯資料</text>
+        <rect class="d-box" x="24" y="248" width="170" height="34" rx="8"/>
+        <text class="ts" x="109" y="270" text-anchor="middle">MTM API</text>
+        <rect class="d-box" x="24" y="292" width="170" height="34" rx="8"/>
+        <text class="ts" x="109" y="314" text-anchor="middle">StyleTricks/Patch</text>
+        <rect class="d-box" x="24" y="336" width="170" height="34" rx="8"/>
+        <text class="ts" x="109" y="358" text-anchor="middle">POM/TagPack 尺寸表</text>
+        <!-- source spine -->
+        <line class="fl" x1="194" y1="221" x2="222" y2="221"/>
+        <line class="fl" x1="194" y1="265" x2="222" y2="265"/>
+        <line class="fl" x1="194" y1="309" x2="222" y2="309"/>
+        <line class="fl" x1="194" y1="353" x2="222" y2="353"/>
+        <line class="fl" x1="222" y1="221" x2="222" y2="353"/>
+        <line class="fl" x1="222" y1="287" x2="246" y2="287" marker-end="url(#ar)"/>
+        <text class="lab" x="222" y="380" text-anchor="middle">API 串接</text>
+        <!-- input elbow -->
+        <polyline class="fl" points="194,152 324,152 324,172" marker-end="url(#ar)"/>
+        <!-- parse -->
+        <rect class="d-box" x="254" y="180" width="140" height="120" rx="10"/>
+        <text class="tt" x="324" y="222" text-anchor="middle">資料解析</text>
+        <text class="ts" x="324" y="243" text-anchor="middle">Category 偵測</text>
+        <text class="ts" x="324" y="261" text-anchor="middle">欄位正規化</text>
+        <!-- parse → judges -->
+        <line class="fl" x1="394" y1="240" x2="424" y2="240" marker-end="url(#ar)"/>
+        <!-- judges frame -->
+        <text class="ts" x="432" y="116" style="letter-spacing:.12em">三大判別</text>
+        <rect class="d-frame" x="432" y="126" width="194" height="226" rx="12"/>
+        <rect class="d-box" x="444" y="150" width="170" height="52" rx="9"/>
+        <text class="tt" x="529" y="173" text-anchor="middle">圖像辨識</text>
+        <text class="ts" x="529" y="191" text-anchor="middle">視覺項目 · 約 60%</text>
+        <rect class="d-box" x="444" y="214" width="170" height="52" rx="9"/>
+        <text class="tt" x="529" y="237" text-anchor="middle">做工翻譯</text>
+        <text class="ts" x="529" y="255" text-anchor="middle">老師傅語句 · 約 80%</text>
+        <rect class="d-box" x="444" y="278" width="170" height="52" rx="9"/>
+        <text class="tt" x="529" y="301" text-anchor="middle">信心指數</text>
+        <text class="ts" x="529" y="319" text-anchor="middle">大數據比對 · 約 90%</text>
+        <!-- judges → verdict -->
+        <line class="fl" x1="626" y1="240" x2="664" y2="240" marker-end="url(#ar)"/>
+        <!-- verdict -->
+        <rect class="d-use" x="672" y="208" width="110" height="64" rx="10"/>
+        <text class="tt" x="727" y="234" text-anchor="middle">加權裁決</text>
+        <text class="ts" x="727" y="253" text-anchor="middle">決定採用結果</text>
+        <!-- verdict → output -->
+        <line class="fl" x1="782" y1="240" x2="812" y2="240" marker-end="url(#ar)"/>
+        <!-- output -->
+        <rect class="d-box" x="820" y="180" width="140" height="120" rx="10"/>
+        <text class="tt" x="890" y="207" text-anchor="middle">輸出結果</text>
+        <text class="ts" x="890" y="230" text-anchor="middle">推薦做工</text>
+        <text class="ts" x="890" y="248" text-anchor="middle">推薦尺寸表</text>
+        <text class="ts" x="890" y="266" text-anchor="middle">生成 PDF</text>
+        <line class="fl" x1="890" y1="300" x2="890" y2="324" marker-end="url(#ar)"/>
+        <!-- prototype -->
+        <rect class="d-box" x="820" y="330" width="140" height="56" rx="10"/>
+        <text class="tt" x="890" y="353" text-anchor="middle">Prototype 編輯頁</text>
+        <text class="ts" x="890" y="371" text-anchor="middle">人工調整</text>
+        <!-- feedback rail -->
+        <polyline class="fl fl-v" points="890,386 890,470 866,470" marker-end="url(#ar-v)"/>
+        <text class="lab tv" x="898" y="432">人工修正紀錄</text>
+        <rect class="d-train" x="660" y="440" width="200" height="60" rx="10"/>
+        <text class="tt" x="760" y="465" text-anchor="middle">回流訓練資料庫</text>
+        <text class="ts" x="760" y="483" text-anchor="middle">使用結果+修正紀錄</text>
+        <line class="fl fl-v" x1="656" y1="470" x2="620" y2="470" marker-end="url(#ar-v)"/>
+        <rect class="d-train" x="444" y="440" width="170" height="60" rx="10"/>
+        <text class="tt" x="529" y="465" text-anchor="middle">模型再訓練</text>
+        <text class="ts" x="529" y="483" text-anchor="middle">Golden Sample 更新</text>
+        <line class="fl fl-v" x1="529" y1="440" x2="529" y2="360" marker-end="url(#ar-v)"/>
+        <text class="lab tv" x="538" y="404">模型更新</text>
+      </svg>
+    </div>
+    <figcaption>系統總覽 — 上排(青綠)是使用流:上傳與四個既有資料來源匯入解析,經三大判別與加權裁決後輸出;下排(靛紫)是回流軌道:Prototype 頁的人工修正回到訓練資料庫,再訓練後更新判別模型。左上虛線為規劃中的自動 Trigger。</figcaption>
+  </figure>
+</section>
+
+<!-- ═══════════ 2. 使用流 ═══════════ -->
+<section id="s2">
+  <div class="sechead"><span class="secno">2</span><h2>使用流 — 拿來即時推論的路徑</h2></div>
+  <p class="lead">設計師/業務上傳後,系統自動判斷並產出推薦做工、尺寸表與 PDF;人是最後一關,在 Prototype 編輯頁確認與調整,而每一筆修正都會被記錄下來餵回訓練。</p>
+  <figure>
+    <div class="scroller">
+      <svg class="svg-tall" viewBox="0 0 720 856" role="img" aria-label="使用流流程圖:上傳圖片與款式資料、偵測 Category 並帶入 Product Line、串接 MTM、KPAC/Judy、StyleTricks、POM 四個資料來源,之後由圖像辨識、做工翻譯、信心指數並行判斷,經加權裁決輸出推薦做工、尺寸表與 PDF,最後進 Prototype 編輯頁人工調整,修正紀錄回流訓練資料庫。">
+        <rect class="d-box" x="200" y="16" width="320" height="60" rx="10"/>
+        <text class="tt" x="360" y="41" text-anchor="middle"><tspan class="tu">①</tspan> 設計師/業務上傳</text>
+        <text class="ts" x="360" y="60" text-anchor="middle">開拍或款式圖片+款式資料</text>
+        <line class="fl" x1="360" y1="76" x2="360" y2="104" marker-end="url(#ar)"/>
+        <rect class="d-box" x="200" y="110" width="320" height="60" rx="10"/>
+        <text class="tt" x="360" y="135" text-anchor="middle"><tspan class="tu">②</tspan> 偵測 Category</text>
+        <text class="ts" x="360" y="154" text-anchor="middle">Shirt/Legging… → 帶入 Product Line</text>
+        <line class="fl" x1="360" y1="170" x2="360" y2="198" marker-end="url(#ar)"/>
+        <rect class="d-box" x="200" y="204" width="320" height="100" rx="10"/>
+        <text class="tt" x="360" y="230" text-anchor="middle"><tspan class="tu">③</tspan> 串接既有資料來源</text>
+        <rect class="d-chip" x="214" y="242" width="140" height="24" rx="6"/>
+        <text class="ts" x="284" y="258" text-anchor="middle">MTM API</text>
+        <rect class="d-chip" x="366" y="242" width="140" height="24" rx="6"/>
+        <text class="ts" x="436" y="258" text-anchor="middle">KPAC/Judy 翻譯</text>
+        <rect class="d-chip" x="214" y="272" width="140" height="24" rx="6"/>
+        <text class="ts" x="284" y="288" text-anchor="middle">StyleTricks/Patch</text>
+        <rect class="d-chip" x="366" y="272" width="140" height="24" rx="6"/>
+        <text class="ts" x="436" y="288" text-anchor="middle">POM/TagPack 尺寸表</text>
+        <!-- branch -->
+        <line class="fl" x1="360" y1="304" x2="360" y2="330"/>
+        <line class="fl" x1="130" y1="330" x2="590" y2="330"/>
+        <text class="tt tu" x="372" y="324" text-anchor="start" style="font-size:11.5px">④ 三類判斷並行</text>
+        <line class="fl" x1="130" y1="330" x2="130" y2="344" marker-end="url(#ar)"/>
+        <line class="fl" x1="360" y1="330" x2="360" y2="344" marker-end="url(#ar)"/>
+        <line class="fl" x1="590" y1="330" x2="590" y2="344" marker-end="url(#ar)"/>
+        <rect class="d-box" x="30" y="350" width="200" height="64" rx="10"/>
+        <text class="tt" x="130" y="375" text-anchor="middle">圖像辨識</text>
+        <text class="ts" x="130" y="394" text-anchor="middle">部位/口袋/門襟/剪接線</text>
+        <rect class="d-box" x="260" y="350" width="200" height="64" rx="10"/>
+        <text class="tt" x="360" y="375" text-anchor="middle">做工翻譯</text>
+        <text class="ts" x="360" y="394" text-anchor="middle">老師傅語句解析</text>
+        <rect class="d-box" x="490" y="350" width="200" height="64" rx="10"/>
+        <text class="tt" x="590" y="375" text-anchor="middle">信心指數</text>
+        <text class="ts" x="590" y="394" text-anchor="middle">大數據比對補強</text>
+        <!-- merge -->
+        <line class="fl" x1="130" y1="414" x2="130" y2="438"/>
+        <line class="fl" x1="360" y1="414" x2="360" y2="438"/>
+        <line class="fl" x1="590" y1="414" x2="590" y2="438"/>
+        <line class="fl" x1="130" y1="438" x2="590" y2="438"/>
+        <line class="fl" x1="360" y1="438" x2="360" y2="460" marker-end="url(#ar)"/>
+        <rect class="d-use" x="240" y="466" width="240" height="64" rx="10"/>
+        <text class="tt" x="360" y="491" text-anchor="middle">⑤ 加權裁決</text>
+        <text class="ts" x="360" y="510" text-anchor="middle">依項目類型決定優先來源</text>
+        <line class="fl" x1="360" y1="530" x2="360" y2="558" marker-end="url(#ar)"/>
+        <rect class="d-box" x="200" y="564" width="320" height="96" rx="10"/>
+        <text class="tt" x="360" y="590" text-anchor="middle"><tspan class="tu">⑥</tspan> 輸出結果</text>
+        <rect class="d-chip" x="208" y="604" width="96" height="26" rx="6"/>
+        <text class="ts" x="256" y="621" text-anchor="middle">推薦做工</text>
+        <rect class="d-chip" x="312" y="604" width="96" height="26" rx="6"/>
+        <text class="ts" x="360" y="621" text-anchor="middle">推薦尺寸表</text>
+        <rect class="d-chip" x="416" y="604" width="96" height="26" rx="6"/>
+        <text class="ts" x="464" y="621" text-anchor="middle">生成 PDF</text>
+        <line class="fl" x1="360" y1="660" x2="360" y2="688" marker-end="url(#ar)"/>
+        <rect class="d-box" x="200" y="694" width="320" height="60" rx="10"/>
+        <text class="tt" x="360" y="719" text-anchor="middle"><tspan class="tu">⑦</tspan> Prototype 編輯頁面</text>
+        <text class="ts" x="360" y="738" text-anchor="middle">人工檢視與調整</text>
+        <line class="fl fl-v dash" x1="360" y1="754" x2="360" y2="782" marker-end="url(#ar-v)"/>
+        <rect class="d-train" x="200" y="788" width="320" height="56" rx="10"/>
+        <text class="tt" x="360" y="811" text-anchor="middle"><tspan class="tv">⑧</tspan> 修正紀錄回流訓練資料庫</text>
+        <text class="ts" x="360" y="829" text-anchor="middle">銜接訓練流(見第 3 節)</text>
+      </svg>
+    </div>
+    <figcaption>使用流 — ①~⑦ 是使用者實際走的推論路徑;⑧(靛紫)不屬於單次使用,而是把每次的人工修正沉澱成訓練資料的出口。</figcaption>
+  </figure>
+</section>
+
+<!-- ═══════════ 3. 訓練流 ═══════════ -->
+<section id="s3">
+  <div class="sechead"><span class="secno">3</span><h2>訓練流 — 標準答案怎麼建立、怎麼回流</h2></div>
+  <p class="lead">從清理資料表開始,建立 Golden Sample 金標、定義標準答案,餵進模型訓練,再用 L1/L2 評分把關;未達標的部分由人工補充,修正結果回流成下一輪訓練資料,形成閉環。</p>
+  <figure>
+    <div class="scroller">
+      <svg class="svg-wide" viewBox="0 0 980 344" role="img" aria-label="訓練流流程圖:整理 Dataset 與清理資料表、建立 Golden Sample 金標、定義標準答案、進行 YOLO/CLIP 與 Supervised 等模型訓練、以 L1/L2 評分機制把關;達標項目部署至使用流,未達標約兩成由人工補充修正,修正結果回流成下一輪訓練資料;使用流的人工修正紀錄也匯入 Dataset。">
+        <text class="ts tu" x="24" y="44">來自使用流:人工修正紀錄</text>
+        <line class="fl fl-u dash" x1="106" y1="54" x2="106" y2="90" marker-end="url(#ar-u)"/>
+        <rect class="d-train" x="24" y="96" width="170" height="96" rx="10"/>
+        <text class="tt" x="109" y="118" text-anchor="middle">① 整理 Dataset</text>
+        <text class="ts" x="109" y="137" text-anchor="middle">ISO 表/客人格式表</text>
+        <text class="ts" x="109" y="153" text-anchor="middle">做工登記簿/規則表</text>
+        <text class="ts" x="109" y="169" text-anchor="middle">尺寸表資料</text>
+        <line class="fl fl-v" x1="194" y1="144" x2="212" y2="144" marker-end="url(#ar-v)"/>
+        <rect class="d-train" x="216" y="96" width="170" height="96" rx="10"/>
+        <text class="tt" x="301" y="118" text-anchor="middle">② Golden Sample</text>
+        <text class="ts" x="301" y="137" text-anchor="middle">建立金標</text>
+        <text class="ts" x="301" y="153" text-anchor="middle">標準答案資料庫</text>
+        <line class="fl fl-v" x1="386" y1="144" x2="404" y2="144" marker-end="url(#ar-v)"/>
+        <rect class="d-train" x="408" y="96" width="170" height="96" rx="10"/>
+        <text class="tt" x="493" y="118" text-anchor="middle">③ 定義標準答案</text>
+        <text class="ts" x="493" y="137" text-anchor="middle">長句拆短句/判部位</text>
+        <text class="ts" x="493" y="153" text-anchor="middle">判做工/對應機種</text>
+        <text class="ts" x="493" y="169" text-anchor="middle">解讀客戶格式</text>
+        <line class="fl fl-v" x1="578" y1="144" x2="596" y2="144" marker-end="url(#ar-v)"/>
+        <rect class="d-train" x="600" y="96" width="170" height="96" rx="10"/>
+        <text class="tt" x="685" y="118" text-anchor="middle">④ 模型訓練</text>
+        <text class="ts" x="685" y="137" text-anchor="middle">YOLO/CLIP 圖像</text>
+        <text class="ts" x="685" y="153" text-anchor="middle">Prompt/Supervised</text>
+        <text class="ts" x="685" y="169" text-anchor="middle">LLM 語意補強</text>
+        <line class="fl fl-v" x1="770" y1="144" x2="788" y2="144" marker-end="url(#ar-v)"/>
+        <rect class="d-train" x="792" y="96" width="170" height="96" rx="10"/>
+        <text class="tt" x="877" y="118" text-anchor="middle">⑤ 評分機制</text>
+        <text class="ts" x="877" y="137" text-anchor="middle">L1/L2 評分標準</text>
+        <text class="ts" x="877" y="153" text-anchor="middle">準確率追蹤</text>
+        <!-- pass -->
+        <line class="fl fl-u" x1="877" y1="192" x2="877" y2="222" marker-end="url(#ar-u)"/>
+        <text class="lab tu" x="885" y="212">達標 80/90%</text>
+        <rect class="d-use" x="792" y="228" width="170" height="48" rx="10"/>
+        <text class="tt" x="877" y="248" text-anchor="middle">達標項目</text>
+        <text class="ts" x="877" y="266" text-anchor="middle">部署至使用流</text>
+        <!-- fail -->
+        <polyline class="fl" points="820,192 820,210 685,210 685,222" marker-end="url(#ar)"/>
+        <text class="lab tg" x="697" y="205">未達 ~20%</text>
+        <rect class="d-box" x="600" y="228" width="170" height="48" rx="10"/>
+        <text class="tt" x="685" y="248" text-anchor="middle">人工補充/修正</text>
+        <text class="ts" x="685" y="266" text-anchor="middle">補資料/修規則</text>
+        <!-- loop back -->
+        <polyline class="fl fl-v" points="685,276 685,324 109,324 109,198" marker-end="url(#ar-v)"/>
+        <text class="lab tv" x="404" y="316" text-anchor="middle">修正結果回流成下一輪訓練資料</text>
+      </svg>
+    </div>
+    <figcaption>訓練流 — ①→⑤ 是每一輪訓練的主軸;右下分流是評分後的兩種去向:達標項目(青綠)部署到使用流,未達標約兩成走人工補充,並沿底部紫線回流成下一輪的 Dataset。左上角是使用流人工修正的匯入口。</figcaption>
+  </figure>
+</section>
+
+<!-- ═══════════ 4. 三大判斷來源與加權裁決 ═══════════ -->
+<section id="s4">
+  <div class="sechead"><span class="secno">4</span><h2>三大判斷來源與加權裁決</h2></div>
+  <p class="lead">流程圖不只畫資料流,也要畫「系統怎麼判斷」:三個判別來源各有擅長與現況準確率,加權裁決決定誰優先、誰補強、什麼情況交給人工。</p>
+  <div class="cards">
+    <article class="jcard">
+      <h3>圖像辨識</h3>
+      <div class="jnum">60<small>%</small></div>
+      <div class="meter" role="img" aria-label="圖像辨識目前準確率約六成"><i style="width:60%"></i></div>
+      <p><b>判什麼:</b>部位、口袋、門襟、剪接線等視覺項目</p>
+      <p><b>現況:</b>模型準確率約六成,需持續訓練</p>
+    </article>
+    <article class="jcard">
+      <h3>做工翻譯(文字解析)</h3>
+      <div class="jnum">80<small>%</small></div>
+      <div class="meter" role="img" aria-label="做工翻譯目前準確率約八成"><i style="width:80%"></i></div>
+      <p><b>判什麼:</b>老師傅做工語句,依 Golden Sample 與規則庫解析</p>
+      <p><b>現況:</b>整體準確率約八成</p>
+    </article>
+    <article class="jcard">
+      <h3>信心指數</h3>
+      <div class="jnum">90<small>%</small></div>
+      <div class="meter" role="img" aria-label="信心指數約九成可跑出"><i style="width:90%"></i></div>
+      <p><b>判什麼:</b>用大數據比對補強,約九成可跑出</p>
+      <p><b>現況:</b>在圖像或翻譯不確定時作為覆蓋依據</p>
+    </article>
+  </div>
+  <figure>
+    <div class="scroller">
+      <svg class="svg-mid" viewBox="0 0 900 364" role="img" aria-label="加權裁決邏輯:三個判斷來源依項目類型分流(視覺項目圖像優先、做工語句翻譯優先、不確定時信心指數補強),信心達門檻即自動輸出;低信心項目進人工確認,確認後輸出,並將修正紀錄回流訓練資料庫形成新的 Golden Sample。">
+        <rect class="d-box" x="24" y="40" width="140" height="44" rx="9"/>
+        <text class="tt" x="94" y="67" text-anchor="middle">圖像辨識</text>
+        <rect class="d-box" x="24" y="104" width="140" height="44" rx="9"/>
+        <text class="tt" x="94" y="131" text-anchor="middle">做工翻譯</text>
+        <rect class="d-box" x="24" y="168" width="140" height="44" rx="9"/>
+        <text class="tt" x="94" y="195" text-anchor="middle">信心指數</text>
+        <line class="fl" x1="164" y1="62" x2="190" y2="62"/>
+        <line class="fl" x1="164" y1="126" x2="190" y2="126"/>
+        <line class="fl" x1="164" y1="190" x2="190" y2="190"/>
+        <line class="fl" x1="190" y1="62" x2="190" y2="190"/>
+        <line class="fl" x1="190" y1="126" x2="212" y2="126" marker-end="url(#ar)"/>
+        <rect class="d-use" x="216" y="67" width="214" height="118" rx="10"/>
+        <text class="tt" x="323" y="93" text-anchor="middle">依項目類型分流</text>
+        <text class="ts" x="323" y="117" text-anchor="middle">視覺項目 → 圖像優先</text>
+        <text class="ts" x="323" y="135" text-anchor="middle">做工語句 → 翻譯優先</text>
+        <text class="ts" x="323" y="153" text-anchor="middle">不確定 → 信心指數補強</text>
+        <line class="fl" x1="430" y1="126" x2="460" y2="126" marker-end="url(#ar)"/>
+        <rect class="d-box" x="466" y="88" width="150" height="76" rx="10"/>
+        <text class="tt" x="541" y="119" text-anchor="middle">信心指數</text>
+        <text class="ts" x="541" y="138" text-anchor="middle">達門檻?</text>
+        <polyline class="fl" points="616,126 642,126 642,84 660,84" marker-end="url(#ar)"/>
+        <text class="lab" x="650" y="108">是</text>
+        <rect class="d-use" x="666" y="52" width="200" height="56" rx="10"/>
+        <text class="tt" x="766" y="76" text-anchor="middle">輸出結果</text>
+        <text class="ts" x="766" y="94" text-anchor="middle">做工/尺寸表/PDF</text>
+        <line class="fl" x1="541" y1="164" x2="541" y2="222" marker-end="url(#ar)"/>
+        <text class="lab tg" x="549" y="198">否·低信心</text>
+        <rect class="d-box" x="466" y="228" width="150" height="52" rx="10"/>
+        <text class="tt" x="541" y="250" text-anchor="middle">人工確認</text>
+        <text class="ts" x="541" y="268" text-anchor="middle">Prototype 頁調整</text>
+        <polyline class="fl" points="616,254 766,254 766,116" marker-end="url(#ar)"/>
+        <text class="lab" x="774" y="190">確認後輸出</text>
+        <polyline class="fl fl-v dash" points="541,280 541,324 658,324" marker-end="url(#ar-v)"/>
+        <rect class="d-train" x="666" y="298" width="200" height="52" rx="10"/>
+        <text class="tt" x="766" y="320" text-anchor="middle">回流訓練資料庫</text>
+        <text class="ts" x="766" y="338" text-anchor="middle">形成新的 Golden Sample</text>
+      </svg>
+    </div>
+    <figcaption>加權裁決 — 判斷先依「項目類型」決定由誰主導,再用信心指數把關:達門檻自動輸出;低信心項目必須人工確認,而人工確認過的答案就是最有價值的新訓練資料。</figcaption>
+  </figure>
+</section>
+
+<!-- ═══════════ 5. 資料來源與缺口 ═══════════ -->
+<section id="s5">
+  <div class="sechead"><span class="secno">5</span><h2>資料來源與缺口</h2></div>
+  <p class="lead">讓 MIS 一眼看懂:資料從哪裡來、哪裡缺資料、誰要補。<span class="gaptext">琥珀色</span>即目前缺口。</p>
+  <div class="twrap">
+    <table>
+      <thead>
+        <tr><th>資料來源</th><th>串接狀態</th><th>已有</th><th>目前缺口</th><th>下一步/窗口</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>KPAC/Judy 翻譯平台</td>
+          <td><span class="pill p-ok">API 已串接</span></td>
+          <td>可用翻譯資料約 900+ 款</td>
+          <td class="gaptext">早期資料缺款號</td>
+          <td>評估補款號方式</td>
+        </tr>
+        <tr>
+          <td>MTM API</td>
+          <td><span class="pill p-ok">已綁 NKCSO/SSO</span></td>
+          <td>款式基本資料(JSON)</td>
+          <td class="gaptext">JSON 欄位不完整</td>
+          <td>下週 review,與 Zack 確認缺欄位</td>
+        </tr>
+        <tr>
+          <td>POM/TagPack 尺寸表</td>
+          <td><span class="pill p-gap">未結構化</span></td>
+          <td>多為 PDF 文件</td>
+          <td class="gaptext">缺結構化欄位</td>
+          <td>確認是否有 POM grading、tolerance 資料</td>
+        </tr>
+        <tr>
+          <td>StyleTricks/MTM Patch</td>
+          <td><span class="pill p-mid">評估中</span></td>
+          <td>—</td>
+          <td class="gaptext">可補欄位待確認</td>
+          <td>評估作為補齊欄位的第二支 API</td>
+        </tr>
+        <tr>
+          <td>Golden Sample 標準答案庫</td>
+          <td><span class="pill p-mid">建置中</span></td>
+          <td>部分金標</td>
+          <td class="gaptext">覆蓋率不足</td>
+          <td>訓練流核心資料,持續擴充(見第 3 節)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════ 6. MIS 討論清單 ═══════════ -->
+<section id="s6">
+  <div class="sechead"><span class="secno">6</span><h2>MIS 待確認事項</h2></div>
+  <p class="lead">這張藍圖的目的之一就是跟 MIS 對齊技術面,以下五組問題請在會議中逐一確認。</p>
+  <div class="mis">
+    <article class="mcard">
+      <h3><span class="mtag">M1</span>系統部署與版控</h3>
+      <ul>
+        <li>GitHub 是否要移到公司 GitLab?</li>
+        <li>公司資安環境如何串接?</li>
+      </ul>
+    </article>
+    <article class="mcard">
+      <h3><span class="mtag">M2</span>API 權限與認證</h3>
+      <ul>
+        <li>NKCSO/SSO 的授權流程</li>
+        <li>API token 如何核發與管理</li>
+        <li>欄位層級的權限如何劃分</li>
+      </ul>
+    </article>
+    <article class="mcard">
+      <h3><span class="mtag">M3</span>自動 Trigger</h3>
+      <ul>
+        <li>新款入庫是否自動啟動分析?</li>
+        <li>由哪個系統觸發?</li>
+        <li>觸發後跑哪些流程?</li>
+      </ul>
+    </article>
+    <article class="mcard">
+      <h3><span class="mtag">M4</span>資料回流</h3>
+      <ul>
+        <li>使用結果如何回到訓練資料庫?</li>
+        <li>人工修正如何被記錄?</li>
+        <li>是否形成新的 Golden Sample?</li>
+      </ul>
+    </article>
+    <article class="mcard">
+      <h3><span class="mtag">M5</span>算力與環境</h3>
+      <ul>
+        <li>是否需要地端模型?</li>
+        <li>是否需要公司內部 GPU/伺服器?</li>
+        <li>Celtrix 對外服務與內部訓練是否共用資源?</li>
+      </ul>
+    </article>
+  </div>
+</section>
+
+<!-- ═══════════ 7. 下次會議交付物 ═══════════ -->
+<section id="s7">
+  <div class="sechead"><span class="secno">7</span><h2>下次會議交付物對照</h2></div>
+  <p class="lead">Action item「繪製系統整體流程圖(含使用流與訓練流)」拆成五項交付物,本頁已全數涵蓋:</p>
+  <div class="deliv">
+    <ol>
+      <li><b>系統總覽圖</b> — 資料來源 → 判別組 → 加權裁決 → 使用者輸出<span class="where">✓ 第 1 節</span></li>
+      <li><b>使用流流程圖</b> — 上傳 → 系統判斷 → 產出 PDF/推薦結果<span class="where">✓ 第 2 節</span></li>
+      <li><b>訓練流流程圖</b> — Dataset → Golden Sample → 訓練 → 評分 → 回流<span class="where">✓ 第 3 節</span></li>
+      <li><b>資料來源與缺口表</b> — 哪些已有、哪些 API 已串、缺什麼、誰負責補<span class="where">✓ 第 5 節</span></li>
+      <li><b>MIS 討論清單</b> — GitLab/SSO/API/Trigger/資料庫/算力<span class="where">✓ 第 6 節</span></li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  草案供討論用 — 60%/80%/90% 等數字為目前估計值,以會議確認後的版本為準。加權裁決的詳細權重與人工確認門檻,待三大判別來源的準確率追蹤數據穩定後再定。
+</footer>
+</main>
+
+</html>
