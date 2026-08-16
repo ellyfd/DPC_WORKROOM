@@ -79,7 +79,7 @@
   main{max-width:1040px;margin:0 auto;padding:48px 20px 72px}
 
   /* ── header ── */
-  header.doc{margin-bottom:40px}
+  header.doc{margin-bottom:28px}
   .kicker{font-size:12px;letter-spacing:.22em;color:var(--use);font-weight:700;margin:0 0 10px}
   h1{font-size:clamp(26px,4.5vw,40px);font-weight:800;letter-spacing:.02em;margin:0 0 10px;text-wrap:balance}
   .subtitle{font-size:15px;color:var(--muted);max-width:42em;margin:0 0 18px}
@@ -90,19 +90,24 @@
     font-variant-numeric:tabular-nums;
   }
 
-  /* ── legend ── */
+  /* ── legend & callout ── */
   .legend{
     display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;
     background:var(--surface);border:1px solid var(--line);border-radius:12px;
-    padding:12px 18px;margin-bottom:44px;font-size:12.5px;color:var(--muted);
+    padding:12px 18px;margin-bottom:14px;font-size:12.5px;color:var(--muted);
   }
   .legend b{color:var(--ink);font-weight:600;margin-right:2px}
   .lg{display:inline-flex;align-items:center;gap:7px}
   .sw{display:inline-block;width:26px;height:0;border-top:3px solid}
   .sw-use{border-color:var(--use)}
   .sw-train{border-color:var(--train)}
-  .sw-dash{border-top-style:dashed;border-color:var(--arrow)}
+  .sw-dash{border-top-style:dashed;border-color:var(--gap)}
   .sw-gap{width:12px;height:12px;border:none;border-radius:3px;background:var(--gap-bg);outline:1.5px solid var(--gap);outline-offset:-1.5px}
+  .callout{
+    background:var(--gap-bg);border:1px solid var(--gap);border-radius:12px;
+    padding:14px 18px;margin-bottom:40px;font-size:13.5px;
+  }
+  .callout b{color:var(--gap)}
 
   /* ── sections ── */
   section{margin-bottom:56px}
@@ -147,14 +152,17 @@
   .fl-u{stroke:var(--use)}
   .dash{stroke-dasharray:5 4}
 
-  /* ── judgment cards ── */
+  /* ── judgment cards / mode cards ── */
   .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
   @media (max-width:760px){.cards{grid-template-columns:1fr}}
+  .modes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0 0}
+  @media (max-width:700px){.modes{grid-template-columns:1fr}}
   .jcard{
     background:var(--surface);border:1px solid var(--line);border-radius:14px;
     padding:18px 20px;display:flex;flex-direction:column;gap:6px;
   }
   .jcard h3{margin:0;font-size:15px;font-weight:700}
+  .jcard h3 small{font-weight:600;color:var(--muted);font-size:12px;margin-left:6px}
   .jnum{
     font-size:40px;font-weight:800;line-height:1.1;
     font-variant-numeric:tabular-nums;letter-spacing:-.01em;
@@ -164,6 +172,12 @@
   .meter i{display:block;height:100%;border-radius:3px;background:var(--use)}
   .jcard p{margin:0;font-size:12.5px;color:var(--muted)}
   .jcard p b{color:var(--ink);font-weight:600}
+  .mode-tag{
+    display:inline-block;font-size:11px;font-weight:700;border-radius:6px;
+    padding:1px 8px;margin-bottom:2px;width:fit-content;
+  }
+  .mode-tag.ju{background:var(--use-bg);color:var(--use)}
+  .mode-tag.ge{background:var(--train-bg);color:var(--train)}
 
   /* ── tables ── */
   .twrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px}
@@ -176,6 +190,10 @@
   td{padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
   tr:last-child td{border-bottom:none}
   td:first-child{font-weight:600;white-space:nowrap}
+  .grp td{
+    background:var(--node);font-size:11.5px;letter-spacing:.08em;
+    font-weight:700;color:var(--muted);padding:8px 16px;white-space:normal;
+  }
   .pill{
     display:inline-block;font-size:11.5px;font-weight:600;border-radius:999px;
     padding:2px 10px;white-space:nowrap;
@@ -246,11 +264,11 @@
 
 <main>
 <header class="doc">
-  <p class="kicker">SYSTEM BLUEPRINT · 會議討論稿</p>
+  <p class="kicker">SYSTEM BLUEPRINT · 現況版 · 會議討論稿</p>
   <h1>智慧做工判別系統藍圖</h1>
-  <p class="subtitle">整體系統流程圖 — 使用流 × 訓練流。給 MIS 看的是整體系統架構:資料從哪裡來、系統怎麼判斷、結果怎麼回流,以及哪裡缺資料、誰要補。</p>
+  <p class="subtitle">整體系統流程圖 — 使用流 × 訓練流,依「目前實際運行」的流程繪製。給 MIS 看的是:現在真的在跑什麼、資料實際從哪裡來、最終輸出的兩種模式,以及哪些已驗證但還沒接進來。</p>
   <div class="meta">
-    <span>草案 v1</span>
+    <span>現況版 v2</span>
     <span>2026-08-16</span>
     <span>下次會議:與 MIS review 流程與架構</span>
   </div>
@@ -258,19 +276,23 @@
 
 <div class="legend" role="note">
   <b>圖例</b>
-  <span class="lg"><span class="sw sw-use"></span>使用流(即時推論)</span>
-  <span class="lg"><span class="sw sw-train"></span>訓練流(標準答案與回流)</span>
-  <span class="lg"><span class="sw sw-dash"></span>虛線=規劃中/未來機制</span>
+  <span class="lg"><span class="sw sw-use"></span>使用流(實際運行中)</span>
+  <span class="lg"><span class="sw sw-train"></span>訓練流與回流</span>
+  <span class="lg"><span class="sw sw-dash"></span>虛線=已驗證未串接/規劃中</span>
   <span class="lg"><span class="sw sw-gap"></span>缺口/待確認</span>
 </div>
 
-<!-- ═══════════ 1. 系統總覽 ═══════════ -->
+<div class="callout">
+  <b>現況邊界:</b>外部 API(KPAC/Judy、MTM、StyleTricks/Patch、POM/TagPack)目前僅完成「可用性驗證」,<b>尚未進入實際流程</b>。本頁所有實線都是現在真的在跑的路徑 — 推論所用的資料是<b>內部整理好的資料集</b>(翻譯匯出資料、規則表、Golden Sample),不是即時 API。API 何時正式接入,是要與 MIS 排時程的議題(見第 6 節)。
+</div>
+
+<!-- ═══════════ 1. 系統總覽(現況) ═══════════ -->
 <section id="s1">
-  <div class="sechead"><span class="secno">1</span><h2>系統總覽</h2></div>
-  <p class="lead">一張圖看完整條路:資料來源 → 解析 → 三大判別 → 加權裁決 → 使用者輸出;人工修正沿底部紫色軌道回流訓練資料庫,再回頭更新模型 — 系統會越用越準。</p>
+  <div class="sechead"><span class="secno">1</span><h2>系統總覽(現況)</h2></div>
+  <p class="lead">實線是目前實際運行的路:上傳+內部資料集 → 解析 → 三大判別 → 加權裁決 → 輸出草稿 → Prototype 人工調整 → 最終輸出分「聚陽模式」與「通用模式(Stytrix Generator)」。左下虛線區是已驗證但尚未串接的外部 API。</p>
   <figure>
     <div class="scroller">
-      <svg class="svg-wide" viewBox="0 0 980 520" role="img" aria-label="系統總覽圖:上傳與既有資料來源經資料解析後進入三大判別(圖像辨識、做工翻譯、信心指數),由加權裁決輸出推薦做工、尺寸表與 PDF,人工調整結果回流訓練資料庫並更新模型;未來規劃新款入庫自動觸發。">
+      <svg class="svg-wide" viewBox="0 0 980 660" role="img" aria-label="系統總覽現況圖:上傳與內部資料集(KPAC 翻譯匯出、規則表、Golden Sample)經資料解析進入三大判別,加權裁決後輸出草稿,經 Prototype 人工調整,最終輸出分聚陽模式與通用模式(Stytrix Generator);人工修正回流訓練資料庫並更新模型。外部 API 已驗證可用但尚未串接,以虛線區塊表示;新款入庫自動 Trigger 為未來規劃。">
         <!-- future trigger -->
         <rect class="d-ghost" x="24" y="20" width="210" height="44" rx="8"/>
         <text class="ts tg" x="129" y="47" text-anchor="middle">未來:新款入庫自動 Trigger</text>
@@ -279,33 +301,40 @@
         <rect class="d-use" x="24" y="120" width="170" height="64" rx="10"/>
         <text class="tt" x="109" y="147" text-anchor="middle">業務/設計師</text>
         <text class="ts" x="109" y="166" text-anchor="middle">上傳圖片+款式資料</text>
-        <!-- sources -->
-        <text class="ts" x="24" y="197" style="letter-spacing:.12em">既有資料來源</text>
+        <!-- internal datasets (actually in the loop) -->
+        <text class="ts" x="24" y="197" style="letter-spacing:.12em">內部資料集 · 實際使用中</text>
         <rect class="d-box" x="24" y="204" width="170" height="34" rx="8"/>
-        <text class="ts" x="109" y="226" text-anchor="middle">KPAC/Judy 翻譯資料</text>
+        <text class="ts" x="109" y="226" text-anchor="middle">KPAC 翻譯匯出 ~900 款</text>
         <rect class="d-box" x="24" y="248" width="170" height="34" rx="8"/>
-        <text class="ts" x="109" y="270" text-anchor="middle">MTM API</text>
+        <text class="ts" x="109" y="270" text-anchor="middle">做工登記簿/規則表</text>
         <rect class="d-box" x="24" y="292" width="170" height="34" rx="8"/>
-        <text class="ts" x="109" y="314" text-anchor="middle">StyleTricks/Patch</text>
-        <rect class="d-box" x="24" y="336" width="170" height="34" rx="8"/>
-        <text class="ts" x="109" y="358" text-anchor="middle">POM/TagPack 尺寸表</text>
-        <!-- source spine -->
+        <text class="ts" x="109" y="314" text-anchor="middle">Golden Sample(建置中)</text>
+        <!-- dataset spine -->
         <line class="fl" x1="194" y1="221" x2="222" y2="221"/>
         <line class="fl" x1="194" y1="265" x2="222" y2="265"/>
         <line class="fl" x1="194" y1="309" x2="222" y2="309"/>
-        <line class="fl" x1="194" y1="353" x2="222" y2="353"/>
-        <line class="fl" x1="222" y1="221" x2="222" y2="353"/>
-        <line class="fl" x1="222" y1="287" x2="246" y2="287" marker-end="url(#ar)"/>
-        <text class="lab" x="222" y="380" text-anchor="middle">API 串接</text>
+        <line class="fl" x1="222" y1="221" x2="222" y2="309"/>
+        <line class="fl" x1="222" y1="265" x2="246" y2="265" marker-end="url(#ar)"/>
         <!-- input elbow -->
-        <polyline class="fl" points="194,152 324,152 324,172" marker-end="url(#ar)"/>
+        <polyline class="fl" points="194,152 324,152 324,174" marker-end="url(#ar)"/>
         <!-- parse -->
         <rect class="d-box" x="254" y="180" width="140" height="120" rx="10"/>
         <text class="tt" x="324" y="222" text-anchor="middle">資料解析</text>
         <text class="ts" x="324" y="243" text-anchor="middle">Category 偵測</text>
         <text class="ts" x="324" y="261" text-anchor="middle">欄位正規化</text>
-        <!-- parse → judges -->
-        <line class="fl" x1="394" y1="240" x2="424" y2="240" marker-end="url(#ar)"/>
+        <!-- validated-but-unwired APIs -->
+        <rect class="d-ghost" x="24" y="430" width="250" height="200" rx="12"/>
+        <text class="ts tg" x="149" y="456" text-anchor="middle" style="letter-spacing:.08em">已驗證可用 · 尚未進流程</text>
+        <rect class="d-ghost" x="38" y="470" width="222" height="28" rx="6"/>
+        <text class="ts tg" x="149" y="488" text-anchor="middle">MTM API(已綁 NKCSO/SSO)</text>
+        <rect class="d-ghost" x="38" y="504" width="222" height="28" rx="6"/>
+        <text class="ts tg" x="149" y="522" text-anchor="middle">KPAC/Judy 翻譯平台 API</text>
+        <rect class="d-ghost" x="38" y="538" width="222" height="28" rx="6"/>
+        <text class="ts tg" x="149" y="556" text-anchor="middle">StyleTricks/Patch API</text>
+        <rect class="d-ghost" x="38" y="572" width="222" height="28" rx="6"/>
+        <text class="ts tg" x="149" y="590" text-anchor="middle">POM/TagPack 尺寸表</text>
+        <polyline class="fl fl-g dash" points="274,530 324,530 324,306" marker-end="url(#ar-g)"/>
+        <text class="lab tg" x="332" y="400">規劃串接 · 待 MIS 確認</text>
         <!-- judges frame -->
         <text class="ts" x="432" y="116" style="letter-spacing:.12em">三大判別</text>
         <rect class="d-frame" x="432" y="126" width="194" height="226" rx="12"/>
@@ -318,50 +347,62 @@
         <rect class="d-box" x="444" y="278" width="170" height="52" rx="9"/>
         <text class="tt" x="529" y="301" text-anchor="middle">信心指數</text>
         <text class="ts" x="529" y="319" text-anchor="middle">大數據比對 · 約 90%</text>
-        <!-- judges → verdict -->
+        <line class="fl" x1="394" y1="240" x2="424" y2="240" marker-end="url(#ar)"/>
         <line class="fl" x1="626" y1="240" x2="664" y2="240" marker-end="url(#ar)"/>
         <!-- verdict -->
         <rect class="d-use" x="672" y="208" width="110" height="64" rx="10"/>
         <text class="tt" x="727" y="234" text-anchor="middle">加權裁決</text>
         <text class="ts" x="727" y="253" text-anchor="middle">決定採用結果</text>
-        <!-- verdict → output -->
-        <line class="fl" x1="782" y1="240" x2="812" y2="240" marker-end="url(#ar)"/>
-        <!-- output -->
-        <rect class="d-box" x="820" y="180" width="140" height="120" rx="10"/>
-        <text class="tt" x="890" y="207" text-anchor="middle">輸出結果</text>
-        <text class="ts" x="890" y="230" text-anchor="middle">推薦做工</text>
-        <text class="ts" x="890" y="248" text-anchor="middle">推薦尺寸表</text>
-        <text class="ts" x="890" y="266" text-anchor="middle">生成 PDF</text>
-        <line class="fl" x1="890" y1="300" x2="890" y2="324" marker-end="url(#ar)"/>
+        <line class="fl" x1="782" y1="240" x2="802" y2="240" marker-end="url(#ar)"/>
+        <!-- draft output -->
+        <rect class="d-box" x="808" y="185" width="150" height="110" rx="10"/>
+        <text class="tt" x="883" y="214" text-anchor="middle">系統輸出草稿</text>
+        <text class="ts" x="883" y="238" text-anchor="middle">推薦做工</text>
+        <text class="ts" x="883" y="256" text-anchor="middle">推薦尺寸表</text>
+        <line class="fl" x1="883" y1="295" x2="883" y2="316" marker-end="url(#ar)"/>
         <!-- prototype -->
-        <rect class="d-box" x="820" y="330" width="140" height="56" rx="10"/>
-        <text class="tt" x="890" y="353" text-anchor="middle">Prototype 編輯頁</text>
-        <text class="ts" x="890" y="371" text-anchor="middle">人工調整</text>
+        <rect class="d-box" x="808" y="320" width="150" height="56" rx="10"/>
+        <text class="tt" x="883" y="343" text-anchor="middle">Prototype 編輯頁</text>
+        <text class="ts" x="883" y="361" text-anchor="middle">人工檢視/調整</text>
+        <!-- final two-mode fork -->
+        <line class="fl" x1="883" y1="376" x2="883" y2="404"/>
+        <line class="fl" x1="674" y1="404" x2="883" y2="404"/>
+        <text class="lab" x="778" y="398" text-anchor="middle">最終輸出 · 兩種模式</text>
+        <line class="fl" x1="674" y1="404" x2="674" y2="416" marker-end="url(#ar)"/>
+        <line class="fl" x1="846" y1="404" x2="846" y2="416" marker-end="url(#ar)"/>
+        <rect class="d-use" x="600" y="420" width="148" height="76" rx="10"/>
+        <text class="tt" x="674" y="444" text-anchor="middle">聚陽模式</text>
+        <text class="ts" x="674" y="463" text-anchor="middle">聚陽既有格式/流程</text>
+        <text class="ts" x="674" y="481" text-anchor="middle">做工+尺寸表+PDF</text>
+        <rect class="d-use" x="772" y="420" width="148" height="76" rx="10"/>
+        <text class="tt" x="846" y="444" text-anchor="middle">通用模式</text>
+        <text class="ts" x="846" y="463" text-anchor="middle">Stytrix Generator</text>
+        <text class="ts" x="846" y="481" text-anchor="middle">通用格式輸出</text>
         <!-- feedback rail -->
-        <polyline class="fl fl-v" points="890,386 890,470 866,470" marker-end="url(#ar-v)"/>
-        <text class="lab tv" x="898" y="432">人工修正紀錄</text>
-        <rect class="d-train" x="660" y="440" width="200" height="60" rx="10"/>
-        <text class="tt" x="760" y="465" text-anchor="middle">回流訓練資料庫</text>
-        <text class="ts" x="760" y="483" text-anchor="middle">使用結果+修正紀錄</text>
-        <line class="fl fl-v" x1="656" y1="470" x2="620" y2="470" marker-end="url(#ar-v)"/>
-        <rect class="d-train" x="444" y="440" width="170" height="60" rx="10"/>
-        <text class="tt" x="529" y="465" text-anchor="middle">模型再訓練</text>
-        <text class="ts" x="529" y="483" text-anchor="middle">Golden Sample 更新</text>
-        <line class="fl fl-v" x1="529" y1="440" x2="529" y2="360" marker-end="url(#ar-v)"/>
-        <text class="lab tv" x="538" y="404">模型更新</text>
+        <polyline class="fl fl-v" points="958,348 970,348 970,590 866,590" marker-end="url(#ar-v)"/>
+        <text class="lab tv" x="915" y="580" text-anchor="middle">人工修正紀錄</text>
+        <rect class="d-train" x="660" y="560" width="200" height="60" rx="10"/>
+        <text class="tt" x="760" y="585" text-anchor="middle">回流訓練資料庫</text>
+        <text class="ts" x="760" y="603" text-anchor="middle">使用結果+修正紀錄</text>
+        <line class="fl fl-v" x1="656" y1="590" x2="620" y2="590" marker-end="url(#ar-v)"/>
+        <rect class="d-train" x="444" y="560" width="170" height="60" rx="10"/>
+        <text class="tt" x="529" y="585" text-anchor="middle">模型再訓練</text>
+        <text class="ts" x="529" y="603" text-anchor="middle">Golden Sample 更新</text>
+        <line class="fl fl-v" x1="529" y1="560" x2="529" y2="360" marker-end="url(#ar-v)"/>
+        <text class="lab tv" x="537" y="470">模型更新</text>
       </svg>
     </div>
-    <figcaption>系統總覽 — 上排(青綠)是使用流:上傳與四個既有資料來源匯入解析,經三大判別與加權裁決後輸出;下排(靛紫)是回流軌道:Prototype 頁的人工修正回到訓練資料庫,再訓練後更新判別模型。左上虛線為規劃中的自動 Trigger。</figcaption>
+    <figcaption>系統總覽(現況)— 實線為目前實際運行:上傳與三組內部資料集匯入解析,經三大判別與加權裁決產出草稿,Prototype 人工調整後,最終輸出分「聚陽模式」與「通用模式(Stytrix Generator)」;靛紫為回流訓練軌道。左下虛線區是已完成可用性驗證、但尚未接進流程的四支外部 API;左上為規劃中的自動 Trigger。</figcaption>
   </figure>
 </section>
 
 <!-- ═══════════ 2. 使用流 ═══════════ -->
 <section id="s2">
-  <div class="sechead"><span class="secno">2</span><h2>使用流 — 拿來即時推論的路徑</h2></div>
-  <p class="lead">設計師/業務上傳後,系統自動判斷並產出推薦做工、尺寸表與 PDF;人是最後一關,在 Prototype 編輯頁確認與調整,而每一筆修正都會被記錄下來餵回訓練。</p>
+  <div class="sechead"><span class="secno">2</span><h2>使用流 — 目前實際的推論路徑</h2></div>
+  <p class="lead">上傳後系統以內部資料集判斷、產出草稿,人在 Prototype 頁把關調整,最後依情境選擇輸出模式:聚陽模式或通用模式(Stytrix Generator)。每一筆修正都會被記錄餵回訓練。</p>
   <figure>
     <div class="scroller">
-      <svg class="svg-tall" viewBox="0 0 720 856" role="img" aria-label="使用流流程圖:上傳圖片與款式資料、偵測 Category 並帶入 Product Line、串接 MTM、KPAC/Judy、StyleTricks、POM 四個資料來源,之後由圖像辨識、做工翻譯、信心指數並行判斷,經加權裁決輸出推薦做工、尺寸表與 PDF,最後進 Prototype 編輯頁人工調整,修正紀錄回流訓練資料庫。">
+      <svg class="svg-tall" viewBox="0 0 720 964" role="img" aria-label="使用流流程圖(現況):上傳圖片與款式資料、偵測 Category 並帶入 Product Line、帶入內部資料集(KPAC 翻譯匯出、規則表與登記簿、Golden Sample;外部 API 未串接),由圖像辨識、做工翻譯、信心指數並行判斷,經加權裁決輸出草稿,進 Prototype 編輯頁人工調整,最終輸出分聚陽模式與通用模式(Stytrix Generator),修正紀錄回流訓練資料庫。">
         <rect class="d-box" x="200" y="16" width="320" height="60" rx="10"/>
         <text class="tt" x="360" y="41" text-anchor="middle"><tspan class="tu">①</tspan> 設計師/業務上傳</text>
         <text class="ts" x="360" y="60" text-anchor="middle">開拍或款式圖片+款式資料</text>
@@ -371,15 +412,15 @@
         <text class="ts" x="360" y="154" text-anchor="middle">Shirt/Legging… → 帶入 Product Line</text>
         <line class="fl" x1="360" y1="170" x2="360" y2="198" marker-end="url(#ar)"/>
         <rect class="d-box" x="200" y="204" width="320" height="100" rx="10"/>
-        <text class="tt" x="360" y="230" text-anchor="middle"><tspan class="tu">③</tspan> 串接既有資料來源</text>
+        <text class="tt" x="360" y="230" text-anchor="middle"><tspan class="tu">③</tspan> 帶入內部資料集</text>
         <rect class="d-chip" x="214" y="242" width="140" height="24" rx="6"/>
-        <text class="ts" x="284" y="258" text-anchor="middle">MTM API</text>
+        <text class="ts" x="284" y="258" text-anchor="middle">KPAC 翻譯匯出</text>
         <rect class="d-chip" x="366" y="242" width="140" height="24" rx="6"/>
-        <text class="ts" x="436" y="258" text-anchor="middle">KPAC/Judy 翻譯</text>
+        <text class="ts" x="436" y="258" text-anchor="middle">規則表·做工登記簿</text>
         <rect class="d-chip" x="214" y="272" width="140" height="24" rx="6"/>
-        <text class="ts" x="284" y="288" text-anchor="middle">StyleTricks/Patch</text>
-        <rect class="d-chip" x="366" y="272" width="140" height="24" rx="6"/>
-        <text class="ts" x="436" y="288" text-anchor="middle">POM/TagPack 尺寸表</text>
+        <text class="ts" x="284" y="288" text-anchor="middle">Golden Sample</text>
+        <rect class="d-ghost" x="366" y="272" width="140" height="24" rx="6"/>
+        <text class="ts tg" x="436" y="288" text-anchor="middle">外部 API · 未串接</text>
         <!-- branch -->
         <line class="fl" x1="360" y1="304" x2="360" y2="330"/>
         <line class="fl" x1="130" y1="330" x2="590" y2="330"/>
@@ -406,32 +447,60 @@
         <text class="tt" x="360" y="491" text-anchor="middle">⑤ 加權裁決</text>
         <text class="ts" x="360" y="510" text-anchor="middle">依項目類型決定優先來源</text>
         <line class="fl" x1="360" y1="530" x2="360" y2="558" marker-end="url(#ar)"/>
-        <rect class="d-box" x="200" y="564" width="320" height="96" rx="10"/>
-        <text class="tt" x="360" y="590" text-anchor="middle"><tspan class="tu">⑥</tspan> 輸出結果</text>
-        <rect class="d-chip" x="208" y="604" width="96" height="26" rx="6"/>
-        <text class="ts" x="256" y="621" text-anchor="middle">推薦做工</text>
-        <rect class="d-chip" x="312" y="604" width="96" height="26" rx="6"/>
-        <text class="ts" x="360" y="621" text-anchor="middle">推薦尺寸表</text>
-        <rect class="d-chip" x="416" y="604" width="96" height="26" rx="6"/>
-        <text class="ts" x="464" y="621" text-anchor="middle">生成 PDF</text>
-        <line class="fl" x1="360" y1="660" x2="360" y2="688" marker-end="url(#ar)"/>
-        <rect class="d-box" x="200" y="694" width="320" height="60" rx="10"/>
-        <text class="tt" x="360" y="719" text-anchor="middle"><tspan class="tu">⑦</tspan> Prototype 編輯頁面</text>
-        <text class="ts" x="360" y="738" text-anchor="middle">人工檢視與調整</text>
-        <line class="fl fl-v dash" x1="360" y1="754" x2="360" y2="782" marker-end="url(#ar-v)"/>
-        <rect class="d-train" x="200" y="788" width="320" height="56" rx="10"/>
-        <text class="tt" x="360" y="811" text-anchor="middle"><tspan class="tv">⑧</tspan> 修正紀錄回流訓練資料庫</text>
-        <text class="ts" x="360" y="829" text-anchor="middle">銜接訓練流(見第 3 節)</text>
+        <rect class="d-box" x="200" y="564" width="320" height="64" rx="10"/>
+        <text class="tt" x="360" y="589" text-anchor="middle"><tspan class="tu">⑥</tspan> 系統輸出草稿</text>
+        <text class="ts" x="360" y="608" text-anchor="middle">推薦做工/推薦尺寸表</text>
+        <line class="fl" x1="360" y1="628" x2="360" y2="656" marker-end="url(#ar)"/>
+        <rect class="d-box" x="200" y="662" width="320" height="60" rx="10"/>
+        <text class="tt" x="360" y="687" text-anchor="middle"><tspan class="tu">⑦</tspan> Prototype 編輯頁面</text>
+        <text class="ts" x="360" y="706" text-anchor="middle">人工檢視與調整</text>
+        <!-- two-mode fork -->
+        <line class="fl" x1="360" y1="722" x2="360" y2="746"/>
+        <line class="fl" x1="185" y1="746" x2="535" y2="746"/>
+        <text class="tt tu" x="372" y="740" text-anchor="start" style="font-size:11.5px">⑧ 最終輸出 · 兩種模式</text>
+        <line class="fl" x1="185" y1="746" x2="185" y2="760" marker-end="url(#ar)"/>
+        <line class="fl" x1="535" y1="746" x2="535" y2="760" marker-end="url(#ar)"/>
+        <rect class="d-use" x="85" y="766" width="200" height="72" rx="10"/>
+        <text class="tt" x="185" y="790" text-anchor="middle">聚陽模式</text>
+        <text class="ts" x="185" y="809" text-anchor="middle">聚陽既有格式/流程</text>
+        <text class="ts" x="185" y="825" text-anchor="middle">做工+尺寸表+PDF</text>
+        <rect class="d-use" x="435" y="766" width="200" height="72" rx="10"/>
+        <text class="tt" x="535" y="790" text-anchor="middle">通用模式</text>
+        <text class="ts" x="535" y="809" text-anchor="middle">Stytrix Generator</text>
+        <text class="ts" x="535" y="825" text-anchor="middle">通用格式輸出</text>
+        <!-- merge to feedback -->
+        <line class="fl fl-v dash" x1="185" y1="838" x2="185" y2="862"/>
+        <line class="fl fl-v dash" x1="535" y1="838" x2="535" y2="862"/>
+        <line class="fl fl-v dash" x1="185" y1="862" x2="535" y2="862"/>
+        <line class="fl fl-v dash" x1="360" y1="862" x2="360" y2="886" marker-end="url(#ar-v)"/>
+        <rect class="d-train" x="200" y="892" width="320" height="56" rx="10"/>
+        <text class="tt" x="360" y="915" text-anchor="middle"><tspan class="tv">⑨</tspan> 修正紀錄回流訓練資料庫</text>
+        <text class="ts" x="360" y="933" text-anchor="middle">銜接訓練流(見第 3 節)</text>
       </svg>
     </div>
-    <figcaption>使用流 — ①~⑦ 是使用者實際走的推論路徑;⑧(靛紫)不屬於單次使用,而是把每次的人工修正沉澱成訓練資料的出口。</figcaption>
+    <figcaption>使用流(現況)— ①~⑧ 是使用者實際走的路徑,③ 帶入的是內部資料集而非即時 API(外部 API 以虛線標示未串接);⑧ 依使用情境二選一輸出;⑨(靛紫)把每次人工修正沉澱成訓練資料。</figcaption>
   </figure>
+  <div class="modes">
+    <article class="jcard">
+      <span class="mode-tag ju">輸出模式 A</span>
+      <h3>聚陽模式</h3>
+      <p><b>情境:</b>聚陽內部日常使用。</p>
+      <p><b>輸出:</b>對齊聚陽既有格式與流程 — 推薦做工、推薦尺寸表、PDF,銜接後續內部系統。</p>
+    </article>
+    <article class="jcard">
+      <span class="mode-tag ge">輸出模式 B</span>
+      <h3>通用模式 <small>Stytrix Generator</small></h3>
+      <p><b>情境:</b>不綁定聚陽格式的通用產生器,供其他客戶/對外情境使用。</p>
+      <p><b>輸出:</b>通用格式的做工與規格輸出。</p>
+    </article>
+  </div>
+  <p class="lead" style="margin-top:12px">※ 兩種模式的欄位與版型細節,建議列入下次會議一併確認。</p>
 </section>
 
 <!-- ═══════════ 3. 訓練流 ═══════════ -->
 <section id="s3">
   <div class="sechead"><span class="secno">3</span><h2>訓練流 — 標準答案怎麼建立、怎麼回流</h2></div>
-  <p class="lead">從清理資料表開始,建立 Golden Sample 金標、定義標準答案,餵進模型訓練,再用 L1/L2 評分把關;未達標的部分由人工補充,修正結果回流成下一輪訓練資料,形成閉環。</p>
+  <p class="lead">從清理資料表開始,建立 Golden Sample 金標、定義標準答案,餵進模型訓練,再用 L1/L2 評分把關;未達標的部分由人工補充,修正結果回流成下一輪訓練資料,形成閉環。這條線是目前實際在做的整理與訓練工作。</p>
   <figure>
     <div class="scroller">
       <svg class="svg-wide" viewBox="0 0 980 344" role="img" aria-label="訓練流流程圖:整理 Dataset 與清理資料表、建立 Golden Sample 金標、定義標準答案、進行 YOLO/CLIP 與 Supervised 等模型訓練、以 L1/L2 評分機制把關;達標項目部署至使用流,未達標約兩成由人工補充修正,修正結果回流成下一輪訓練資料;使用流的人工修正紀錄也匯入 Dataset。">
@@ -539,7 +608,7 @@
         <text class="lab" x="650" y="108">是</text>
         <rect class="d-use" x="666" y="52" width="200" height="56" rx="10"/>
         <text class="tt" x="766" y="76" text-anchor="middle">輸出結果</text>
-        <text class="ts" x="766" y="94" text-anchor="middle">做工/尺寸表/PDF</text>
+        <text class="ts" x="766" y="94" text-anchor="middle">聚陽模式/通用模式</text>
         <line class="fl" x1="541" y1="164" x2="541" y2="222" marker-end="url(#ar)"/>
         <text class="lab tg" x="549" y="198">否·低信心</text>
         <rect class="d-box" x="466" y="228" width="150" height="52" rx="10"/>
@@ -560,33 +629,49 @@
 <!-- ═══════════ 5. 資料來源與缺口 ═══════════ -->
 <section id="s5">
   <div class="sechead"><span class="secno">5</span><h2>資料來源與缺口</h2></div>
-  <p class="lead">讓 MIS 一眼看懂:資料從哪裡來、哪裡缺資料、誰要補。<span class="gaptext">琥珀色</span>即目前缺口。</p>
+  <p class="lead">目前實際在流程中的是<b>內部整理資料集</b>;四支外部 API 都已完成可用性驗證但<span class="gaptext">尚未串接</span> — 何時正式接入,是要與 MIS 排時程的重點。</p>
   <div class="twrap">
     <table>
       <thead>
-        <tr><th>資料來源</th><th>串接狀態</th><th>已有</th><th>目前缺口</th><th>下一步/窗口</th></tr>
+        <tr><th>資料來源</th><th>狀態</th><th>已有</th><th>目前缺口</th><th>下一步/窗口</th></tr>
       </thead>
       <tbody>
+        <tr class="grp"><td colspan="5">目前實際在流程中 — 內部資料集</td></tr>
         <tr>
-          <td>KPAC/Judy 翻譯平台</td>
-          <td><span class="pill p-ok">API 已串接</span></td>
+          <td>KPAC 翻譯資料(匯出)</td>
+          <td><span class="pill p-ok">使用中</span></td>
           <td>可用翻譯資料約 900+ 款</td>
           <td class="gaptext">早期資料缺款號</td>
           <td>評估補款號方式</td>
         </tr>
         <tr>
+          <td>做工登記簿/規則表</td>
+          <td><span class="pill p-ok">使用中</span></td>
+          <td>部位/機種/做工規則</td>
+          <td class="gaptext">持續整理中</td>
+          <td>隨訓練流逐輪補齊</td>
+        </tr>
+        <tr>
+          <td>Golden Sample 標準答案庫</td>
+          <td><span class="pill p-mid">建置中</span></td>
+          <td>部分金標</td>
+          <td class="gaptext">覆蓋率不足</td>
+          <td>訓練流核心資料,持續擴充(見第 3 節)</td>
+        </tr>
+        <tr class="grp"><td colspan="5">已驗證可用 · 尚未進流程 — 外部 API</td></tr>
+        <tr>
           <td>MTM API</td>
-          <td><span class="pill p-ok">已綁 NKCSO/SSO</span></td>
-          <td>款式基本資料(JSON)</td>
+          <td><span class="pill p-gap">已驗證·未串接</span></td>
+          <td>已綁 NKCSO/SSO,可取 JSON</td>
           <td class="gaptext">JSON 欄位不完整</td>
           <td>下週 review,與 Zack 確認缺欄位</td>
         </tr>
         <tr>
-          <td>POM/TagPack 尺寸表</td>
-          <td><span class="pill p-gap">未結構化</span></td>
-          <td>多為 PDF 文件</td>
-          <td class="gaptext">缺結構化欄位</td>
-          <td>確認是否有 POM grading、tolerance 資料</td>
+          <td>KPAC/Judy 翻譯平台 API</td>
+          <td><span class="pill p-gap">已驗證·未串接</span></td>
+          <td>API 可呼叫</td>
+          <td class="gaptext">未接入流程</td>
+          <td>與 MIS 排定串接時程與權限</td>
         </tr>
         <tr>
           <td>StyleTricks/MTM Patch</td>
@@ -596,11 +681,11 @@
           <td>評估作為補齊欄位的第二支 API</td>
         </tr>
         <tr>
-          <td>Golden Sample 標準答案庫</td>
-          <td><span class="pill p-mid">建置中</span></td>
-          <td>部分金標</td>
-          <td class="gaptext">覆蓋率不足</td>
-          <td>訓練流核心資料,持續擴充(見第 3 節)</td>
+          <td>POM/TagPack 尺寸表</td>
+          <td><span class="pill p-gap">未結構化</span></td>
+          <td>多為 PDF 文件</td>
+          <td class="gaptext">缺結構化欄位</td>
+          <td>確認是否有 POM grading、tolerance 資料</td>
         </tr>
       </tbody>
     </table>
@@ -620,11 +705,11 @@
       </ul>
     </article>
     <article class="mcard">
-      <h3><span class="mtag">M2</span>API 權限與認證</h3>
+      <h3><span class="mtag">M2</span>API 權限與正式串接</h3>
       <ul>
+        <li>已驗證的四支外部 API 何時正式接入流程?</li>
         <li>NKCSO/SSO 的授權流程</li>
-        <li>API token 如何核發與管理</li>
-        <li>欄位層級的權限如何劃分</li>
+        <li>API token 如何核發與管理、欄位權限如何劃分</li>
       </ul>
     </article>
     <article class="mcard">
@@ -660,17 +745,17 @@
   <p class="lead">Action item「繪製系統整體流程圖(含使用流與訓練流)」拆成五項交付物,本頁已全數涵蓋:</p>
   <div class="deliv">
     <ol>
-      <li><b>系統總覽圖</b> — 資料來源 → 判別組 → 加權裁決 → 使用者輸出<span class="where">✓ 第 1 節</span></li>
-      <li><b>使用流流程圖</b> — 上傳 → 系統判斷 → 產出 PDF/推薦結果<span class="where">✓ 第 2 節</span></li>
+      <li><b>系統總覽圖(現況)</b> — 內部資料集 → 判別組 → 加權裁決 → 雙模式輸出<span class="where">✓ 第 1 節</span></li>
+      <li><b>使用流流程圖</b> — 上傳 → 系統判斷 → Prototype → 聚陽/通用模式輸出<span class="where">✓ 第 2 節</span></li>
       <li><b>訓練流流程圖</b> — Dataset → Golden Sample → 訓練 → 評分 → 回流<span class="where">✓ 第 3 節</span></li>
-      <li><b>資料來源與缺口表</b> — 哪些已有、哪些 API 已串、缺什麼、誰負責補<span class="where">✓ 第 5 節</span></li>
-      <li><b>MIS 討論清單</b> — GitLab/SSO/API/Trigger/資料庫/算力<span class="where">✓ 第 6 節</span></li>
+      <li><b>資料來源與缺口表</b> — 內部資料集使用中/外部 API 已驗證未串接<span class="where">✓ 第 5 節</span></li>
+      <li><b>MIS 討論清單</b> — GitLab/SSO/API 串接/Trigger/資料庫/算力<span class="where">✓ 第 6 節</span></li>
     </ol>
   </div>
 </section>
 
 <footer>
-  草案供討論用 — 60%/80%/90% 等數字為目前估計值,以會議確認後的版本為準。加權裁決的詳細權重與人工確認門檻,待三大判別來源的準確率追蹤數據穩定後再定。
+  現況版 v2 供討論用 — 實線為目前實際運行的流程;外部 API 僅完成可用性驗證、尚未串接,以虛線表示。60%/80%/90% 等數字為目前估計值;兩種輸出模式(聚陽/通用 Stytrix Generator)的欄位與版型細節、加權裁決的詳細權重與人工確認門檻,以會議確認後的版本為準。
 </footer>
 </main>
 
