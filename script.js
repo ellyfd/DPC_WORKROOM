@@ -183,6 +183,8 @@ async function init() {
   // post jumps to & highlights that one, the header opens the full list.
   $("#sections-area")?.addEventListener("click", (e) => {
     if (e.target.closest("a")) return;
+    const tag = e.target.closest(".tip-tag");
+    if (tag) { tipsTagFilter = tag.dataset.tag || ""; openTipsPopover(); return; }
     const thumb = e.target.closest("[data-img-key]");
     if (thumb) { window.open(fileUrl(thumb.dataset.imgKey), "_blank", "noopener"); return; }
     const one = e.target.closest("[data-open-tip]");
@@ -2966,6 +2968,7 @@ let editingTipImages = [];      // images buffer for the tip being edited
 let editDraftText = "";         // in-progress edit text (survives image re-renders)
 let pendingTipImages = [];      // images attached to the tip being composed
 let imgTarget = "compose";      // where the shared file input routes its picks
+let tipsTagFilter = "";         // active hashtag filter on the tips wall ("" = all)
 
 /* ===== history popover (recycle bin / stats / recent changes) ===== */
 function initHistoryPopover() {
@@ -3310,6 +3313,13 @@ function initTipsPopover() {
   // Delegate edit / save / cancel / delete / image clicks on the list.
   const list = document.getElementById("tips-list");
   list?.addEventListener("click", (e) => {
+    const tagBtn = e.target.closest("[data-tag]");
+    if (tagBtn) {
+      // Same tag again = clear the filter.
+      tipsTagFilter = tipsTagFilter === tagBtn.dataset.tag ? "" : tagBtn.dataset.tag;
+      renderTipsList();
+      return;
+    }
     const del = e.target.closest("[data-del-tip]");
     if (del) { deleteTip(del.dataset.delTip); return; }
     const edit = e.target.closest("[data-edit-tip]");
@@ -3366,6 +3376,24 @@ function closeTipsPopover() {
   if (pop) pop.hidden = true;
   editingTipId = null;
   pendingTipImages = [];
+  tipsTagFilter = "";
+}
+
+/* Tag chips above the wall: every hashtag in use, most-used first. */
+function tipTagBarHTML(tips) {
+  const counts = new Map();
+  for (const tip of tips) {
+    for (const tag of tipTags(tip.text)) counts.set(tag, (counts.get(tag) || 0) + 1);
+  }
+  if (!counts.size) return "";
+  const top = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"))
+    .slice(0, 12);
+  const chips = top.map(([tag, n]) => `
+    <button type="button" class="tip-tag tip-tag-filter${tag === tipsTagFilter ? " active" : ""}" data-tag="${escapeAttr(tag)}">
+      #${escapeHTML(tag)}<span class="tip-tag-n">${n}</span>
+    </button>`).join("");
+  return `<div class="tip-tag-bar">${chips}</div>`;
 }
 
 function renderTipsList() {
@@ -3381,12 +3409,21 @@ function renderTipsList() {
     return;
   }
 
-  // Newest first.
-  const sorted = [...tips].sort((a, b) =>
+  // Newest first; an active hashtag filter narrows the wall.
+  let sorted = [...tips].sort((a, b) =>
     String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
   );
+  const tagBar = tipTagBarHTML(sorted);
+  if (tipsTagFilter) {
+    sorted = sorted.filter((tip) => tipTags(tip.text).includes(tipsTagFilter));
+  }
+  if (!sorted.length) {
+    wrap.innerHTML = tagBar +
+      `<div class="tips-empty">沒有 #${escapeHTML(tipsTagFilter)} 的小知識 — 點標籤取消過濾</div>`;
+    return;
+  }
 
-  wrap.innerHTML = sorted.map((tip) => {
+  wrap.innerHTML = tagBar + sorted.map((tip) => {
     const who = tip.author
       ? `<span class="tip-who"><span class="tip-ava">${escapeHTML(initial(tip.author))}</span>${escapeHTML(tip.author)}</span>`
       : `<span class="tip-who tip-who-anon">匿名</span>`;
@@ -3574,10 +3611,28 @@ function saveTipEdit(id) {
 }
 
 // Turn bare URLs in a tip into clickable links (everything else escaped).
+/* ===== 小知識 hashtag =====
+   Pure convention, zero schema: a "#標籤" in the text becomes a clickable
+   chip that filters the wall. The # must sit at the start or after
+   whitespace/brackets so a URL's #fragment never turns into a tag. */
+const TIP_TAG_RX = /(^|[\s(（【[])#([\p{L}\p{N}_-]{1,24})/gu;
+
+function tipTags(text) {
+  const out = [];
+  for (const m of String(text || "").matchAll(TIP_TAG_RX)) out.push(m[2]);
+  return out;
+}
+
 function linkifyTip(text) {
   const safe = escapeHTML(text || "");
-  return safe.replace(/https?:\/\/[^\s<]+/g, (url) =>
+  const linked = safe.replace(/https?:\/\/[^\s<]+/g, (url) =>
     `<a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(url)}</a>`
+  );
+  // Hashtags → chips. Only rewrite text segments (never inside the <a> tags
+  // just generated), mirroring how highlightTip stays markup-safe.
+  return linked.replace(/<[^>]+>|[^<]+/g, (seg) =>
+    seg[0] === "<" ? seg : seg.replace(TIP_TAG_RX, (m, pre, tag) =>
+      `${pre}<button type="button" class="tip-tag" data-tag="${escapeAttr(tag)}">#${escapeHTML(tag)}</button>`)
   ).replace(/\n/g, "<br>");
 }
 
