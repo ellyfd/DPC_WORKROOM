@@ -17,7 +17,7 @@ jobs:
 
       - name: Syntax check
         run: |
-          node --check script.js
+          for f in js/*.mjs; do node --check "$f"; done
           node --check sw.js
           node --check worker/index.js
       - name: Run merge-logic tests
