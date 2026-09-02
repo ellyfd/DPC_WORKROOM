@@ -218,6 +218,38 @@ async function init() {
   initOverlayScrollLock();
 
   updateTipsBadge();
+
+  // Installed-PWA share sheet → prefill the add-tool form (see share_target
+  // in manifest.webmanifest). After popovers are wired, never before.
+  maybeHandleShareTarget();
+}
+
+/* ===== PWA Share Target =====
+   manifest.webmanifest declares a GET share_target, so "share to DPC Hub"
+   from a phone lands here as ?su=<url>&sx=<text>&st=<title>. Open the
+   add-tool form, prefill the URL and let the existing auto-fetch grab the
+   name/icon. Many apps put the link in the text field, so fish it out of
+   there too. */
+function maybeHandleShareTarget() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has("su") && !params.has("sx") && !params.has("st")) return;
+  const rawUrl = (params.get("su") || "").trim();
+  const text = (params.get("sx") || "").trim();
+  const title = (params.get("st") || "").trim();
+  // Strip the share params so a reload doesn't re-open the form.
+  history.replaceState(null, "", location.pathname);
+
+  const fromText = (text.match(/https?:\/\/\S+/) || [])[0] || "";
+  const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : fromText;
+  if (!url && !title && !text) return;
+
+  openToolPopover(null, $("#open-add"));
+  const f = $("#add-form").elements;
+  if (url) f.url.value = url;
+  if (title && !f.name.value) f.name.value = title;
+  if (!url && text && !f.description.value) f.description.value = text;
+  updateIconPreview();
+  if (url) autoFetch();
 }
 
 /* ===== overlay scroll lock =====
