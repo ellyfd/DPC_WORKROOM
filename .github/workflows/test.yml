@@ -1,0 +1,24 @@
+name: Test
+
+# PR 紅綠燈:跑與 deploy.yml 相同的檢查,讓問題在合併前就現形。
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Syntax check
+        run: |
+          node --check script.js
+          node --check sw.js
+          node --check worker/index.js
+      - name: Run merge-logic tests
+        run: node tests/merge.test.mjs
