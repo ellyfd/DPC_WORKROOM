@@ -81,7 +81,22 @@ async function init() {
   state.collapsed = loadJSON(LS_COLLAPSE_KEY, {});
   state.me = (localStorage.getItem(LS_ME_KEY) || "").trim();
 
-  await loadRemoteState();
+  // Offline edit queue: edits the server never confirmed (tab closed while
+  // offline / mid-sync) were snapshotted to localStorage — replay them
+  // through the server merge instead of fetching fresh state over them.
+  const pendingEdits = loadJSON(LS_PENDING_KEY, null);
+  if (pendingEdits && Array.isArray(pendingEdits.tools)) {
+    adoptServerState(pendingEdits);
+    state.rev = Number.isFinite(pendingEdits.baseRev) ? pendingEdits.baseRev : 0;
+    _dirty = true;
+    await syncStateNow();
+    // Replay confirmed → pull the full server picture (stats, recycle bin,
+    // activity feed) that the snapshot never carried. Still offline → keep
+    // showing the local edits; the retry timer pushes them up later.
+    if (!_dirty) await quietRefresh(true);
+  } else {
+    await loadRemoteState();
+  }
 
   // First-time seed: if the server is empty, pull the static tools.json
   // (if present) and push it up as the initial state.
@@ -138,9 +153,16 @@ async function init() {
   // After the board is up, surface a dismissable "本週上新" notice (once per batch).
   maybeShowNewArrivalsNotice();
 
+  // Move any legacy base64 icons out of the state blob into R2 (background).
+  migrateIconsToR2();
+
+  // Debounced: renderSections rebuilds the whole board, so don't do it on
+  // every keystroke of a fast typist — once the input settles is enough.
+  let searchTimer = null;
   $("#search").addEventListener("input", (e) => {
     state.query = e.target.value.trim().toLowerCase();
-    renderSections();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderSections, 120);
   });
   $("#brand-filter")?.addEventListener("change", (e) => {
     state.brandFilter = e.target.value || "";
@@ -402,12 +424,24 @@ function favoriteTools() {
 
 /* Non-destructive server re-fetch: on any failure the current in-memory
    state is left untouched (unlike loadRemoteState, whose blank-slate
-   fallback is only right at initial load). */
-async function quietRefresh() {
+   fallback is only right at initial load).
+   Sends ?since=<rev> so the server can answer "unchanged" without shipping
+   the whole blob — only the usage stats (which move without bumping rev)
+   come back in that case. Pass full=true to force a complete re-download. */
+async function quietRefresh(full = false) {
   try {
-    const res = await fetch("/api/state", { cache: "no-cache" });
+    const useSince = !full && Number.isFinite(state.rev) && state.rev > 0;
+    const res = await fetch(
+      "/api/state" + (useSince ? "?since=" + state.rev : ""),
+      { cache: "no-cache" }
+    );
     if (!res.ok) return false;
-    adoptServerState(await res.json());
+    const data = await res.json();
+    if (data && data.unchanged) {
+      if (data.stats && typeof data.stats === "object") state.stats = data.stats;
+    } else {
+      adoptServerState(data);
+    }
     _lastLoadedAt = Date.now();
     return true;
   } catch {
@@ -521,8 +555,39 @@ let _syncPending = false;
 // refreshes must not replace local state while this is set.
 let _dirty = false;
 
+/* The exact payload a sync PUTs up — also what gets parked in localStorage
+   while the server hasn't confirmed it (the offline edit queue). */
+function syncPayload() {
+  return {
+    tools: state.localTools,
+    categories: state.categories,
+    creators: state.creators,
+    brands: state.brands,
+    tips: state.tips,
+    tombstones: state.tombstones,
+    baseRev: state.rev,
+    // Who is making this change — shown in the 最近異動 feed.
+    actor: state.me,
+  };
+}
+
+/* ===== offline edit queue =====
+   Unconfirmed edits are snapshotted to localStorage the moment they happen
+   and cleared once the server acknowledges the sync. If the tab is closed
+   (or the device is offline) before that, the next launch finds the
+   snapshot, replays it through the server merge, and nothing is lost. */
+const LS_PENDING_KEY = "dpcHub.pending.v1";
+
+function persistPending() {
+  try { saveJSON(LS_PENDING_KEY, syncPayload()); } catch {}
+}
+function clearPending() {
+  try { localStorage.removeItem(LS_PENDING_KEY); } catch {}
+}
+
 function scheduleSync() {
   _dirty = true;
+  persistPending();
   if (_syncTimer) clearTimeout(_syncTimer);
   _syncTimer = setTimeout(syncStateNow, 250);
 }
@@ -535,17 +600,7 @@ async function syncStateNow() {
     const res = await fetch("/api/state", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tools: state.localTools,
-        categories: state.categories,
-        creators: state.creators,
-        brands: state.brands,
-        tips: state.tips,
-        tombstones: state.tombstones,
-        baseRev: state.rev,
-        // Who is making this change — shown in the 最近異動 feed.
-        actor: state.me,
-      }),
+      body: JSON.stringify(syncPayload()),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const out = await res.json().catch(() => null);
@@ -563,9 +618,13 @@ async function syncStateNow() {
     } else if (out && Number.isFinite(out.rev)) {
       state.rev = out.rev;
     }
-    if (!_syncPending && !_syncTimer) _dirty = false;
+    if (!_syncPending && !_syncTimer) {
+      _dirty = false;
+      clearPending();
+    }
   } catch (e) {
     toast?.("同步到伺服器失敗,稍後再試");
+    persistPending();
     // Keep the unsent edits marked dirty and retry shortly — the _syncTimer
     // also blocks the background refreshes from clobbering them meanwhile.
     if (!_syncTimer) _syncTimer = setTimeout(syncStateNow, 5000);
@@ -3584,12 +3643,61 @@ function initIconPicker() {
     if (!file) return;
     try {
       const dataUrl = await readAndResize(file, 256);
-      $("#add-form").elements.icon.value = dataUrl;
+      const f = $("#add-form").elements;
+      // The resized icon goes to R2 and the tool only stores a "/files/…"
+      // link — base64 blobs in the state JSON made every sync ship megabytes.
+      // Offline / upload failure falls back to the old inline dataURL; the
+      // background migration re-uploads it on a later launch.
+      try {
+        f.icon.value = await uploadIconDataUrl(dataUrl, state.editingId || "new");
+      } catch {
+        f.icon.value = dataUrl;
+      }
       updateIconPreview();
     } catch {
       toast("圖片讀取失敗");
     }
   });
+}
+
+/* Upload a dataURL icon to R2, returning the "/files/<key>" URL to store. */
+async function uploadIconDataUrl(dataUrl, toolId) {
+  const blob = await (await fetch(dataUrl)).blob();
+  const ext = (blob.type || "").includes("png") ? "png" : "jpg";
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    headers: {
+      "Content-Type": blob.type || "image/png",
+      "X-Tool-Id": "tool-icon",
+      "X-Filename": encodeURIComponent(`icon-${toolId || "new"}.${ext}`),
+      "X-Uploaded-By": encodeURIComponent(state.me || ""),
+    },
+    body: blob,
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const out = await res.json();
+  return fileUrl(out.key);
+}
+
+/* ===== icon migration: inline base64 → R2 =====
+   Tools saved before icons moved to R2 carry the whole base64 image inside
+   the shared state blob, so every load and every sync round-trips it. After
+   startup, quietly upload each one and swap in its "/files/…" link.
+   `updated` is left untouched — a migration must never outrank someone's
+   real edit in the merge. Any failure just leaves the rest for next launch. */
+async function migrateIconsToR2() {
+  const legacy = state.localTools.filter((t) => (t.icon || "").startsWith("data:"));
+  if (!legacy.length) return;
+  let changed = 0;
+  for (const t of legacy) {
+    try {
+      t.icon = await uploadIconDataUrl(t.icon, t.id);
+      changed++;
+    } catch {
+      break; // offline or server trouble — retry the remainder next time
+    }
+  }
+  if (changed) scheduleSync();
 }
 
 function updateIconPreview() {

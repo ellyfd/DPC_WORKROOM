@@ -18,7 +18,7 @@ export default {
 
     try {
       if (url.pathname === "/api/state") {
-        if (request.method === "GET") return await getState(env);
+        if (request.method === "GET") return await getState(env, url);
         if (request.method === "PUT") {
           if (!writeOriginAllowed(request)) return jsonError("origin not allowed", 403);
           return await putState(request, env);
@@ -149,44 +149,78 @@ function normalizeState(raw) {
   };
 }
 
-async function getState(env) {
+async function getState(env, url) {
+  // Conditional read: ?since=<rev> lets a client that already holds rev N
+  // skip re-downloading the whole blob. json_extract reads the rev straight
+  // out of the stored JSON, so the unchanged path never parses the blob.
+  const sinceRaw = url ? url.searchParams.get("since") : null;
+  const since = sinceRaw == null ? NaN : parseInt(sinceRaw, 10);
+  if (Number.isFinite(since) && since > 0) {
+    const r = await env.DB.prepare(
+      "SELECT json_extract(v, '$.rev') AS rev FROM kv WHERE k = ?"
+    ).bind("state").first();
+    if (r && r.rev === since) {
+      // Stats live outside the blob and move without bumping rev, so the
+      // unchanged response still carries them.
+      return json({ unchanged: true, rev: since, stats: await readStats(env) });
+    }
+  }
+
   const row = await env.DB.prepare("SELECT v FROM kv WHERE k = ?").bind("state").first();
   const state = normalizeState(row ? JSON.parse(row.v) : null);
-  // Usage counters live in their own table (not the merged blob) so a click
-  // never triggers a state write; missing table just means no stats yet.
-  state.stats = {};
+  state.stats = await readStats(env);
+  return json(state);
+}
+
+/* Usage counters live in their own table (not the merged blob) so a click
+   never triggers a state write; missing table just means no stats yet. */
+async function readStats(env) {
+  const stats = {};
   try {
     const { results } = await env.DB.prepare(
       "SELECT tool_id, opens, downloads, last_at FROM hits"
     ).all();
     for (const r of results || []) {
-      state.stats[r.tool_id] = {
+      stats[r.tool_id] = {
         opens: r.opens || 0,
         downloads: r.downloads || 0,
         lastAt: r.last_at || 0,
       };
     }
   } catch {}
-  return json(state);
+  return stats;
 }
 
 /* Per-tool usage counters — POST /api/hit {toolId, kind: "open"|"download"}.
    Fire-and-forget from the client; kept out of the state blob so counting a
    click can never conflict with (or spam) the merge machinery. */
+let _hitsTableReady = null;
+function ensureHitsTable(env) {
+  if (!_hitsTableReady) {
+    _hitsTableReady = env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS hits (tool_id TEXT PRIMARY KEY, opens INTEGER DEFAULT 0, downloads INTEGER DEFAULT 0, last_at INTEGER)"
+    )
+      .run()
+      .catch((e) => {
+        _hitsTableReady = null;
+        throw e;
+      });
+  }
+  return _hitsTableReady;
+}
+
 async function recordHit(request, env) {
   const body = await request.json().catch(() => ({}));
   const toolId = typeof body.toolId === "string" ? body.toolId.slice(0, 80) : "";
   const kind = body.kind === "download" ? "download" : body.kind === "open" ? "open" : "";
   if (!toolId || !kind) return jsonError("bad hit", 400);
-  await env.DB.batch([
-    env.DB.prepare(
-      "CREATE TABLE IF NOT EXISTS hits (tool_id TEXT PRIMARY KEY, opens INTEGER DEFAULT 0, downloads INTEGER DEFAULT 0, last_at INTEGER)"
-    ),
-    env.DB.prepare(
-      "INSERT INTO hits (tool_id, opens, downloads, last_at) VALUES (?, ?, ?, ?) " +
-        "ON CONFLICT(tool_id) DO UPDATE SET opens = opens + excluded.opens, downloads = downloads + excluded.downloads, last_at = excluded.last_at"
-    ).bind(toolId, kind === "open" ? 1 : 0, kind === "download" ? 1 : 0, Date.now()),
-  ]);
+  await ensureHitsTable(env);
+  await env.DB.prepare(
+    "INSERT INTO hits (tool_id, opens, downloads, last_at) VALUES (?, ?, ?, ?) " +
+      "ON CONFLICT(tool_id) DO UPDATE SET opens = opens + excluded.opens, downloads = downloads + excluded.downloads, last_at = excluded.last_at"
+  )
+    .bind(toolId, kind === "open" ? 1 : 0, kind === "download" ? 1 : 0, Date.now())
+    .run();
   return json({ ok: true });
 }
 
@@ -452,12 +486,27 @@ async function deleteFiles(env, keys) {
     .run();
 }
 
+/* Tool icons uploaded to R2 are stored as "/files/<key>" URLs on the tool —
+   pull the key back out so icons ride the same trash/rescue lifecycle as
+   file versions and tip images. */
+function iconFileKey(t) {
+  const icon = t && typeof t.icon === "string" ? t.icon : "";
+  if (!icon.startsWith("/files/")) return "";
+  try {
+    return icon.slice("/files/".length).split("/").map(decodeURIComponent).join("/");
+  } catch {
+    return "";
+  }
+}
+
 function collectFileKeys(tools, tips) {
   const set = new Set();
   for (const t of tools || []) {
     if (Array.isArray(t.files)) {
       for (const f of t.files) if (f && f.key) set.add(f.key);
     }
+    const ik = iconFileKey(t);
+    if (ik) set.add(ik);
   }
   for (const tip of tips || []) {
     if (Array.isArray(tip.images)) {
