@@ -1020,7 +1020,10 @@ function queryTokens(q) {
 function matchesQuery(t) {
   const tokens = queryTokens(state.query);
   if (!tokens.length) return true;
-  const hay = [t.name, t.creator, t.description, t.category, t.brand]
+  // Filenames of uploaded versions count too — "上次那個 xxx.py" is exactly
+  // how people remember file tools.
+  const fileNames = (t.files || []).map((f) => (f && f.name) || "").join(" ");
+  const hay = [t.name, t.creator, t.description, t.category, t.brand, fileNames]
     .join(" ").toLowerCase();
   return tokens.every((tk) => hay.includes(tk));
 }
