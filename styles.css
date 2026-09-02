@@ -1170,6 +1170,35 @@ h1, h2, h3 { margin: 0; }
   word-break: break-word;
 }
 .tip-text a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+/* 小知識 hashtag chips — 內文裡的 #標籤 與牆頂的過濾列 */
+.tip-tag {
+  display: inline-block;
+  border: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 0 8px;
+  margin: 0 1px;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+.tip-tag:hover { background: var(--accent); color: #fff; }
+.tip-tag-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 2px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.tip-tag-filter { padding: 3px 10px; }
+.tip-tag-filter.active { background: var(--accent); color: #fff; }
+.tip-tag-n { margin-left: 4px; font-weight: 500; opacity: 0.7; font-size: 11px; }
 .tip-foot {
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px;
@@ -2779,6 +2808,34 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 }
 .history-count-zero { color: var(--text-mute); background: var(--surface-2); }
 .history-unused { color: var(--danger); font-weight: 600; }
+
+/* 統計頁:近 6 個月迷你趨勢條(單序列,由左至右=舊到新) */
+.trend {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 22px;
+  margin-right: 4px;
+}
+.trend-bar {
+  width: 5px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.85;
+}
+.trend-bar-zero { background: var(--border-2); opacity: 1; }
+
+/* 「90 天沒人用」— 淘汰決策用的標記 */
+.stat-stale {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
 
 /* ===== 我的常用 — per-device favorites row ===== */
 .section-fav {

@@ -19,20 +19,21 @@ jobs:
       # 紅燈不部署:先語法檢查,再跑同步合併邏輯的回歸測試。
       - name: Syntax check
         run: |
-          node --check script.js
+          for f in js/*.mjs; do node --check "$f"; done
           node --check sw.js
           node --check worker/index.js
       - name: Run merge-logic tests
         run: node tests/merge.test.mjs
 
       # 用 commit SHA 自動蓋版本號,不再依賴手動改 ?v= 字串——
-      # 每次部署都會讓所有用戶端拿到新版 script/styles 與 Service Worker。
+      # 每次部署都會讓所有用戶端拿到新版 modules/styles 與 Service Worker。
+      # js/*.mjs 之間的 import 也帶 ?v=,一起蓋,保證整套模組同版。
       - name: Stamp asset versions with commit SHA
         run: |
           V="${GITHUB_SHA:0:8}"
-          sed -i -E "s/(script\.js\?v=)[0-9a-z]+/\1${V}/g; s/(styles\.css\?v=)[0-9a-z]+/\1${V}/g" index.html sw.js
+          sed -i -E "s/(\.mjs\?v=)[0-9a-z]+/\1${V}/g; s/(styles\.css\?v=)[0-9a-z]+/\1${V}/g" index.html sw.js js/*.mjs
           sed -i -E "s/(dpc-hub-v)[0-9a-z]+/\1${V}/g" sw.js
-          grep -H "v=${V}" index.html && grep -H "dpc-hub-v${V}" sw.js
+          grep -H "v=${V}" index.html && grep -H "dpc-hub-v${V}" sw.js && grep -l "v=${V}" js/*.mjs
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3

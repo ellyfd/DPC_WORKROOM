@@ -4,11 +4,23 @@ const CACHE = "dpc-hub-v20260804e";
 
 // App shell precached on install. Versioned query strings match index.html so
 // a bump fetches fresh copies; the no-store routes below are never cached.
+// 全部 js/*.mjs 都列在這:CACHE 名稱隨部署換,install 一次抓齊同版模組,
+// 不會出現新 main.mjs 配到舊子模組的混版。
 const SHELL = [
   "/",
   "/index.html",
   "/styles.css?v=20260804e",
-  "/script.js?v=20260804e",
+  "/js/main.mjs?v=20260804e",
+  "/js/state.mjs?v=20260804e",
+  "/js/helpers.mjs?v=20260804e",
+  "/js/sync.mjs?v=20260804e",
+  "/js/data.mjs?v=20260804e",
+  "/js/board.mjs?v=20260804e",
+  "/js/files.mjs?v=20260804e",
+  "/js/menus.mjs?v=20260804e",
+  "/js/popovers.mjs?v=20260804e",
+  "/js/tips.mjs?v=20260804e",
+  "/js/history.mjs?v=20260804e",
   "/manifest.webmanifest",
   "/icon-192.png?v=20260616a",
   "/icon-512.png?v=20260616a",

@@ -9,6 +9,8 @@ import {
   computeDeletedTools,
   appendActivity,
   writeOriginAllowed,
+  monthKey,
+  monthFloor,
 } from "../worker/index.js";
 
 const now = Date.now();
@@ -84,6 +86,30 @@ assert(trash.k2 && !expired.includes("k2"), "剛失去引用的檔案進回收�
 assert(!trash.k8, "重新引用的檔案被救回");
 assert(expired.includes("k9"), "超過 30 天才真正刪除");
 
+/* ---- R2 icon(/files/ 連結)跟檔案走同一套 trash 生命週期 ---- */
+const iconOld = normalizeState({
+  tools: [
+    { id: "a", updated: iso(-10), icon: "/files/tool-icon/icon-a.png" },
+    { id: "b", updated: iso(-10), icon: "/files/tool-icon/icon-b.png" },
+  ],
+  trash: { "tool-icon/icon-c.png": iso(-1 * 24 * 60) },
+});
+const iconFin = normalizeState({
+  tools: [
+    { id: "a", updated: iso(0), icon: "" }, // a 換掉 icon
+    { id: "d", updated: iso(0), icon: "/files/tool-icon/icon-c.png" }, // c 被重新引用
+    // b 整個被刪
+  ],
+});
+const iconTrash = computeTrash(iconOld, iconFin);
+assert(iconTrash.trash["tool-icon/icon-a.png"], "被換掉的 icon 進回收暫存");
+assert(iconTrash.trash["tool-icon/icon-b.png"], "被刪工具的 icon 進回收暫存");
+assert(!iconTrash.trash["tool-icon/icon-c.png"], "重新引用的 icon 被救回");
+assert(
+  !iconTrash.trash["data:image/png;base64,xxx"] && !iconTrash.trash["https://example.com/x.png"],
+  "dataURL / 外部網址 icon 不進 trash 機制"
+);
+
 /* ---- tombstone:期限清除 + 未來時間壓回 ---- */
 const tomb = { tools: { old: iso(-31 * 24 * 60), fresh: iso(-60), fast: iso(120) }, tips: {}, categories: {}, creators: {}, brands: {} };
 purgeTombstones(tomb);
@@ -109,6 +135,12 @@ assert(!bin.some((e) => e.tool.id === "b"), "還原後離開回收桶");
 const acts = appendActivity(binOld, binFinal, "小葇");
 assert(acts.some((a) => a.action === "刪除工具" && a.target === "A" && a.actor === "小葇"), "刪除留下紀錄與操作人");
 assert(acts.some((a) => a.action === "還原工具" && a.target === "B"), "還原被辨識為還原(而非新增)");
+
+/* ---- 使用統計月份分桶 ---- */
+assert(monthKey(Date.UTC(2026, 0, 15)) === "2026-01", "monthKey 產生 YYYY-MM 桶");
+assert(monthFloor(1, Date.UTC(2026, 8, 2)) === "2026-09", "monthFloor(1) = 當月");
+assert(monthFloor(12, Date.UTC(2026, 8, 2)) === "2025-10", "monthFloor(12) 含當月共 12 個月");
+assert(monthFloor(6, Date.UTC(2026, 1, 10)) === "2025-09", "monthFloor 跨年正確");
 
 /* ---- 寫入來源檢查 ---- */
 const req = (origin) => ({ headers: { get: (k) => (k === "Origin" ? origin : null) } });

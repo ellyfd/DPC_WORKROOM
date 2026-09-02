@@ -114,7 +114,18 @@ Policy 設定允許的公司信箱網域即可。
 DPC_WORKROOM/
 ├── index.html            # 整個 UI(header / 面板 / 表單)
 ├── styles.css            # 所有樣式 + RWD
-├── script.js             # 所有前端邏輯(同步 / 上傳 / 統計 / 常用列)
+├── js/                   # 前端邏輯(原生 ES modules,零框架)
+│   ├── main.mjs          #   進入點:init 與各面板接線
+│   ├── state.mjs         #   共用狀態物件與常數
+│   ├── helpers.mjs       #   純工具函式(escape / 格式化 / toast)
+│   ├── sync.mjs          #   伺服器同步、離線編輯佇列、使用計數
+│   ├── data.mjs          #   工具 / 分類 / 製作人 / 品牌資料層
+│   ├── board.mjs         #   啟動台板面:render、卡片、拖曳、篩選
+│   ├── files.mjs         #   檔案版本管理(上傳 / 下載 / 頁面工具)
+│   ├── menus.mjs         #   卡片選單、檔案面板、tooltip
+│   ├── popovers.mjs      #   工具 / 分類表單、pickers、自動抓取
+│   ├── tips.mjs          #   小知識牆(貼文 / 圖片 / hashtag)
+│   └── history.mjs       #   紀錄面板(回收桶 / 統計 / 異動)
 ├── sw.js                 # Service Worker(PWA 離線殼)
 ├── worker/index.js       # Cloudflare Worker(API / 合併 / 備份 / 沙箱)
 ├── wrangler.toml         # Worker 設定(D1 / R2 / cron)
