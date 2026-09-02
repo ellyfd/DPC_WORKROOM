@@ -2780,6 +2780,34 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 .history-count-zero { color: var(--text-mute); background: var(--surface-2); }
 .history-unused { color: var(--danger); font-weight: 600; }
 
+/* 統計頁:近 6 個月迷你趨勢條(單序列,由左至右=舊到新) */
+.trend {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 22px;
+  margin-right: 4px;
+}
+.trend-bar {
+  width: 5px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.85;
+}
+.trend-bar-zero { background: var(--border-2); opacity: 1; }
+
+/* 「90 天沒人用」— 淘汰決策用的標記 */
+.stat-stale {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
 /* ===== 我的常用 — per-device favorites row ===== */
 .section-fav {
   grid-column: 1 / -1; /* full-width row above the category columns */

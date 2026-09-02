@@ -46,6 +46,9 @@ const state = {
   activity: [],
   // per-tool usage counters from the server: { toolId: {opens, downloads, lastAt} }
   stats: {},
+  // monthly usage rollup, fetched lazily when the stats pane opens:
+  // { toolId: { "YYYY-MM": {opens, downloads} } }
+  monthlyStats: {},
 };
 
 function addTombstone(kind, key) {
@@ -2961,6 +2964,7 @@ async function openHistoryPopover() {
   if (!pop) return;
   // Pull fresh server data first — the bin and the feed live server-side.
   if (!_dirty && !_syncTimer && !_syncing) await quietRefresh();
+  await loadMonthlyStats();
   renderHistoryLists();
   // Land on the bin when there's something to restore, otherwise on stats.
   selectHistoryTab(state.deletedTools?.length ? "recycle" : "stats");
@@ -3091,6 +3095,57 @@ function formatWhen(iso) {
 
 /* 使用統計 — used tools ranked on top; untouched ones live in a collapsed
    neutral-gray group (zero is "no data yet", not an alarm). */
+/* Monthly usage rollup — fetched lazily when the stats pane opens (it's
+   deliberately not part of /api/state, whose ?since= fast path stays tiny). */
+let _monthlyLoadedAt = 0;
+
+async function loadMonthlyStats() {
+  if (Date.now() - _monthlyLoadedAt < 60 * 1000) return;
+  try {
+    const res = await fetch("/api/stats/monthly", { cache: "no-cache" });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.months && typeof data.months === "object") {
+      state.monthlyStats = data.months;
+      _monthlyLoadedAt = Date.now();
+    }
+  } catch {} // offline → the pane just shows totals without trends
+}
+
+// The last n calendar months as "YYYY-MM", oldest first, current month last.
+function lastMonths(n) {
+  const d = new Date();
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - i, 1));
+    out.push(m.toISOString().slice(0, 7));
+  }
+  return out;
+}
+
+const TREND_MONTHS = 6;
+const STALE_AFTER_MS = 90 * 24 * 60 * 60 * 1000;
+
+/* Six tiny baseline-anchored bars, one per month; zero months keep a faint
+   stub so the timeline reads as six slots. Single series → accent color,
+   native title tooltip per bar. */
+function trendBarsHTML(toolId) {
+  const byMonth = (state.monthlyStats || {})[toolId];
+  if (!byMonth) return "";
+  const months = lastMonths(TREND_MONTHS);
+  const vals = months.map((m) => {
+    const s = byMonth[m];
+    return s ? (s.opens || 0) + (s.downloads || 0) : 0;
+  });
+  const max = Math.max(...vals);
+  if (!max) return "";
+  const bars = months.map((m, i) => {
+    const h = vals[i] ? Math.max(3, Math.round((vals[i] / max) * 20)) : 2;
+    return `<i class="trend-bar${vals[i] ? "" : " trend-bar-zero"}" style="height:${h}px" title="${m}:${vals[i]} 次"></i>`;
+  }).join("");
+  return `<span class="trend">${bars}</span>`;
+}
+
 function renderStatsList() {
   const el = document.getElementById("stats-list");
   if (!el) return;
@@ -3110,7 +3165,9 @@ function renderStatsList() {
     (a.t.name || a.t.id).localeCompare(b.t.name || b.t.id, "zh-Hant"));
 
   const usedHTML = used.length
-    ? used.map((r) => `
+    ? used.map((r) => {
+        const stale = r.lastAt && Date.now() - r.lastAt > STALE_AFTER_MS;
+        return `
         <div class="history-row history-row-plain">
           <div class="history-row-main">
             <div class="history-row-title">${escapeHTML(r.t.name || r.t.id)}</div>
@@ -3118,10 +3175,13 @@ function renderStatsList() {
               <span class="history-meta">開啟 ${r.opens} 次</span>
               <span class="history-meta">下載 ${r.downloads} 次</span>
               <span class="history-meta">最近 ${r.lastAt ? formatWhen(new Date(r.lastAt).toISOString()) : "—"}</span>
+              ${stale ? `<span class="stat-stale">90 天沒人用</span>` : ""}
             </div>
           </div>
+          ${trendBarsHTML(r.t.id)}
           <span class="history-count">${r.total}</span>
-        </div>`).join("")
+        </div>`;
+      }).join("")
     : `<div class="history-empty">還沒有使用紀錄 — 大家開始點工具後會出現在這裡</div>`;
 
   const unusedHTML = unused.length

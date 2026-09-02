@@ -9,6 +9,8 @@ import {
   computeDeletedTools,
   appendActivity,
   writeOriginAllowed,
+  monthKey,
+  monthFloor,
 } from "../worker/index.js";
 
 const now = Date.now();
@@ -133,6 +135,12 @@ assert(!bin.some((e) => e.tool.id === "b"), "還原後離開回收桶");
 const acts = appendActivity(binOld, binFinal, "小葇");
 assert(acts.some((a) => a.action === "刪除工具" && a.target === "A" && a.actor === "小葇"), "刪除留下紀錄與操作人");
 assert(acts.some((a) => a.action === "還原工具" && a.target === "B"), "還原被辨識為還原(而非新增)");
+
+/* ---- 使用統計月份分桶 ---- */
+assert(monthKey(Date.UTC(2026, 0, 15)) === "2026-01", "monthKey 產生 YYYY-MM 桶");
+assert(monthFloor(1, Date.UTC(2026, 8, 2)) === "2026-09", "monthFloor(1) = 當月");
+assert(monthFloor(12, Date.UTC(2026, 8, 2)) === "2025-10", "monthFloor(12) 含當月共 12 個月");
+assert(monthFloor(6, Date.UTC(2026, 1, 10)) === "2025-09", "monthFloor 跨年正確");
 
 /* ---- 寫入來源檢查 ---- */
 const req = (origin) => ({ headers: { get: (k) => (k === "Origin" ? origin : null) } });

@@ -33,6 +33,9 @@ export default {
         if (!writeOriginAllowed(request)) return jsonError("origin not allowed", 403);
         return await recordHit(request, env);
       }
+      if (url.pathname === "/api/stats/monthly" && request.method === "GET") {
+        return await getMonthlyStats(env);
+      }
       if (url.pathname.startsWith("/files/")) {
         const key = decodeURIComponent(url.pathname.slice("/files/".length));
         return await downloadFile(env, key);
@@ -60,6 +63,12 @@ export default {
   // R2 so a bad write or bug can never lose data permanently.
   async scheduled(_event, env) {
     await backupState(env);
+    // Trim the monthly usage rollup past its serving window.
+    try {
+      await env.DB.prepare("DELETE FROM hits_monthly WHERE month < ?")
+        .bind(monthFloor(STATS_KEEP_MONTHS))
+        .run();
+    } catch {} // table not created yet → nothing to trim
   },
 };
 
@@ -197,17 +206,37 @@ async function readStats(env) {
 let _hitsTableReady = null;
 function ensureHitsTable(env) {
   if (!_hitsTableReady) {
-    _hitsTableReady = env.DB.prepare(
-      "CREATE TABLE IF NOT EXISTS hits (tool_id TEXT PRIMARY KEY, opens INTEGER DEFAULT 0, downloads INTEGER DEFAULT 0, last_at INTEGER)"
-    )
-      .run()
-      .catch((e) => {
-        _hitsTableReady = null;
-        throw e;
-      });
+    _hitsTableReady = env.DB.batch([
+      env.DB.prepare(
+        "CREATE TABLE IF NOT EXISTS hits (tool_id TEXT PRIMARY KEY, opens INTEGER DEFAULT 0, downloads INTEGER DEFAULT 0, last_at INTEGER)"
+      ),
+      // Per-month rollup behind the usage-trend view — lifetime totals alone
+      // can't answer "has anyone touched this in the last three months?".
+      env.DB.prepare(
+        "CREATE TABLE IF NOT EXISTS hits_monthly (tool_id TEXT, month TEXT, opens INTEGER DEFAULT 0, downloads INTEGER DEFAULT 0, PRIMARY KEY (tool_id, month))"
+      ),
+    ]).catch((e) => {
+      _hitsTableReady = null;
+      throw e;
+    });
   }
   return _hitsTableReady;
 }
+
+// "YYYY-MM" bucket for the monthly usage rollup.
+function monthKey(ts = Date.now()) {
+  return new Date(ts).toISOString().slice(0, 7);
+}
+
+// Oldest "YYYY-MM" still kept/served, counting back from `ts` inclusive.
+function monthFloor(keepMonths, ts = Date.now()) {
+  const d = new Date(ts);
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() - (keepMonths - 1));
+  return d.toISOString().slice(0, 7);
+}
+
+const STATS_KEEP_MONTHS = 12;
 
 async function recordHit(request, env) {
   const body = await request.json().catch(() => ({}));
@@ -215,13 +244,37 @@ async function recordHit(request, env) {
   const kind = body.kind === "download" ? "download" : body.kind === "open" ? "open" : "";
   if (!toolId || !kind) return jsonError("bad hit", 400);
   await ensureHitsTable(env);
-  await env.DB.prepare(
-    "INSERT INTO hits (tool_id, opens, downloads, last_at) VALUES (?, ?, ?, ?) " +
-      "ON CONFLICT(tool_id) DO UPDATE SET opens = opens + excluded.opens, downloads = downloads + excluded.downloads, last_at = excluded.last_at"
-  )
-    .bind(toolId, kind === "open" ? 1 : 0, kind === "download" ? 1 : 0, Date.now())
-    .run();
+  const opens = kind === "open" ? 1 : 0;
+  const downloads = kind === "download" ? 1 : 0;
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO hits (tool_id, opens, downloads, last_at) VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT(tool_id) DO UPDATE SET opens = opens + excluded.opens, downloads = downloads + excluded.downloads, last_at = excluded.last_at"
+    ).bind(toolId, opens, downloads, Date.now()),
+    env.DB.prepare(
+      "INSERT INTO hits_monthly (tool_id, month, opens, downloads) VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT(tool_id, month) DO UPDATE SET opens = opens + excluded.opens, downloads = downloads + excluded.downloads"
+    ).bind(toolId, monthKey(), opens, downloads),
+  ]);
   return json({ ok: true });
+}
+
+/* GET /api/stats/monthly → { toolId: { "YYYY-MM": {opens, downloads} } }.
+   Served separately from /api/state so the ?since= unchanged fast path stays
+   tiny — the stats pane fetches this lazily when opened. */
+async function getMonthlyStats(env) {
+  const out = {};
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT tool_id, month, opens, downloads FROM hits_monthly WHERE month >= ? ORDER BY month"
+    )
+      .bind(monthFloor(STATS_KEEP_MONTHS))
+      .all();
+    for (const r of results || []) {
+      (out[r.tool_id] ||= {})[r.month] = { opens: r.opens || 0, downloads: r.downloads || 0 };
+    }
+  } catch {}
+  return json({ months: out });
 }
 
 async function putState(request, env) {
@@ -651,4 +704,6 @@ export {
   computeDeletedTools,
   appendActivity,
   writeOriginAllowed,
+  monthKey,
+  monthFloor,
 };
