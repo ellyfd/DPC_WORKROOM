@@ -115,16 +115,58 @@ function bumpLocalUsage(toolId) {
 }
 
 
+// Per-device opt-outs: tools removed from 我的常用, and the whole row hidden.
+const LS_FAV_HIDDEN_KEY = "dpcHub.favHidden.v1";
+
+const LS_FAV_OFF_KEY = "dpcHub.favOff.v1";
+
+
+function favHiddenIds() {
+  const v = loadJSON(LS_FAV_HIDDEN_KEY, []);
+  return Array.isArray(v) ? v : [];
+}
+
+
+function hideFavorite(id) {
+  const ids = favHiddenIds();
+  if (!ids.includes(id)) saveJSON(LS_FAV_HIDDEN_KEY, [...ids, id]);
+}
+
+
+function unhideFavorite(id) {
+  saveJSON(LS_FAV_HIDDEN_KEY, favHiddenIds().filter((x) => x !== id));
+}
+
+
+function restoreFavorites() {
+  saveJSON(LS_FAV_HIDDEN_KEY, []);
+}
+
+
+function isFavRowOff() {
+  return loadJSON(LS_FAV_OFF_KEY, false) === true;
+}
+
+
+function setFavRowOff(off) {
+  saveJSON(LS_FAV_OFF_KEY, !!off);
+}
+
+
 function favoriteTools() {
   const usage = loadJSON(LS_USAGE_KEY, {});
+  const hidden = new Set(favHiddenIds());
   const cutoff = Date.now() - FAV_WINDOW_MS;
   const byId = new Map(allTools().map((t) => [t.id, t]));
   const picked = Object.entries(usage)
-    .filter(([id, u]) => byId.has(id) && u && u.n >= FAV_MIN_USES && (u.last || 0) >= cutoff)
+    .filter(([id, u]) => byId.has(id) && !hidden.has(id) && u && u.n >= FAV_MIN_USES && (u.last || 0) >= cutoff)
     .sort((a, b) => b[1].n - a[1].n || (b[1].last || 0) - (a[1].last || 0))
     .slice(0, FAV_MAX)
     .map(([id]) => byId.get(id));
-  return picked.length >= FAV_MIN ? picked : [];
+  // Once someone has curated the row (removed items), keep it even if it
+  // drops below the usual minimum — vanishing would feel like a bug.
+  const min = hidden.size ? 1 : FAV_MIN;
+  return picked.length >= min ? picked : [];
 }
 
 /* Non-destructive server re-fetch: on any failure the current in-memory
@@ -367,4 +409,4 @@ const saveBrands = scheduleSync;
 
 const saveTips = scheduleSync;
 
-export { _dirty, _lastLoadedAt, _syncTimer, _syncing, bootSyncState, favoriteTools, quietRefresh, saveBrands, saveCats, saveCreators, saveTips, saveTools, scheduleSync, setupPullToRefresh, syncStateNow, trackHit };
+export { _dirty, _lastLoadedAt, _syncTimer, _syncing, bootSyncState, favHiddenIds, favoriteTools, hideFavorite, isFavRowOff, restoreFavorites, setFavRowOff, unhideFavorite, quietRefresh, saveBrands, saveCats, saveCreators, saveTips, saveTools, scheduleSync, setupPullToRefresh, syncStateNow, trackHit };

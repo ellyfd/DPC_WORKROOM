@@ -3078,8 +3078,47 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.fav-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fav-btn {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.fav-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* × on each favourite — appears on hover (always on touch) */
+.fav-remove {
+  position: absolute;
+  top: 0; left: 6px;
+  z-index: 6;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: #64748b;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.15s, transform 0.15s, background 0.15s;
+}
+.section-fav .card:hover .fav-remove,
+.fav-remove:focus-visible { opacity: 1; transform: none; }
+.fav-remove:hover { background: var(--danger); }
+@media (hover: none) {
+  .fav-remove { opacity: 0.85; transform: none; }
+}
 @media (max-width: 640px) {
   .fav-hint { display: none; }
+  .fav-btn { height: 30px; }
 }
 
 /* ===== history popover v2: tabs / day groups / neutral zero states ===== */
