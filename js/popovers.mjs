@@ -413,6 +413,11 @@ function applyTypeMode(type) {
       ? "上傳 HTML 即發佈為 /p/<工具> 頁面。再次上傳會覆蓋上一份,單檔上限 25 MB。"
       : "每次上傳自動記錄時間 / 上傳人,最新一筆是目前版本。最多保留 5 個版本,單檔上限 25 MB。";
   }
+  // Existing tools manage their files in the 版本 panel only — the edit form
+  // is just name / category / creator / description / lock.
+  if (state.editingId) {
+    document.querySelectorAll(".file-manager").forEach((el) => { el.hidden = true; });
+  }
   // Brand applies to every type — keep the dropdown populated when the user
   // switches type inside the popover.
   renderBrandSelect(document.getElementById("brand-select")?.value || "");
@@ -768,7 +773,7 @@ function saveTool() {
       return;
     }
   }
-  if (d.type === "file" || d.type === "page") {
+  if ((d.type === "file" || d.type === "page") && !state.editingId) {
     if (!state.editingFiles.length) {
       toast(d.type === "page" ? "請上傳 HTML 檔案" : "請上傳至少一個檔案");
       return;
@@ -777,8 +782,7 @@ function saveTool() {
       toast("頁面類型只接受 .html / .htm");
       return;
     }
-  } else {
-    // link
+  } else if (d.type === "link") {
     if (!d.url) {
       toast("請填 URL");
       return;
@@ -808,7 +812,9 @@ function saveTool() {
     // whatever was picked instead of silently dropping it for non-file tools.
     brand: d.brand,
     files: (d.type === "file" || d.type === "page")
-      ? state.editingFiles.map(copyFileEntry)
+      // Editing: files are owned by the 版本 panel — keep whatever the tool
+      // has right now. New tool: the file picked in this form.
+      ? (isNew ? state.editingFiles : (allTools().find((t) => t.id === id)?.files || [])).map(copyFileEntry)
       : [],
     lockedBy: d.lock ? d.creator : "",
     // Stamp creation time once. New tools get "now"; tools saved before this
@@ -1151,4 +1157,4 @@ function positionPopover(popEl, _anchor) {
   panel.style.right = "auto";
 }
 
-export { autoFetch, closeToolPopover, deleteCategory, initBrandPicker, initCatPopover, initCategoryPicker, initCreatorPicker, initIconPicker, initMiniPopover, initToolPopover, initTypeSelector, migrateIconsToR2, openCatPopover, openMiniPopover, openToolPopover, syncCustomSelectLabel, updateIconPreview };
+export { autoFetch, deleteCategory, initBrandPicker, initCatPopover, initCategoryPicker, initCreatorPicker, initIconPicker, initMiniPopover, initToolPopover, initTypeSelector, migrateIconsToR2, openCatPopover, openMiniPopover, openToolPopover, syncCustomSelectLabel, updateIconPreview };

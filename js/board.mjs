@@ -89,6 +89,8 @@ function markUpdateSeen(toolId) {
   document.querySelectorAll(`#sections-area .card[data-id="${cssEscape(toolId)}"]`).forEach((card) => {
     card.classList.remove("is-updated");
     card.querySelectorAll(".update-badge").forEach((b) => b.remove());
+    if (t.description) card.dataset.note = t.description;
+    else card.removeAttribute("data-note");
   });
 }
 
@@ -96,6 +98,15 @@ function markUpdateSeen(toolId) {
 // once per distinct batch. A new tool or a new version changes the signature
 // and the notice pops again on next load. (New-tools-only signatures keep the
 // old format so people who dismissed a batch aren't asked again.)
+
+function updateTooltip(t, latest) {
+  const ver = t.type === "page" ? "" : ` v${t.files.length}`;
+  let note = (latest.note || "").trim();
+  if (note.length > 140) note = note.slice(0, 140) + "…";
+  const head = `🔄 新版本${ver}${note ? `:${note}` : ""}`;
+  return t.description ? `${head}\n\n${t.description}` : head;
+}
+
 
 function newToolsSignature(tools, updates = []) {
   return [
@@ -519,7 +530,6 @@ function cardHTML(t, cv, seenMap = loadJSON(LS_UPDATE_SEEN_KEY, {})) {
     ? `<img src="${escapeAttr(t.icon)}" alt="" draggable="false" onerror="this.remove()" />`
     : "";
   const isPage = isPageTool(t);
-  const noteAttr = t.description ? ` data-note="${escapeAttr(t.description)}"` : "";
 
   const locked = isToolLocked(t);
   const lockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
@@ -528,9 +538,9 @@ function cardHTML(t, cv, seenMap = loadJSON(LS_UPDATE_SEEN_KEY, {})) {
   const updated = isUpdatedTool(t, seenMap);
   const fresh = !updated && isNewTool(t);
   const latest = updated ? latestVersion(t) : null;
-  const updTitle = latest
-    ? (latest.note ? `有新版本:${latest.note}` : "有新版本")
-    : "";
+  // Hover tooltip: lead with this update's 更新內容, then the description.
+  const tip = updated ? updateTooltip(t, latest) : (t.description || "");
+  const noteAttr = tip ? ` data-note="${escapeAttr(tip)}"` : "";
 
   return `
     <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}${fresh ? " is-new" : ""}${updated ? " is-updated" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}"${noteAttr} draggable="true">
@@ -543,7 +553,7 @@ function cardHTML(t, cv, seenMap = loadJSON(LS_UPDATE_SEEN_KEY, {})) {
           </div>
           ${locked ? `<span class="lock-badge" title="已鎖定 — 只有 ${escapeAttr(t.lockedBy)} 能編輯/刪除">${lockSvg}</span>` : ""}
           ${fresh ? `<span class="new-badge" title="本週上新">NEW</span>` : ""}
-          ${updated ? `<span class="new-badge update-badge" title="${escapeAttr(updTitle)}">UPDATE</span>` : ""}
+          ${updated ? `<span class="new-badge update-badge" data-open-versions="${escapeAttr(t.id)}" title="點這裡看更新內容">UPDATE</span>` : ""}
         </div>
         <h3 class="card-title">${escapeHTML(t.name)}</h3>
       </button>
@@ -601,6 +611,11 @@ function wireSections() {
       // The click that follows a completed long-press must not open the tool.
       if (_longPressFired) { _longPressFired = false; return; }
       const id = tile.dataset.open;
+      // UPDATE badge → see what changed instead of downloading straight away.
+      if (e.target.closest("[data-open-versions]")) {
+        openFilePopover(id);
+        return;
+      }
       const tool = allTools().find((t) => t.id === id);
       if (tool) openTool(tool, e.currentTarget);
     });
