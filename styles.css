@@ -35,7 +35,11 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; min-height: 100%; overflow-x: hidden; }
+html, body { margin: 0; padding: 0; min-height: 100%; }
+/* html's overflow goes to the viewport; body uses clip (not hidden) so it
+   doesn't become its own scroll box — that would break position: sticky. */
+html { overflow-x: hidden; }
+body { overflow-x: clip; }
 body {
   font-family: var(--font-sans);
   font-size: 15px;
@@ -68,7 +72,7 @@ h1, h2, h3 { margin: 0; }
 .page {
   position: relative;
   z-index: 1;
-  max-width: 1440px;
+  max-width: 1880px;
   margin: 0 auto;
   padding: 40px 32px 60px;
   display: flex;
@@ -119,9 +123,12 @@ h1, h2, h3 { margin: 0; }
   line-height: 1.15;
 }
 .brand-sub {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-mute);
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .search {
@@ -330,6 +337,37 @@ h1, h2, h3 { margin: 0; }
 .section-title-row {
   display: flex; align-items: baseline; gap: 10px;
   min-width: 0;
+  padding: 2px 4px 2px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.section-title-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.section-chev {
+  align-self: center;
+  flex-shrink: 0;
+  color: var(--text-mute);
+  opacity: 0;
+  transition: transform 0.18s, opacity 0.15s;
+}
+.section-title-row:hover .section-chev,
+.section-title-row:focus-visible .section-chev,
+.section.collapsed .section-chev { opacity: 0.8; }
+.section.collapsed .section-chev { transform: rotate(-90deg); }
+.section.collapsed .section-body { display: none; }
+.section.collapsed .section-head { margin-bottom: 0; }
+.section { scroll-margin-top: var(--sticky-total, 12px); }
+.section.flash { animation: section-flash 1.2s ease-out; }
+@keyframes section-flash {
+  0%, 30% { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 4px var(--accent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .section.flash { animation: none; }
 }
 .section-color-dot {
   width: 12px; height: 12px;
@@ -534,6 +572,9 @@ h1, h2, h3 { margin: 0; }
   pointer-events: none;
 }
 .card-icon .ic-letter { position: relative; z-index: 1; }
+.card-icon .ic-letter.is-two { font-size: 0.8em; letter-spacing: -0.04em; }
+.card-icon.has-hue { filter: hue-rotate(var(--hue, 0deg)); }
+.card-icon.has-hue .tile-type-chip { filter: hue-rotate(calc(var(--hue, 0deg) * -1)); }
 .card-icon img {
   position: absolute; inset: 0;
   width: 100%; height: 100%; object-fit: cover;
@@ -578,6 +619,8 @@ h1, h2, h3 { margin: 0; }
 .card.is-page .card-icon {
   background: linear-gradient(135deg, #ede9fe, #ddd6fe);
 }
+/* Light tile → dark lettering, otherwise white-on-lavender is unreadable */
+.card.is-page .card-icon .ic-letter { color: #5b21b6; }
 
 .card-title {
   font-size: 13px;
@@ -588,9 +631,14 @@ h1, h2, h3 { margin: 0; }
   margin: 0;
   max-width: 100%;
   width: 100%;
-  white-space: nowrap;
+  /* Up to two lines, then ellipsis — the hover tooltip has the full name. */
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  word-break: break-word;
   letter-spacing: -0.005em;
 }
 
@@ -2681,6 +2729,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
    secondary ones (許願池/紀錄/小知識) shrink to icon-only. The primary
    新增工具 keeps its label. */
 @media (max-width: 1360px) {
+  .brand-sub { display: none; }
   .hero .btn-wish .btn-text,
   .hero .btn-tips .btn-text { display: none; }
   .hero .btn-wish,
@@ -2797,7 +2846,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   }
   .card-add-plus { width: 48px; height: 48px; border-radius: 12px; }
   .card-add-plus svg { width: 18px; height: 18px; }
-  .card-title { font-size: 12.5px; max-width: 80px; }
+  .card-title { font-size: 12px; max-width: 84px; }
   .card-add { padding: 4px 2px 36px; }
   .card-actions { gap: 4px; }
   .card-act { width: 26px; height: 26px; border-radius: 7px; }
@@ -3127,6 +3176,9 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   vertical-align: top;
   margin-bottom: 18px;    /* replaces the grid gap between rows */
 }
+@media (min-width: 1680px) {
+  .board-cols { columns: 4; }
+}
 @media (max-width: 1200px) {
   .board-cols { columns: 2; }
 }
@@ -3156,4 +3208,99 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* ============================================================
+   Sticky header (desktop) + 分類快捷列
+   ============================================================ */
+@media (min-width: 641px) {
+  .hero {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    margin: -12px -32px 0;
+    padding: 12px 32px;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+}
+.cat-nav {
+  position: sticky;
+  top: var(--hero-sticky-h, 0px);
+  z-index: 29;
+  display: flex; align-items: center; gap: 10px;
+  margin: -24px -32px -16px;
+  padding: 8px 32px 10px;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+/* Frosted backdrop only once the page scrolls under the sticky bars */
+body.is-scrolled .cat-nav {
+  background: rgba(245, 247, 251, 0.9);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  backdrop-filter: saturate(1.4) blur(10px);
+  box-shadow: 0 6px 12px -10px rgba(15, 23, 42, 0.35);
+}
+@media (min-width: 641px) {
+  body.is-scrolled .hero {
+    background: rgba(245, 247, 251, 0.9);
+    -webkit-backdrop-filter: saturate(1.4) blur(10px);
+    backdrop-filter: saturate(1.4) blur(10px);
+  }
+}
+.cat-nav[hidden] { display: none; }
+.cat-nav-chips {
+  flex: 1; min-width: 0;
+  display: flex; gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+  padding-right: 24px;
+}
+.cat-nav-chips::-webkit-scrollbar { display: none; }
+.cat-chip {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px; font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.cat-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.cat-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cat-chip-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--c1, #60a5fa), var(--c2, #6366f1));
+}
+.cat-chip-count { font-size: 11.5px; font-weight: 500; color: var(--text-mute); font-variant-numeric: tabular-nums; }
+.cat-nav-toggle {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px; font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cat-nav-toggle:hover { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 880px) {
+  .hero { margin-left: -22px; margin-right: -22px; padding-left: 22px; padding-right: 22px; }
+  .cat-nav { margin-left: -22px; margin-right: -22px; padding-left: 22px; padding-right: 22px; margin-top: -18px; }
+}
+@media (max-width: 640px) {
+  .cat-nav { top: 0; margin: -14px -14px -10px; padding: max(8px, env(safe-area-inset-top)) 14px 8px; }
+  .cat-chip, .cat-nav-toggle { height: 34px; }
+  .cat-nav-toggle span { display: none; }
+  .cat-nav-toggle { padding: 0 10px; }
 }

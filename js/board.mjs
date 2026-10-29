@@ -89,8 +89,7 @@ function markUpdateSeen(toolId) {
   document.querySelectorAll(`#sections-area .card[data-id="${cssEscape(toolId)}"]`).forEach((card) => {
     card.classList.remove("is-updated");
     card.querySelectorAll(".update-badge").forEach((b) => b.remove());
-    if (t.description) card.dataset.note = t.description;
-    else card.removeAttribute("data-note");
+    card.dataset.note = t.description ? `${t.name}\n${t.description}` : t.name;
   });
 }
 
@@ -396,6 +395,7 @@ function renderSections() {
   renderBrandFilter();
 
   if (!allTools().length && !state.categories.length) {
+    renderCatNav(null);
     area.innerHTML = "";
     empty.hidden = false;
     return;
@@ -414,6 +414,7 @@ function renderSections() {
   }
 
   if (scope === "tips") {
+    renderCatNav(null);
     area.innerHTML = tipsBlock ||
       `<div class="section"><div class="section-body"><div class="section-grid"><div class="section-empty">沒有符合條件的小知識</div></div></div></div>`;
     return;
@@ -434,6 +435,7 @@ function renderSections() {
       .filter((g) => g.tools.length);
   }
 
+  renderCatNav(groups);
   if (!groups.length) {
     // Found tips but no tools → just show the tips block (no "no tools" noise).
     area.innerHTML = tipsBlock ||
@@ -486,28 +488,20 @@ function sectionHTML(g, showHeader = true) {
   const isSystem = g.system;
   const cards = g.tools.map((t) => cardHTML(t, cv)).join("");
 
-  const addBtn = `
-    <button class="section-action section-action-add" title="在「${escapeAttr(g.name)}」新增工具" aria-label="在「${escapeAttr(g.name)}」新增工具" data-add-tool="${escapeAttr(isSystem ? "" : g.name)}">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
-    </button>`;
-
+  const collapsed = !!state.collapsed[g.name];
+  const chev = `<svg class="section-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
   const header = !showHeader ? "" : `
     <div class="section-head">
-      <div class="section-title-row">
+      <button type="button" class="section-title-row" data-toggle-cat="${escapeAttr(g.name)}" aria-expanded="${collapsed ? "false" : "true"}" title="${collapsed ? "展開" : "收合"}">
         <span class="section-color-dot"></span>
         <span class="section-title">${escapeHTML(g.name)}</span>
         <span class="section-count">${g.tools.length}</span>
-      </div>
+        ${chev}
+      </button>
       <div class="section-actions">
-        ${addBtn}
-        ${isSystem ? "" : `
-          <button class="section-action" title="編輯分類" data-edit-cat="${escapeAttr(g.name)}">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-          </button>
-          <button class="section-action danger" title="刪除分類" data-del-cat="${escapeAttr(g.name)}">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-          </button>
-        `}
+        <button type="button" class="section-action" title="分類選單" aria-label="「${escapeAttr(g.name)}」分類選單" data-cat-menu="${escapeAttr(g.name)}"${isSystem ? ' data-system="1"' : ""}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </button>
       </div>
     </div>
   `;
@@ -515,7 +509,7 @@ function sectionHTML(g, showHeader = true) {
   const grid = `<div class="section-grid">${cards}</div>`;
 
   return `
-    <section class="section" data-cv="${cv}" data-cat="${escapeAttr(g.name)}"${isSystem ? ' data-system="1"' : ''}>
+    <section class="section${collapsed ? " collapsed" : ""}" data-cv="${cv}" data-cat="${escapeAttr(g.name)}"${isSystem ? ' data-system="1"' : ''}>
       ${header}
       <div class="section-body">${grid}</div>
     </section>
@@ -530,6 +524,10 @@ function cardHTML(t, cv, seenMap = loadJSON(LS_UPDATE_SEEN_KEY, {})) {
     ? `<img src="${escapeAttr(t.icon)}" alt="" draggable="false" onerror="this.remove()" />`
     : "";
   const isPage = isPageTool(t);
+  const abbr = tileAbbr(t.name);
+  // Letter tiles in one category share a colour — nudge the hue per name so
+  // neighbours don't look identical. Real icons are left alone.
+  const hue = t.icon ? 0 : nameHue(t.name);
 
   const locked = isToolLocked(t);
   const lockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
@@ -539,15 +537,17 @@ function cardHTML(t, cv, seenMap = loadJSON(LS_UPDATE_SEEN_KEY, {})) {
   const fresh = !updated && isNewTool(t);
   const latest = updated ? latestVersion(t) : null;
   // Hover tooltip: lead with this update's 更新內容, then the description.
-  const tip = updated ? updateTooltip(t, latest) : (t.description || "");
+  // Tooltip always leads with the full name (titles clamp at two lines).
+  const extra = updated ? updateTooltip(t, latest) : (t.description || "");
+  const tip = extra ? `${t.name}\n${extra}` : t.name;
   const noteAttr = tip ? ` data-note="${escapeAttr(tip)}"` : "";
 
   return `
     <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}${fresh ? " is-new" : ""}${updated ? " is-updated" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}"${noteAttr} draggable="true">
       <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" aria-label="${escapeAttr(t.name)}">
         <div class="card-top">
-          <div class="card-icon">
-            <span class="ic-letter">${escapeHTML(initial(t.name))}</span>
+          <div class="card-icon${hue ? " has-hue" : ""}"${hue ? ` style="--hue:${hue}deg"` : ""}>
+            <span class="ic-letter${abbr.length > 1 ? " is-two" : ""}">${escapeHTML(abbr)}</span>
             ${iconImg}
             <span class="tile-type-chip tile-type-${tType}" aria-label="${escapeAttr(type.label)}">${type.icon}</span>
           </div>
@@ -634,24 +634,12 @@ function wireSections() {
       openTileContextMenu(card.dataset.id, x, y);
     });
   });
-  // "+ 新增" in a section header → new-tool popover with that category preselected
-  $$("#sections-area [data-add-tool]").forEach((btn) => {
+  $$("#sections-area [data-cat-menu]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      state.prefillCategory = btn.dataset.addTool || null;
-      openToolPopover(null, btn);
-    });
-  });
-  $$("#sections-area [data-edit-cat]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openCatPopover(btn.dataset.editCat, btn);
-    });
-  });
-  $$("#sections-area [data-del-cat]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      deleteCategory(btn.dataset.delCat);
+      const menu = document.getElementById("cat-menu");
+      if (menu && !menu.hidden && _catMenuTarget?.anchor === btn) { closeCatMenu(); return; }
+      openCatMenu(btn);
     });
   });
   $$("#sections-area [data-toggle-cat]").forEach((head) => {
@@ -661,6 +649,7 @@ function wireSections() {
     });
   });
   wireCardDrag();
+  syncCollapseAllButton();
 }
 
 
@@ -925,7 +914,189 @@ function toggleSection(name) {
   state.collapsed[name] = !state.collapsed[name];
   saveJSON(LS_COLLAPSE_KEY, state.collapsed);
   const sec = document.querySelector(`#sections-area .section[data-cat="${cssEscape(name)}"]`);
-  if (sec) sec.classList.toggle("collapsed", !!state.collapsed[name]);
+  if (sec) {
+    const c = !!state.collapsed[name];
+    sec.classList.toggle("collapsed", c);
+    const head = sec.querySelector("[data-toggle-cat]");
+    if (head) {
+      head.setAttribute("aria-expanded", c ? "false" : "true");
+      head.title = c ? "展開" : "收合";
+    }
+  }
+  syncCollapseAllButton();
+}
+
+
+/* ===== 分類快捷列 — jump to a category, collapse / expand all ===== */
+
+function renderCatNav(groups) {
+  const nav = document.getElementById("cat-nav");
+  if (!nav) return;
+  if (!groups || !groups.length) { nav.hidden = true; nav.innerHTML = ""; return; }
+  const chips = groups.map((g) => `
+    <button type="button" class="cat-chip" data-cv="${g.color}" data-jump-cat="${escapeAttr(g.name)}">
+      <span class="cat-chip-dot"></span>
+      <span class="cat-chip-name">${escapeHTML(g.name)}</span>
+      <span class="cat-chip-count">${g.tools.length}</span>
+    </button>`).join("");
+  nav.innerHTML = `
+    <div class="cat-nav-chips">${chips}</div>
+    <button type="button" class="cat-nav-toggle" id="cat-nav-toggle"></button>`;
+  nav.hidden = false;
+  syncCollapseAllButton();
+  nav.querySelectorAll("[data-jump-cat]").forEach((btn) =>
+    btn.addEventListener("click", () => jumpToCategory(btn.dataset.jumpCat))
+  );
+  nav.querySelector("#cat-nav-toggle").addEventListener("click", () => {
+    const names = [...document.querySelectorAll("#sections-area .board-cols .section[data-cat]")]
+      .map((sec) => sec.dataset.cat);
+    const anyOpen = names.some((n) => !state.collapsed[n]);
+    for (const n of names) state.collapsed[n] = anyOpen;
+    saveJSON(LS_COLLAPSE_KEY, state.collapsed);
+    renderSections();
+  });
+  updateStickyOffsets();
+}
+
+
+function syncCollapseAllButton() {
+  const btn = document.getElementById("cat-nav-toggle");
+  if (!btn) return;
+  const secs = [...document.querySelectorAll("#sections-area .board-cols .section[data-cat]")];
+  const anyOpen = secs.some((sec) => !sec.classList.contains("collapsed"));
+  btn.innerHTML = anyOpen
+    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 20 5-5 5 5M7 4l5 5 5-5"/></svg><span>全部收合</span>`
+    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg><span>全部展開</span>`;
+}
+
+
+function jumpToCategory(name) {
+  if (state.collapsed[name]) toggleSection(name);
+  const sec = document.querySelector(`#sections-area .section[data-cat="${cssEscape(name)}"]`);
+  if (!sec) return;
+  sec.scrollIntoView({ behavior: "smooth", block: "start" });
+  sec.classList.remove("flash");
+  void sec.offsetWidth;  // restart the highlight animation
+  sec.classList.add("flash");
+}
+
+// The header (desktop) and the category bar stick to the top; sections need
+// to know how much space that takes so a jump doesn't land underneath them.
+
+let _stickyWired = false;
+
+
+function updateStickyOffsets() {
+  const hero = document.querySelector(".hero");
+  const nav = document.getElementById("cat-nav");
+  const root = document.documentElement;
+  const heroSticky = hero && getComputedStyle(hero).position === "sticky";
+  const heroH = heroSticky ? hero.offsetHeight : 0;
+  const navH = nav && !nav.hidden ? nav.offsetHeight : 0;
+  root.style.setProperty("--hero-sticky-h", `${heroH}px`);
+  root.style.setProperty("--sticky-total", `${heroH + navH + 12}px`);
+  if (!_stickyWired) {
+    _stickyWired = true;
+    let raf = 0;
+    window.addEventListener("resize", () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateStickyOffsets);
+    });
+    const onScroll = () => document.body.classList.toggle("is-scrolled", window.scrollY > 4);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  }
+}
+
+
+/* ===== category "⋯" menu ===== */
+
+let _catMenuTarget = null;
+
+
+function openCatMenu(btn) {
+  const menu = document.getElementById("cat-menu");
+  if (!menu) return;
+  if (!menu.dataset.wired) {
+    menu.dataset.wired = "1";
+    menu.querySelectorAll("[data-cat-act]").forEach((item) =>
+      item.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const t = _catMenuTarget;
+        closeCatMenu();
+        if (!t) return;
+        const act = item.dataset.catAct;
+        if (act === "add") {
+          state.prefillCategory = t.system ? null : t.name;
+          openToolPopover(null, t.anchor);
+        } else if (act === "edit") {
+          openCatPopover(t.name, t.anchor);
+        } else if (act === "delete") {
+          deleteCategory(t.name);
+        }
+      })
+    );
+    document.addEventListener("click", (e) => {
+      if (menu.hidden || e.target.closest("#cat-menu") || e.target.closest("[data-cat-menu]")) return;
+      closeCatMenu();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCatMenu(); });
+    window.addEventListener("scroll", closeCatMenu, true);
+    window.addEventListener("resize", closeCatMenu);
+  }
+  const system = btn.dataset.system === "1";
+  _catMenuTarget = { name: btn.dataset.catMenu, system, anchor: btn };
+  menu.querySelector("#cat-menu-edit").hidden = system;
+  menu.querySelector("#cat-menu-delete").hidden = system;
+  menu.querySelector("#cat-menu-sep").hidden = system;
+  menu.hidden = false;
+  const r = btn.getBoundingClientRect();
+  const mw = menu.offsetWidth || 200;
+  const mh = menu.offsetHeight || 120;
+  let left = Math.min(r.right - mw, window.innerWidth - mw - 8);
+  if (left < 8) left = 8;
+  let top = r.bottom + 6;
+  if (top + mh > window.innerHeight - 8) top = r.top - mh - 6;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+}
+
+
+function closeCatMenu() {
+  const menu = document.getElementById("cat-menu");
+  if (menu) menu.hidden = true;
+  _catMenuTarget = null;
+}
+
+
+/* ===== letter tiles: two-character abbreviation + per-name hue ===== */
+
+// "TGT GSA PPT" → "TG", "DCSG Snapshot" → "DS", "2D印圖" → "2D",
+// "人台搜尋" → "人台", "(未完成)對條碼" → "對條". Initials of the first two
+// Latin words; otherwise the first two characters of the first word.
+
+function tileAbbr(name) {
+  const clean = String(name || "")
+    .replace(/[(（\[【][^)）\]】]*[)）\]】]/g, " ")
+    .trim() || String(name || "").trim();
+  if (!clean) return "?";
+  const tokens = clean.match(/[A-Za-z0-9]+|[\u3400-\u9fff\uf900-\ufaff]+/g) || [];
+  if (!tokens.length) return initial(clean);
+  const first = tokens[0];
+  const isLatin = (t) => /^[A-Za-z0-9]/.test(t);
+  if (isLatin(first)) {
+    const second = tokens.slice(1).find(isLatin);
+    const abbr = second ? first[0] + second[0] : first.slice(0, 2);
+    return abbr.toUpperCase();
+  }
+  return [...first].slice(0, 2).join("");
+}
+
+
+function nameHue(name) {
+  let h = 0;
+  for (const ch of String(name || "")) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return [-28, -14, 0, 14, 28][h % 5];
 }
 
 
