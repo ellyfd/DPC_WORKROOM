@@ -41,7 +41,7 @@ function newToolsThisWeek() {
 
 /* ===== 版本更新 (new versions of existing tools) ===== */
 
-const UPDATE_WINDOW_DAYS = 7;
+const UPDATE_WINDOW_DAYS = 3;
 
 const UPDATE_WINDOW_MS = UPDATE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
@@ -207,7 +207,9 @@ function renderNewArrivalsNotice(tools, sig, updates = []) {
   if (heading && sub) {
     if (tools.length && updates.length) {
       heading.textContent = "最新動態";
-      sub.textContent = `最近 ${NEW_WINDOW_DAYS} 天新增的工具 · 最近 ${UPDATE_WINDOW_DAYS} 天有新版本的工具`;
+      sub.textContent = NEW_WINDOW_DAYS === UPDATE_WINDOW_DAYS
+        ? `最近 ${NEW_WINDOW_DAYS} 天新增或有新版本的工具 · 點一下即可開啟`
+        : `最近 ${NEW_WINDOW_DAYS} 天新增的工具 · 最近 ${UPDATE_WINDOW_DAYS} 天有新版本的工具`;
     } else if (updates.length) {
       heading.textContent = "版本更新";
       sub.textContent = `最近 ${UPDATE_WINDOW_DAYS} 天有新版本的工具 · 點一下看完整版本歷史`;

@@ -1151,4 +1151,4 @@ function positionPopover(popEl, _anchor) {
   panel.style.right = "auto";
 }
 
-export { autoFetch, deleteCategory, initBrandPicker, initCatPopover, initCategoryPicker, initCreatorPicker, initIconPicker, initMiniPopover, initToolPopover, initTypeSelector, migrateIconsToR2, openCatPopover, openMiniPopover, openToolPopover, syncCustomSelectLabel, updateIconPreview };
+export { autoFetch, closeToolPopover, deleteCategory, initBrandPicker, initCatPopover, initCategoryPicker, initCreatorPicker, initIconPicker, initMiniPopover, initToolPopover, initTypeSelector, migrateIconsToR2, openCatPopover, openMiniPopover, openToolPopover, syncCustomSelectLabel, updateIconPreview };

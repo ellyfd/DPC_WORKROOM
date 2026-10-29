@@ -1,11 +1,11 @@
 // DPC Hub — 卡片選單:右鍵/長按選單、檔案面板、tooltip、使用者身分
 import { canEditTool, copyToolUrl, markUpdateSeen, render } from "./board.mjs?v=20260804e";
 import { allTools, ensureCreator, listAllCreators } from "./data.mjs?v=20260804e";
-import { askVersionNote, downloadFile, isHtmlFile, isPageTool, pageUrl, versionEntry } from "./files.mjs?v=20260804e";
+import { downloadFile, isHtmlFile, isPageTool, pageUrl, versionEntry } from "./files.mjs?v=20260804e";
 import { escapeHTML, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
 import { openHistoryPopover } from "./history.mjs?v=20260804e";
 import { openMiniPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
-import { LS_ME_KEY, MAX_FILE_BYTES, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
+import { LS_ME_KEY, MAX_FILE_BYTES, MAX_NOTE_CHARS, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
 import { saveTools, trackHit } from "./sync.mjs?v=20260804e";
 
 /* ===== tile file menu (click a file tile → download or upload new) ===== */
@@ -120,17 +120,12 @@ let _ctxMenuTargetId = null;
 function initTileContextMenu() {
   const menu = document.getElementById("tile-context-menu");
   if (!menu) return;
-  const uploadInput = document.getElementById("tile-context-upload-input");
 
   menu.querySelectorAll("[data-action]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const id = _ctxMenuTargetId;
       const action = btn.dataset.action;
-      if (action === "upload") {
-        if (uploadInput) uploadInput.click();
-        return;
-      }
       closeTileContextMenu();
       if (!id) return;
       const tool = allTools().find((t) => t.id === id);
@@ -151,22 +146,12 @@ function initTileContextMenu() {
         } else {
           toast("找不到檔案");
         }
-      } else if (action === "history") {
+      } else if (action === "versions") {
+        // One place for both: version history + upload box + 更新內容.
         openFilePopover(id);
       }
     });
   });
-
-  if (uploadInput) {
-    uploadInput.addEventListener("change", async (e) => {
-      const f = e.target.files?.[0];
-      const id = _ctxMenuTargetId;
-      e.target.value = "";
-      closeTileContextMenu();
-      if (!f || !id) return;
-      await addVersionToTool(id, f);
-    });
-  }
 
   document.addEventListener("click", (e) => {
     if (menu.hidden) return;
@@ -199,8 +184,8 @@ function openTileContextMenu(toolId, x, y) {
   const copyItem = document.getElementById("tile-context-copy");
   const dlItem = document.getElementById("tile-context-download");
   const dlLabel = document.getElementById("tile-context-download-label");
-  const upItem = document.getElementById("tile-context-upload");
-  const histItem = document.getElementById("tile-context-history");
+  const verItem = document.getElementById("tile-context-versions");
+  const verLabel = document.getElementById("tile-context-versions-label");
 
   if (copyItem) copyItem.hidden = !(tType === "link" && tool.url);
   if (dlItem) {
@@ -212,8 +197,8 @@ function openTileContextMenu(toolId, x, y) {
       dlLabel.textContent = showDownload ? `下載原始檔 (${latest.name})` : "下載";
     }
   }
-  if (upItem) upItem.hidden = !isFileType;
-  if (histItem) histItem.hidden = !(tType === "file" && Array.isArray(tool.files) && tool.files.length > 1);
+  if (verItem) verItem.hidden = !isFileType;
+  if (verLabel) verLabel.textContent = tType === "page" ? "更換 HTML" : "上傳新版本 / 版本歷史";
 
   _ctxMenuTargetId = toolId;
   menu.hidden = false;
@@ -322,27 +307,83 @@ function initFilePopover() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !pop.hidden) closeFilePopover();
   });
+  const drop = document.getElementById("file-panel-drop");
   const uploadBtn = document.getElementById("file-panel-upload-btn");
   const uploadInput = document.getElementById("file-panel-upload");
-  uploadBtn?.addEventListener("click", () => {
-    if (!_filePanelToolId) return;
-    const tool = allTools().find((t) => t.id === _filePanelToolId);
-    uploadInput.accept = tool?.type === "page" ? ".html,.htm,text/html" : "";
+  const pick = () => {
+    if (!_filePanelToolId || _filePanelBusy) return;
     uploadInput.click();
+  };
+  drop?.addEventListener("click", pick);
+  drop?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); }
   });
-  uploadInput?.addEventListener("change", async (e) => {
+  drop?.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("dragover"); });
+  drop?.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+  drop?.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("dragover");
+    const f = e.dataTransfer?.files?.[0];
+    if (f && !_filePanelBusy) setPendingFile(f);
+  });
+  uploadInput?.addEventListener("change", (e) => {
     const f = e.target.files?.[0];
-    const id = _filePanelToolId;
     e.target.value = "";
-    if (!f || !id) return;
-    const tool = allTools().find((t) => t.id === id);
-    if (tool?.type === "page" && !isHtmlFile({ name: f.name })) {
-      toast("這是頁面類型,只接受 .html / .htm");
-      return;
-    }
-    await addVersionToTool(id, f);
-    if (!document.getElementById("file-popover").hidden) openFilePopover(id);
+    if (f) setPendingFile(f);
   });
+  uploadBtn?.addEventListener("click", async () => {
+    const id = _filePanelToolId;
+    const f = _filePanelPending;
+    if (!id || !f || _filePanelBusy) return;
+    const note = document.getElementById("file-panel-note").value.trim().slice(0, MAX_NOTE_CHARS);
+    _filePanelBusy = true;
+    renderPanelUploadState();
+    const ok = await addVersionToTool(id, f, note);
+    _filePanelBusy = false;
+    if (ok && _filePanelToolId === id) openFilePopover(id);  // refresh list, reset form
+    else renderPanelUploadState();
+  });
+}
+
+
+let _filePanelPending = null;
+
+let _filePanelBusy = false;
+
+
+function setPendingFile(f) {
+  const tool = allTools().find((t) => t.id === _filePanelToolId);
+  if (!tool) return;
+  if (tool.type === "page" && !isHtmlFile({ name: f.name })) {
+    toast("這是頁面類型,只接受 .html / .htm");
+    return;
+  }
+  if (f.size > MAX_FILE_BYTES) {
+    toast(`檔案太大(${formatBytes(f.size)},上限 ${formatBytes(MAX_FILE_BYTES)})`);
+    return;
+  }
+  _filePanelPending = f;
+  renderPanelUploadState();
+  const note = document.getElementById("file-panel-note");
+  if (note && !note.hidden) note.focus();
+}
+
+
+function renderPanelUploadState() {
+  const drop = document.getElementById("file-panel-drop");
+  const text = document.getElementById("file-panel-drop-text");
+  const btn = document.getElementById("file-panel-upload-btn");
+  const f = _filePanelPending;
+  drop?.classList.toggle("has-file", !!f);
+  if (text) {
+    text.textContent = f
+      ? `${f.name} · ${formatBytes(f.size)}(點一下換檔案)`
+      : "點這裡或拖檔案進來";
+  }
+  if (btn) {
+    btn.disabled = !f || _filePanelBusy;
+    btn.querySelector("span").textContent = _filePanelBusy ? "上傳中…" : "上傳";
+  }
 }
 
 
@@ -365,13 +406,23 @@ function openFilePopover(toolId) {
   title.textContent = tool.name;
   sub.textContent = isPage ? "HTML 頁面" : `${files.length} 個版本`;
 
-  const uploadBtn = document.getElementById("file-panel-upload-btn");
-  const uploadLabel = uploadBtn?.querySelector("span");
-  if (uploadLabel) {
-    uploadLabel.textContent = isPage
+  // Upload box: title by type; 更新內容 only when this replaces something.
+  // Locked tools (not yours) can be viewed, not updated.
+  const uploadTitle = document.getElementById("file-panel-upload-title");
+  if (uploadTitle) {
+    uploadTitle.textContent = isPage
       ? (files.length ? "更換 HTML" : "上傳 HTML")
-      : "上傳新版本";
+      : (files.length ? "上傳新版本" : "上傳第一個檔案");
   }
+  const uploadInput = document.getElementById("file-panel-upload");
+  if (uploadInput) uploadInput.accept = isPage ? ".html,.htm,text/html" : "";
+  const noteEl = document.getElementById("file-panel-note");
+  noteEl.value = "";
+  noteEl.hidden = !files.length;
+  const uploadBox = pop.querySelector(".file-panel-upload-box");
+  if (uploadBox) uploadBox.hidden = !canEditTool(tool);
+  _filePanelPending = null;
+  renderPanelUploadState();
 
   // Pages keep no history, so surface the latest 更新內容 as a card instead.
   const pageNote = isPage && files[0] && files[0].note;
@@ -452,6 +503,7 @@ function closeFilePopover() {
   const pop = document.getElementById("file-popover");
   if (pop) pop.hidden = true;
   _filePanelToolId = null;
+  _filePanelPending = null;
 }
 
 
@@ -470,23 +522,20 @@ function positionFloatingMenu(menu, anchor) {
 }
 
 
-async function addVersionToTool(toolId, file) {
+// Upload `file` as the tool's newest version. `note` = 更新內容 (from the
+// version panel). Resolves true on success.
+
+async function addVersionToTool(toolId, file, note = "") {
   if (file.size > MAX_FILE_BYTES) {
     toast(`檔案太大(${formatBytes(file.size)},上限 ${formatBytes(MAX_FILE_BYTES)})`);
-    return;
+    return false;
   }
   const existing = allTools().find((t) => t.id === toolId);
   if (!canEditTool(existing)) {
     toast(`已鎖定 — 只有「${existing.lockedBy}」能上傳新版`);
-    return;
+    return false;
   }
-  // A tool that already has a file → this is an update; ask what changed.
   const isUpdate = Array.isArray(existing?.files) && existing.files.length > 0;
-  let note = "";
-  if (isUpdate) {
-    note = await askVersionNote({ fileName: file.name, toolName: existing.name });
-    if (note === null) return;  // cancelled
-  }
   const me = await getMe();
   try {
     toast("上傳中…");
@@ -510,7 +559,7 @@ async function addVersionToTool(toolId, file) {
         state.localTools.push(tool);
       }
     }
-    if (!tool) { toast("找不到這個工具"); return; }
+    if (!tool) { toast("找不到這個工具"); return false; }
     if (!Array.isArray(tool.files)) tool.files = [];
     const entry = versionEntry(meta, note, isUpdate);
     if (tool.type === "page") {
@@ -524,9 +573,11 @@ async function addVersionToTool(toolId, file) {
     saveTools();
     render();
     toast(tool.type === "page" ? `已更新 ${meta.name}` : `已上傳 ${meta.name}`);
+    return true;
   } catch (err) {
     toast("上傳失敗");
     console.error(err);
+    return false;
   }
 }
 
