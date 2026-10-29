@@ -1,9 +1,9 @@
 // DPC Hub — 檔案版本管理(上傳、版本列表、下載、頁面工具)
 import { $, escapeAttr, escapeHTML, fileExt, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
 import { markUpdateSeen } from "./board.mjs?v=20260804e";
-import { getMe } from "./menus.mjs?v=20260804e";
-import { updateIconPreview } from "./popovers.mjs?v=20260804e";
-import { MAX_FILE_BYTES, MAX_NOTE_CHARS, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
+import { getMe, openFilePopover } from "./menus.mjs?v=20260804e";
+import { closeToolPopover, updateIconPreview } from "./popovers.mjs?v=20260804e";
+import { MAX_FILE_BYTES, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
 import { trackHit } from "./sync.mjs?v=20260804e";
 
 /* ===== file management (versioned uploads) ===== */
@@ -24,9 +24,19 @@ function initFileUpload() {
   // because those buttons stopPropagation/handle their own events.
   zone.addEventListener("click", (e) => {
     if (e.target.closest("[data-action]")) return;
+    if (zone.classList.contains("is-readonly")) return;
     input.click();
   });
+  // Existing tool with files → new versions are uploaded in the version
+  // panel (one place, with 更新內容), not in this form.
+  document.getElementById("file-manager-goto")?.addEventListener("click", () => {
+    const id = state.editingId;
+    if (!id) return;
+    closeToolPopover();
+    openFilePopover(id);
+  });
   zone.addEventListener("keydown", (e) => {
+    if (zone.classList.contains("is-readonly")) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       input.click();
@@ -34,12 +44,14 @@ function initFileUpload() {
   });
   zone.addEventListener("dragover", (e) => {
     e.preventDefault();
+    if (zone.classList.contains("is-readonly")) return;
     zone.classList.add("dragover");
   });
   zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
   zone.addEventListener("drop", async (e) => {
     e.preventDefault();
     zone.classList.remove("dragover");
+    if (zone.classList.contains("is-readonly")) return;
     const file = e.dataTransfer?.files?.[0];
     if (file) await addFileVersion(file);
   });
@@ -56,13 +68,11 @@ async function addFileVersion(file) {
     toast("頁面類型只接受 .html / .htm");
     return;
   }
-  // Replacing an existing version is an update — ask what changed.
+  // The form only uploads a tool's first file; later versions (with 更新內容)
+  // go through the version panel. A second pick on a brand-new tool still
+  // counts as a version of it.
   const isUpdate = state.editingFiles.length > 0;
-  let note = "";
-  if (isUpdate) {
-    note = await askVersionNote({ fileName: file.name, toolName: $("#add-form").elements.name.value });
-    if (note === null) return;  // cancelled
-  }
+  const note = "";
   const me = await getMe();
   const toolId = $("#add-form").elements.id.value || "new";
   try {
@@ -115,6 +125,21 @@ function renderFileList() {
   if (!list) return;
   const currentType = $("#add-form").elements.type.value;
   const isPage = currentType === "page";
+  // Editing a tool that already has files: list only, upload lives in the
+  // version panel (reached via the button under the list).
+  const readonly = !!state.editingId &&
+    (allToolsFiles(state.editingId).length > 0);
+  const zone = document.getElementById("file-dropzone");
+  if (zone) {
+    zone.classList.toggle("is-readonly", readonly);
+    zone.tabIndex = readonly ? -1 : 0;
+  }
+  const goto = document.getElementById("file-manager-goto");
+  if (goto) {
+    goto.hidden = !readonly;
+    const label = goto.querySelector("span");
+    if (label) label.textContent = isPage ? "更換 HTML" : "上傳新版本 / 版本歷史";
+  }
   const cta = document.getElementById("file-dropzone-cta-text");
   if (cta) {
     if (isPage) {
@@ -178,6 +203,15 @@ function renderFileList() {
 }
 
 
+// Files saved on the tool itself (not the unsaved form copy).
+
+function allToolsFiles(toolId) {
+  const t = state.localTools.find((x) => x.id === toolId) ||
+    state.seedTools.find((x) => x.id === toolId);
+  return Array.isArray(t?.files) ? t.files : [];
+}
+
+
 /* ===== version entries + 更新內容 ===== */
 
 // Build the file entry stored on tool.files[]. `note` = what changed in this
@@ -210,62 +244,6 @@ function copyFileEntry(f) {
   if (f.note) out.note = f.note;
   if (f.update) out.update = true;
   return out;
-}
-
-
-let _noteResolve = null;
-
-
-function initNotePopover() {
-  const pop = document.getElementById("note-popover");
-  if (!pop || pop.dataset.wired) return;
-  pop.dataset.wired = "1";
-  const input = document.getElementById("note-popover-input");
-  pop.querySelectorAll("[data-close]").forEach((el) =>
-    el.addEventListener("click", () => finishNote(null))
-  );
-  document.getElementById("note-popover-confirm").addEventListener("click", () =>
-    finishNote(input.value.trim().slice(0, MAX_NOTE_CHARS))
-  );
-  // Capture phase so Escape doesn't also close the tool form underneath.
-  document.addEventListener("keydown", (e) => {
-    if (pop.hidden) return;
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      finishNote(null);
-    } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      finishNote(input.value.trim().slice(0, MAX_NOTE_CHARS));
-    }
-  }, true);
-}
-
-
-function finishNote(value) {
-  const pop = document.getElementById("note-popover");
-  if (pop) pop.hidden = true;
-  const resolve = _noteResolve;
-  _noteResolve = null;
-  if (resolve) resolve(value);
-}
-
-// Ask for 更新內容 before uploading a new version. Resolves to the note
-// (possibly "") or null when the user cancels the upload.
-
-function askVersionNote({ fileName = "", toolName = "" } = {}) {
-  const pop = document.getElementById("note-popover");
-  if (!pop) return Promise.resolve("");
-  initNotePopover();
-  if (_noteResolve) finishNote(null);  // never leave an earlier prompt dangling
-  document.getElementById("note-popover-title").textContent =
-    toolName ? `上傳新版本 · ${toolName}` : "上傳新版本";
-  document.getElementById("note-popover-file").textContent = fileName;
-  const input = document.getElementById("note-popover-input");
-  input.value = "";
-  pop.hidden = false;
-  setTimeout(() => input.focus(), 30);
-  return new Promise((resolve) => { _noteResolve = resolve; });
 }
 
 
@@ -312,4 +290,4 @@ function pageUrl(toolId, versionIdx = 0) {
   return versionIdx > 0 ? `${base}?v=${versionIdx}` : base;
 }
 
-export { askVersionNote, copyFileEntry, downloadFile, initFileUpload, isHtmlFile, isPageTool, pageUrl, renderFileList, versionEntry };
+export { copyFileEntry, downloadFile, initFileUpload, isHtmlFile, isPageTool, pageUrl, renderFileList, versionEntry };

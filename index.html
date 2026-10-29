@@ -276,6 +276,10 @@
               <span id="file-dropzone-cta-text">點這裡或拖檔案進來</span>
             </div>
           </div>
+          <button type="button" class="btn btn-secondary file-manager-goto" id="file-manager-goto" hidden>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            <span>上傳新版本 / 版本歷史</span>
+          </button>
           <div class="file-manager-hint muted small" id="file-manager-hint">每次上傳自動記錄時間 / 上傳人,最新一筆是目前版本。最多保留 5 個版本,單檔上限 25 MB。</div>
           <input type="file" id="file-input" hidden />
         </div>
@@ -409,31 +413,6 @@
     </div>
   </div>
 
-  <!-- Version note prompt — asked before uploading a new version -->
-  <div class="mini-popover" id="note-popover" hidden>
-    <div class="mini-popover-backdrop" data-close></div>
-    <div class="mini-popover-panel note-popover-panel" role="dialog" aria-modal="true" aria-labelledby="note-popover-title">
-      <div class="mini-popover-head">
-        <div>
-          <div class="mini-popover-title" id="note-popover-title">上傳新版本</div>
-          <div class="note-popover-file muted small" id="note-popover-file"></div>
-        </div>
-        <button class="icon-btn" data-close aria-label="關閉">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
-      </div>
-      <div class="mini-popover-body">
-        <label class="note-popover-label" for="note-popover-input">更新內容</label>
-        <textarea id="note-popover-input" rows="5" maxlength="1000" placeholder="這版改了什麼?例如:&#10;- 修正 xxx 欄位抓錯&#10;- 新增 yyy 功能"></textarea>
-        <div class="mini-popover-hint muted small">大家會在「版本更新」通知和版本歷史看到這段說明。可留白。</div>
-      </div>
-      <div class="mini-popover-actions">
-        <button type="button" class="btn btn-secondary" data-close>取消</button>
-        <button type="button" class="btn btn-primary" id="note-popover-confirm">上傳</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Floating menu (file tile click → primary action by tool type) -->
   <div class="floating-menu" id="tile-file-menu" hidden>
     <button type="button" class="floating-menu-item primary" data-action="page" id="tile-file-menu-page" hidden>
@@ -470,15 +449,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
       <span id="tile-context-download-label">下載</span>
     </button>
-    <button type="button" class="floating-menu-item" data-action="upload" hidden id="tile-context-upload">
+    <button type="button" class="floating-menu-item" data-action="versions" hidden id="tile-context-versions">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-      <span>上傳新版本</span>
+      <span id="tile-context-versions-label">上傳新版本 / 版本歷史</span>
     </button>
-    <button type="button" class="floating-menu-item" data-action="history" hidden id="tile-context-history">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
-      <span>版本歷史</span>
-    </button>
-    <input type="file" id="tile-context-upload-input" hidden />
   </div>
 
   <!-- Unified file panel (latest version + actions + history + upload) -->
@@ -500,11 +474,19 @@
           <div class="file-panel-section-title">歷史版本</div>
           <div id="file-panel-history"></div>
         </div>
-        <button type="button" class="btn btn-secondary file-panel-upload" id="file-panel-upload-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-          <span>上傳新版本</span>
-        </button>
-        <input type="file" id="file-panel-upload" hidden />
+        <!-- Upload box + 更新內容 on the same panel -->
+        <div class="file-panel-upload-box">
+          <div class="file-panel-section-title" id="file-panel-upload-title">上傳新版本</div>
+          <div class="file-panel-drop" id="file-panel-drop" tabindex="0" role="button" aria-label="選擇要上傳的檔案">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            <span id="file-panel-drop-text">點這裡或拖檔案進來</span>
+          </div>
+          <textarea id="file-panel-note" rows="3" maxlength="1000" placeholder="更新內容:這版改了什麼?(可留白)&#10;例如:修正 xxx 欄位抓錯、新增 yyy 功能"></textarea>
+          <button type="button" class="btn btn-primary file-panel-upload" id="file-panel-upload-btn" disabled>
+            <span>上傳</span>
+          </button>
+          <input type="file" id="file-panel-upload" hidden />
+        </div>
       </div>
     </div>
   </div>
