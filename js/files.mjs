@@ -1,8 +1,9 @@
 // DPC Hub — 檔案版本管理(上傳、版本列表、下載、頁面工具)
-import { $, escapeHTML, fileExt, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
+import { $, escapeAttr, escapeHTML, fileExt, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
+import { markUpdateSeen } from "./board.mjs?v=20260804e";
 import { getMe } from "./menus.mjs?v=20260804e";
 import { updateIconPreview } from "./popovers.mjs?v=20260804e";
-import { MAX_FILE_BYTES, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
+import { MAX_FILE_BYTES, MAX_NOTE_CHARS, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
 import { trackHit } from "./sync.mjs?v=20260804e";
 
 /* ===== file management (versioned uploads) ===== */
@@ -55,6 +56,13 @@ async function addFileVersion(file) {
     toast("頁面類型只接受 .html / .htm");
     return;
   }
+  // Replacing an existing version is an update — ask what changed.
+  const isUpdate = state.editingFiles.length > 0;
+  let note = "";
+  if (isUpdate) {
+    note = await askVersionNote({ fileName: file.name, toolName: $("#add-form").elements.name.value });
+    if (note === null) return;  // cancelled
+  }
   const me = await getMe();
   const toolId = $("#add-form").elements.id.value || "new";
   try {
@@ -71,13 +79,7 @@ async function addFileVersion(file) {
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const meta = await res.json();
-    const entry = {
-      key: meta.key,
-      name: meta.name,
-      size: meta.size,
-      uploadedAt: meta.uploadedAt,
-      uploadedBy: meta.uploadedBy,
-    };
+    const entry = versionEntry(meta, note, isUpdate);
     if (currentType === "page") {
       state.editingFiles = [entry];
     } else {
@@ -144,6 +146,7 @@ function renderFileList() {
             <span>${escapeHTML(formatBytes(f.size))}</span>
             ${isLatest && !isPage ? `<span class="file-row-latest-badge">目前版本</span>` : ""}
           </div>
+          ${f.note ? `<div class="file-row-note" title="${escapeAttr(f.note)}">📝 ${escapeHTML(f.note)}</div>` : ""}
         </div>
         <div class="file-row-actions">
           <button type="button" class="file-row-action" data-action="download" data-version="${i}" title="下載">
@@ -175,12 +178,106 @@ function renderFileList() {
 }
 
 
+/* ===== version entries + 更新內容 ===== */
+
+// Build the file entry stored on tool.files[]. `note` = what changed in this
+// version; `update` marks it as a new version of an existing tool (drives the
+// UPDATE badge and the 版本更新 notice).
+
+function versionEntry(meta, note, isUpdate) {
+  const entry = {
+    key: meta.key,
+    name: meta.name,
+    size: meta.size,
+    uploadedAt: meta.uploadedAt,
+    uploadedBy: meta.uploadedBy || "",
+  };
+  if (note) entry.note = note;
+  if (isUpdate) entry.update = true;
+  return entry;
+}
+
+// Whitelisted copy of a stored entry (used when the tool form saves).
+
+function copyFileEntry(f) {
+  const out = {
+    key: f.key,
+    name: f.name,
+    size: f.size,
+    uploadedAt: f.uploadedAt,
+    uploadedBy: f.uploadedBy || "",
+  };
+  if (f.note) out.note = f.note;
+  if (f.update) out.update = true;
+  return out;
+}
+
+
+let _noteResolve = null;
+
+
+function initNotePopover() {
+  const pop = document.getElementById("note-popover");
+  if (!pop || pop.dataset.wired) return;
+  pop.dataset.wired = "1";
+  const input = document.getElementById("note-popover-input");
+  pop.querySelectorAll("[data-close]").forEach((el) =>
+    el.addEventListener("click", () => finishNote(null))
+  );
+  document.getElementById("note-popover-confirm").addEventListener("click", () =>
+    finishNote(input.value.trim().slice(0, MAX_NOTE_CHARS))
+  );
+  // Capture phase so Escape doesn't also close the tool form underneath.
+  document.addEventListener("keydown", (e) => {
+    if (pop.hidden) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      finishNote(null);
+    } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      finishNote(input.value.trim().slice(0, MAX_NOTE_CHARS));
+    }
+  }, true);
+}
+
+
+function finishNote(value) {
+  const pop = document.getElementById("note-popover");
+  if (pop) pop.hidden = true;
+  const resolve = _noteResolve;
+  _noteResolve = null;
+  if (resolve) resolve(value);
+}
+
+// Ask for 更新內容 before uploading a new version. Resolves to the note
+// (possibly "") or null when the user cancels the upload.
+
+function askVersionNote({ fileName = "", toolName = "" } = {}) {
+  const pop = document.getElementById("note-popover");
+  if (!pop) return Promise.resolve("");
+  initNotePopover();
+  if (_noteResolve) finishNote(null);  // never leave an earlier prompt dangling
+  document.getElementById("note-popover-title").textContent =
+    toolName ? `上傳新版本 · ${toolName}` : "上傳新版本";
+  document.getElementById("note-popover-file").textContent = fileName;
+  const input = document.getElementById("note-popover-input");
+  input.value = "";
+  pop.hidden = false;
+  setTimeout(() => input.focus(), 30);
+  return new Promise((resolve) => { _noteResolve = resolve; });
+}
+
+
 function downloadFile(fileObj, toolId) {
   if (!fileObj?.key) {
     toast("找不到這版的檔案");
     return;
   }
-  if (toolId) trackHit(toolId, "download");
+  if (toolId) {
+    trackHit(toolId, "download");
+    markUpdateSeen(toolId);
+  }
   const a = document.createElement("a");
   a.href = "/files/" + fileObj.key.split("/").map(encodeURIComponent).join("/");
   a.download = fileObj.name || "download";
@@ -215,4 +312,4 @@ function pageUrl(toolId, versionIdx = 0) {
   return versionIdx > 0 ? `${base}?v=${versionIdx}` : base;
 }
 
-export { downloadFile, initFileUpload, isHtmlFile, isPageTool, pageUrl, renderFileList };
+export { askVersionNote, copyFileEntry, downloadFile, initFileUpload, isHtmlFile, isPageTool, pageUrl, renderFileList, versionEntry };

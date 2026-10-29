@@ -689,6 +689,12 @@ h1, h2, h3 { margin: 0; }
   pointer-events: none;
 }
 
+/* 版本更新 — "UPDATE" pill, same spot as NEW, blue so the two read apart */
+.update-badge {
+  background: linear-gradient(135deg, #38bdf8, #2563eb);
+  box-shadow: 0 3px 8px -2px rgba(37, 99, 235, 0.55);
+}
+
 /* ============================================================
    本週上新 通知 — dismissable login popover (text only, no icons)
    ============================================================ */
@@ -882,6 +888,32 @@ h1, h2, h3 { margin: 0; }
   padding: 6px 2px;
 }
 .new-popover-dismiss:hover { color: var(--text-dim); text-decoration: underline; text-underline-offset: 2px; }
+
+/* 版本更新 group in the notice */
+.upd-group { --c1: #38bdf8; --c2: #2563eb; --c-text: #1d4ed8; --c-bg: #dbeafe; --c-border: #bfdbfe; }
+.upd-ver {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.upd-when { font-size: 11.5px; color: var(--text-mute); }
+.upd-note {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.upd-note-empty { color: var(--text-mute); font-style: italic; }
 
 /* Narrow screens → single column */
 @media (max-width: 640px) {
@@ -1743,6 +1775,62 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 }
 .file-panel-row-info { margin-top: 2px; }
 .file-panel-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+/* 更新內容 — one-line preview, click the row to expand */
+.file-panel-row.has-note { cursor: pointer; align-items: flex-start; transition: border-color 0.14s, background 0.14s; }
+.file-panel-row.has-note:hover { border-color: var(--accent); }
+.file-panel-row.has-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.file-panel-row.has-note .file-panel-row-actions,
+.file-panel-row.has-note .file-panel-row-ver { margin-top: 2px; }
+.file-panel-row-note {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-panel-row.is-open .file-panel-row-note {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.file-panel-row-note-label {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px; font-weight: 600;
+}
+.file-panel-row.is-open .file-panel-row-note-label { display: block; width: max-content; margin: 0 0 4px; }
+.file-panel-row-chev {
+  flex-shrink: 0;
+  margin-top: 9px;
+  color: var(--text-mute);
+  transition: transform 0.16s;
+}
+.file-panel-row.is-open .file-panel-row-chev { transform: rotate(180deg); }
+.file-panel-note-card {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.file-panel-note-card .file-panel-section-title { margin-bottom: 4px; text-transform: none; }
+.file-panel-note-text { font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.file-row-note {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .file-panel-row-btn {
   width: 28px;
   height: 28px;
@@ -2361,6 +2449,25 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .mini-popover-hint { font-size: 12.5px; }
+/* 上傳新版本 · 更新內容 prompt */
+.note-popover-panel { width: 440px; }
+.note-popover-file { margin-top: 2px; word-break: break-all; }
+.note-popover-label { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+#note-popover-input {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+#note-popover-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .mini-popover-actions {
   display: flex; justify-content: flex-end; gap: 8px;
   padding: 4px 16px 16px;
@@ -2671,6 +2778,7 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   .popover-form select,
   .popover-form textarea { font-size: 16px; padding: 8px 11px; }
   .mini-popover-body input { font-size: 16px; padding: 10px 12px; }
+  #note-popover-input { font-size: 16px; }
   .btn-mini { height: 38px; padding: 0 12px; font-size: 14px; }
   .form-actions { padding: 8px 0 2px; }
   .form-actions .btn { height: 38px; font-size: 14px; padding: 0 16px; }
