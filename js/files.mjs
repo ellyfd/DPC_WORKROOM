@@ -1,8 +1,8 @@
 // DPC Hub — 檔案版本管理(上傳、版本列表、下載、頁面工具)
 import { $, escapeAttr, escapeHTML, fileExt, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
 import { markUpdateSeen } from "./board.mjs?v=20260804e";
-import { getMe, openFilePopover } from "./menus.mjs?v=20260804e";
-import { closeToolPopover, updateIconPreview } from "./popovers.mjs?v=20260804e";
+import { getMe } from "./menus.mjs?v=20260804e";
+import { updateIconPreview } from "./popovers.mjs?v=20260804e";
 import { MAX_FILE_BYTES, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
 import { trackHit } from "./sync.mjs?v=20260804e";
 
@@ -24,19 +24,9 @@ function initFileUpload() {
   // because those buttons stopPropagation/handle their own events.
   zone.addEventListener("click", (e) => {
     if (e.target.closest("[data-action]")) return;
-    if (zone.classList.contains("is-readonly")) return;
     input.click();
   });
-  // Existing tool with files → new versions are uploaded in the version
-  // panel (one place, with 更新內容), not in this form.
-  document.getElementById("file-manager-goto")?.addEventListener("click", () => {
-    const id = state.editingId;
-    if (!id) return;
-    closeToolPopover();
-    openFilePopover(id);
-  });
   zone.addEventListener("keydown", (e) => {
-    if (zone.classList.contains("is-readonly")) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       input.click();
@@ -44,14 +34,12 @@ function initFileUpload() {
   });
   zone.addEventListener("dragover", (e) => {
     e.preventDefault();
-    if (zone.classList.contains("is-readonly")) return;
     zone.classList.add("dragover");
   });
   zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
   zone.addEventListener("drop", async (e) => {
     e.preventDefault();
     zone.classList.remove("dragover");
-    if (zone.classList.contains("is-readonly")) return;
     const file = e.dataTransfer?.files?.[0];
     if (file) await addFileVersion(file);
   });
@@ -68,9 +56,8 @@ async function addFileVersion(file) {
     toast("頁面類型只接受 .html / .htm");
     return;
   }
-  // The form only uploads a tool's first file; later versions (with 更新內容)
-  // go through the version panel. A second pick on a brand-new tool still
-  // counts as a version of it.
+  // The form only appears for brand-new tools; later versions (with 更新內容)
+  // go through the 版本 panel.
   const isUpdate = state.editingFiles.length > 0;
   const note = "";
   const me = await getMe();
@@ -125,21 +112,6 @@ function renderFileList() {
   if (!list) return;
   const currentType = $("#add-form").elements.type.value;
   const isPage = currentType === "page";
-  // Editing a tool that already has files: list only, upload lives in the
-  // version panel (reached via the button under the list).
-  const readonly = !!state.editingId &&
-    (allToolsFiles(state.editingId).length > 0);
-  const zone = document.getElementById("file-dropzone");
-  if (zone) {
-    zone.classList.toggle("is-readonly", readonly);
-    zone.tabIndex = readonly ? -1 : 0;
-  }
-  const goto = document.getElementById("file-manager-goto");
-  if (goto) {
-    goto.hidden = !readonly;
-    const label = goto.querySelector("span");
-    if (label) label.textContent = isPage ? "更換 HTML" : "上傳新版本 / 版本歷史";
-  }
   const cta = document.getElementById("file-dropzone-cta-text");
   if (cta) {
     if (isPage) {
@@ -200,15 +172,6 @@ function renderFileList() {
       }
     });
   });
-}
-
-
-// Files saved on the tool itself (not the unsaved form copy).
-
-function allToolsFiles(toolId) {
-  const t = state.localTools.find((x) => x.id === toolId) ||
-    state.seedTools.find((x) => x.id === toolId);
-  return Array.isArray(t?.files) ? t.files : [];
 }
 
 

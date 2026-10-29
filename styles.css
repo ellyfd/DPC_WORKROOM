@@ -430,7 +430,7 @@ h1, h2, h3 { margin: 0; }
   font-weight: 500;
   line-height: 1.5;
   text-align: left;
-  white-space: normal;
+  white-space: pre-line;
   word-break: break-word;
   border-radius: 10px;
   box-shadow: 0 8px 18px -8px rgba(15, 23, 42, 0.45);
@@ -691,6 +691,8 @@ h1, h2, h3 { margin: 0; }
 
 /* 版本更新 — "UPDATE" pill, same spot as NEW, blue so the two read apart */
 .update-badge {
+  pointer-events: auto;
+  cursor: pointer;
   background: linear-gradient(135deg, #38bdf8, #2563eb);
   box-shadow: 0 3px 8px -2px rgba(37, 99, 235, 0.55);
 }
@@ -1814,15 +1816,6 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   transition: transform 0.16s;
 }
 .file-panel-row.is-open .file-panel-row-chev { transform: rotate(180deg); }
-.file-panel-note-card {
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-2);
-}
-.file-panel-note-card .file-panel-section-title { margin-bottom: 4px; text-transform: none; }
-.file-panel-note-text { font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 .file-row-note {
   margin-top: 3px;
   font-size: 12px;
@@ -1843,7 +1836,12 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   border-radius: 6px;
   cursor: pointer;
 }
-.file-panel-row-btn:hover {
+.file-panel-row-btn.danger:hover {
+  color: var(--danger);
+  border-color: #fecaca;
+  background: var(--danger-soft);
+}
+.file-panel-row-btn:not(.danger):hover {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-soft);
@@ -1860,10 +1858,56 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 /* Upload box — file picker + 更新內容 + 上傳, all on the version panel */
 .file-panel-upload-box {
   display: flex; flex-direction: column; gap: 8px;
-  margin-top: 6px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
 }
+.file-panel-upload-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.file-panel-upload-actions .btn { height: 36px; padding: 0 16px; font-size: 13.5px; }
+.file-panel-upload-actions .btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.file-panel-upload-actions [hidden] { display: none; }
+.file-panel-upload-toggle {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; height: 38px;
+  margin-bottom: 14px;
+  border-style: dashed;
+}
+.file-panel-upload-toggle[hidden] { display: none; }
+/* 目前版本 card */
+.file-panel-current {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+.fpc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.fpc-ver {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11.5px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.fpc-label { font-size: 12px; font-weight: 700; color: var(--accent); letter-spacing: 0.04em; }
+.fpc-name { font-size: 14px; font-weight: 600; word-break: break-all; }
+.fpc-meta { margin-top: 2px; }
+.fpc-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.fpc-note .file-panel-row-note-label { display: block; width: max-content; margin: 0 0 4px; }
+.fpc-actions { display: flex; gap: 8px; margin-top: 10px; }
+.fpc-actions .btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; font-size: 13.5px; }
 .file-panel-upload-box[hidden] { display: none; }
 .file-panel-drop {
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -1899,14 +1943,6 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
 }
 #file-panel-note[hidden] { display: none; }
 #file-panel-note:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-/* Edit form: existing tool → version list only; upload lives in the panel */
-.file-dropzone.is-readonly { cursor: default; border-style: solid; border-color: var(--border); }
-.file-dropzone.is-readonly .file-dropzone-cta { display: none; }
-.file-manager-goto {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  width: 100%; height: 38px; margin-top: 8px;
-}
-.file-manager-goto[hidden] { display: none; }
 
 /* ===== Version history popover (legacy, kept for backward compat) ===== */
 .history-list {
