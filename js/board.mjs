@@ -1,11 +1,11 @@
 // DPC Hub — 啟動台板面:render、卡片、拖曳、篩選、本週上新
 import { allTools, ensureCategory, groupedTools, listAllBrands, sortToolsByOrder } from "./data.mjs?v=20260804e";
 import { downloadFile, isPageTool, pageUrl } from "./files.mjs?v=20260804e";
-import { $, $$, cssEscape, escapeAttr, escapeHTML, formatDate, initial, loadJSON, queryTokens, saveJSON, toast, uniq } from "./helpers.mjs?v=20260804e";
+import { $, $$, cssEscape, escapeAttr, escapeHTML, formatDate, initial, loadJSON, queryTokens, saveJSON, toast, toastUndo, uniq } from "./helpers.mjs?v=20260804e";
 import { openFilePopover, openTileContextMenu, openTileFileMenuUploadOnly } from "./menus.mjs?v=20260804e";
 import { deleteCategory, openCatPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
 import { LS_COLLAPSE_KEY, LS_NEW_SEEN_KEY, LS_UPDATE_SEEN_KEY, NUM_COLORS, state } from "./state.mjs?v=20260804e";
-import { favoriteTools, saveCats, saveTools, trackHit } from "./sync.mjs?v=20260804e";
+import { favHiddenIds, favoriteTools, hideFavorite, isFavRowOff, restoreFavorites, saveCats, saveTools, setFavRowOff, trackHit, unhideFavorite } from "./sync.mjs?v=20260804e";
 import { matchingTips, tipResultsHTML } from "./tips.mjs?v=20260804e";
 
 /* ===== 本週上新 (new arrivals) ===== */
@@ -458,13 +458,19 @@ function renderSections() {
 
 
 function favoritesSectionHTML() {
+  if (isFavRowOff()) return "";
   const tools = favoriteTools();
   if (!tools.length) return "";
   const catColor = new Map(state.categories.map((c) => [c.name, c.color]));
+  const removeSvg = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
   // Favorites are shortcuts, not a category — no dragging in or out.
+  // Each one gets an × to drop it from this device's row.
   const cards = tools
-    .map((t) => cardHTML(t, catColor.get(t.category) ?? 0).replace('draggable="true"', 'draggable="false"'))
+    .map((t) => cardHTML(t, catColor.get(t.category) ?? 0)
+      .replace('draggable="true"', 'draggable="false"')
+      .replace("</article>", `<button type="button" class="fav-remove" data-fav-remove="${escapeAttr(t.id)}" title="從我的常用移除" aria-label="把「${escapeAttr(t.name)}」從我的常用移除">${removeSvg}</button></article>`))
     .join("");
+  const hiddenN = favHiddenIds().length;
   return `
     <section class="section section-fav" data-fav="1">
       <div class="section-head">
@@ -473,7 +479,14 @@ function favoritesSectionHTML() {
           <span class="section-title">我的常用</span>
           <span class="section-count">${tools.length}</span>
         </div>
-        <span class="fav-hint">依你在這台裝置的使用習慣自動排序</span>
+        <div class="fav-tools">
+          <span class="fav-hint">依你在這台裝置的使用習慣自動排序</span>
+          ${hiddenN ? `<button type="button" class="fav-btn" data-fav-restore>恢復已移除 (${hiddenN})</button>` : ""}
+          <button type="button" class="fav-btn" data-fav-off title="隱藏我的常用(可從分類列叫回來)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>
+            <span>隱藏</span>
+          </button>
+        </div>
       </div>
       <div class="section-body"><div class="section-grid">${cards}</div></div>
     </section>
@@ -633,6 +646,25 @@ function wireSections() {
       try { navigator.vibrate?.(10); } catch {}
       openTileContextMenu(card.dataset.id, x, y);
     });
+  });
+  $$("#sections-area [data-fav-remove]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      removeFromFavorites(btn.dataset.favRemove);
+    });
+  });
+  $("#sections-area [data-fav-off]")?.addEventListener("click", () => {
+    setFavRowOff(true);
+    renderSections();
+    toastUndo("已隱藏我的常用 · 分類列上的「⭐ 常用」可叫回來", "復原", () => {
+      setFavRowOff(false);
+      renderSections();
+    });
+  });
+  $("#sections-area [data-fav-restore]")?.addEventListener("click", () => {
+    restoreFavorites();
+    renderSections();
+    toast("已恢復移除的常用工具");
   });
   $$("#sections-area [data-cat-menu]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -939,9 +971,18 @@ function renderCatNav(groups) {
       <span class="cat-chip-name">${escapeHTML(g.name)}</span>
       <span class="cat-chip-count">${g.tools.length}</span>
     </button>`).join("");
+  const favBtn = isFavRowOff()
+    ? `<button type="button" class="cat-nav-toggle cat-nav-fav" id="cat-nav-fav" title="顯示我的常用"><span aria-hidden="true">⭐</span><span>常用</span></button>`
+    : "";
   nav.innerHTML = `
     <div class="cat-nav-chips">${chips}</div>
+    ${favBtn}
     <button type="button" class="cat-nav-toggle" id="cat-nav-toggle"></button>`;
+  nav.querySelector("#cat-nav-fav")?.addEventListener("click", () => {
+    setFavRowOff(false);
+    renderSections();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
   nav.hidden = false;
   syncCollapseAllButton();
   nav.querySelectorAll("[data-jump-cat]").forEach((btn) =>
@@ -956,6 +997,17 @@ function renderCatNav(groups) {
     renderSections();
   });
   updateStickyOffsets();
+}
+
+
+function removeFromFavorites(id) {
+  const t = allTools().find((x) => x.id === id);
+  hideFavorite(id);
+  renderSections();
+  toastUndo(`已把「${t?.name || id}」從我的常用移除`, "復原", () => {
+    unhideFavorite(id);
+    renderSections();
+  });
 }
 
 
@@ -1168,4 +1220,4 @@ function fallbackCopy(text) {
   document.body.removeChild(ta);
 }
 
-export { canEditTool, copyToolUrl, markUpdateSeen, maybeShowNewArrivalsNotice, normalizeType, render, renderSections };
+export { canEditTool, copyToolUrl, markUpdateSeen, removeFromFavorites, maybeShowNewArrivalsNotice, normalizeType, render, renderSections };

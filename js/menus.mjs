@@ -1,12 +1,12 @@
 // DPC Hub — 卡片選單:右鍵/長按選單、檔案面板、tooltip、使用者身分
-import { canEditTool, copyToolUrl, markUpdateSeen, render } from "./board.mjs?v=20260804e";
+import { canEditTool, copyToolUrl, markUpdateSeen, removeFromFavorites, render } from "./board.mjs?v=20260804e";
 import { allTools, ensureCreator, listAllCreators } from "./data.mjs?v=20260804e";
 import { downloadFile, isHtmlFile, isPageTool, pageUrl, versionEntry } from "./files.mjs?v=20260804e";
 import { escapeHTML, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
 import { openHistoryPopover } from "./history.mjs?v=20260804e";
 import { openMiniPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
 import { LS_ME_KEY, MAX_FILE_BYTES, MAX_NOTE_CHARS, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
-import { saveTools, trackHit } from "./sync.mjs?v=20260804e";
+import { favoriteTools, isFavRowOff, saveTools, trackHit } from "./sync.mjs?v=20260804e";
 
 /* ===== tile file menu (click a file tile → download or upload new) ===== */
 
@@ -146,6 +146,8 @@ function initTileContextMenu() {
         } else {
           toast("找不到檔案");
         }
+      } else if (action === "unfav") {
+        removeFromFavorites(id);
       } else if (action === "open") {
         trackHit(id, "open");
         markUpdateSeen(id);
@@ -203,6 +205,8 @@ function openTileContextMenu(toolId, x, y) {
   }
   if (verItem) verItem.hidden = !isFileType;
   if (verLabel) verLabel.textContent = tType === "page" ? "更換 HTML" : "版本";
+  const unfavItem = document.getElementById("tile-context-unfav");
+  if (unfavItem) unfavItem.hidden = isFavRowOff() || !favoriteTools().some((t) => t.id === toolId);
   const openItem = document.getElementById("tile-context-open");
   if (openItem) openItem.hidden = !(tType === "page" && hasFile);
 
