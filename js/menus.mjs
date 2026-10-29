@@ -1,7 +1,7 @@
 // DPC Hub — 卡片選單:右鍵/長按選單、檔案面板、tooltip、使用者身分
-import { canEditTool, copyToolUrl, render } from "./board.mjs?v=20260804e";
+import { canEditTool, copyToolUrl, markUpdateSeen, render } from "./board.mjs?v=20260804e";
 import { allTools, ensureCreator, listAllCreators } from "./data.mjs?v=20260804e";
-import { downloadFile, isHtmlFile, isPageTool, pageUrl } from "./files.mjs?v=20260804e";
+import { askVersionNote, downloadFile, isHtmlFile, isPageTool, pageUrl, versionEntry } from "./files.mjs?v=20260804e";
 import { escapeHTML, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
 import { openHistoryPopover } from "./history.mjs?v=20260804e";
 import { openMiniPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
@@ -373,9 +373,14 @@ function openFilePopover(toolId) {
       : "上傳新版本";
   }
 
-  // Slim popup: no prominent "latest" card. Just admin actions.
-  // (Download is now on the action row.)
-  latestEl.innerHTML = "";
+  // Pages keep no history, so surface the latest 更新內容 as a card instead.
+  const pageNote = isPage && files[0] && files[0].note;
+  latestEl.innerHTML = pageNote
+    ? `<div class="file-panel-note-card">
+         <div class="file-panel-section-title">最新更新內容 · ${escapeHTML(formatDate(files[0].uploadedAt))}${files[0].uploadedBy ? ` · ${escapeHTML(files[0].uploadedBy)}` : ""}</div>
+         <div class="file-panel-note-text">${escapeHTML(files[0].note)}</div>
+       </div>`
+    : "";
 
   // History list. For files: all versions (latest tagged "目前"). For pages: hidden.
   if (isPage || !files.length) {
@@ -386,8 +391,10 @@ function openFilePopover(toolId) {
     histEl.innerHTML = files.map((f, i) => {
       const isLatest = i === 0;
       const ver = files.length - i;
+      const note = (f.note || "").trim();
+      // Rows with 更新內容 show a one-line preview; clicking expands it.
       return `
-        <div class="file-panel-row${isLatest ? " is-latest" : ""}" data-version="${i}">
+        <div class="file-panel-row${isLatest ? " is-latest" : ""}${note ? " has-note" : ""}" data-version="${i}"${note ? ` role="button" tabindex="0" aria-expanded="false" title="點一下看更新內容"` : ""}>
           <div class="file-panel-row-ver">v${ver}</div>
           <div class="file-panel-row-meta">
             <div class="file-panel-row-name">${escapeHTML(f.name || "(未命名)")}${isLatest ? ` <span class="file-panel-row-tag">目前</span>` : ""}</div>
@@ -396,15 +403,32 @@ function openFilePopover(toolId) {
               ${f.uploadedBy ? ` · ${escapeHTML(f.uploadedBy)}` : ""}
               · ${escapeHTML(formatBytes(f.size || 0))}
             </div>
+            ${note ? `<div class="file-panel-row-note"><span class="file-panel-row-note-label">更新內容</span>${escapeHTML(note)}</div>` : ""}
           </div>
+          ${note ? `<svg class="file-panel-row-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>` : ""}
           <div class="file-panel-row-actions">
             <button type="button" class="file-panel-row-btn" data-act="download" data-version="${i}" title="下載這版">${dlSvg}</button>
           </div>
         </div>
       `;
     }).join("");
+    histEl.querySelectorAll(".file-panel-row.has-note").forEach((row) => {
+      const toggle = () => {
+        const open = row.classList.toggle("is-open");
+        row.setAttribute("aria-expanded", open ? "true" : "false");
+      };
+      row.addEventListener("click", (e) => {
+        if (e.target.closest("[data-act]")) return;
+        toggle();
+      });
+      row.addEventListener("keydown", (e) => {
+        if (e.target !== row) return;
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+      });
+    });
     histEl.querySelectorAll("[data-act]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
         const i = parseInt(btn.dataset.version, 10);
         const f = files[i];
         if (!f) return;
@@ -420,6 +444,7 @@ function openFilePopover(toolId) {
   }
 
   pop.hidden = false;
+  markUpdateSeen(toolId);
 }
 
 
@@ -455,6 +480,13 @@ async function addVersionToTool(toolId, file) {
     toast(`已鎖定 — 只有「${existing.lockedBy}」能上傳新版`);
     return;
   }
+  // A tool that already has a file → this is an update; ask what changed.
+  const isUpdate = Array.isArray(existing?.files) && existing.files.length > 0;
+  let note = "";
+  if (isUpdate) {
+    note = await askVersionNote({ fileName: file.name, toolName: existing.name });
+    if (note === null) return;  // cancelled
+  }
   const me = await getMe();
   try {
     toast("上傳中…");
@@ -480,13 +512,7 @@ async function addVersionToTool(toolId, file) {
     }
     if (!tool) { toast("找不到這個工具"); return; }
     if (!Array.isArray(tool.files)) tool.files = [];
-    const entry = {
-      key: meta.key,
-      name: meta.name,
-      size: meta.size,
-      uploadedAt: meta.uploadedAt,
-      uploadedBy: meta.uploadedBy,
-    };
+    const entry = versionEntry(meta, note, isUpdate);
     if (tool.type === "page") {
       // Pages don't keep history — replace whatever's there.
       tool.files = [entry];
@@ -554,4 +580,4 @@ function pickCreatorAsMe() {
   });
 }
 
-export { getMe, initFilePopover, initTileContextMenu, initTileFileMenu, initTileTooltip, openTileContextMenu, openTileFileMenuUploadOnly };
+export { getMe, initFilePopover, openFilePopover, initTileContextMenu, initTileFileMenu, initTileTooltip, openTileContextMenu, openTileFileMenuUploadOnly };

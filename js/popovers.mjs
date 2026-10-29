@@ -1,7 +1,7 @@
 // DPC Hub — 編輯介面:工具/分類表單、各種 picker、自動抓取、icon
 import { canEditTool, normalizeType, render } from "./board.mjs?v=20260804e";
 import { allTools, ensureBrand, ensureCategory, ensureCreator, listAllBrands, listAllCreators, renderBrandSelect, renderCreatorSelect, uniqueSlug } from "./data.mjs?v=20260804e";
-import { isHtmlFile, renderFileList } from "./files.mjs?v=20260804e";
+import { copyFileEntry, isHtmlFile, renderFileList } from "./files.mjs?v=20260804e";
 import { $, $$, escapeAttr, escapeHTML, fileUrl, initial, loadJSON, saveJSON, toast, toastUndo } from "./helpers.mjs?v=20260804e";
 import { LS_DRAFT_KEY, LS_ME_KEY, NUM_COLORS, addTombstone, clearTombstone, state } from "./state.mjs?v=20260804e";
 import { saveBrands, saveCats, saveCreators, saveTools, scheduleSync } from "./sync.mjs?v=20260804e";
@@ -808,13 +808,7 @@ function saveTool() {
     // whatever was picked instead of silently dropping it for non-file tools.
     brand: d.brand,
     files: (d.type === "file" || d.type === "page")
-      ? state.editingFiles.map((f) => ({
-          key: f.key,
-          name: f.name,
-          size: f.size,
-          uploadedAt: f.uploadedAt,
-          uploadedBy: f.uploadedBy || "",
-        }))
+      ? state.editingFiles.map(copyFileEntry)
       : [],
     lockedBy: d.lock ? d.creator : "",
     // Stamp creation time once. New tools get "now"; tools saved before this

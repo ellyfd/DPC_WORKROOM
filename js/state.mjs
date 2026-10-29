@@ -8,6 +8,11 @@ const LS_ME_KEY = "dpcHub.me.v1";
 
 const LS_NEW_SEEN_KEY = "dpcHub.newSeen.v1";
 
+// toolId → key of the latest file version this device has already looked at
+const LS_UPDATE_SEEN_KEY = "dpcHub.updateSeen.v1";
+
+const MAX_NOTE_CHARS = 1000;               // 更新內容 length cap per version
+
 const NUM_COLORS = 7;
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024;  // 25 MB per upload (R2 backed)
@@ -70,4 +75,4 @@ function clearTombstone(kind, key) {
   if (key) delete state.tombstones[kind][key];
 }
 
-export { LS_COLLAPSE_KEY, LS_DRAFT_KEY, LS_ME_KEY, LS_NEW_SEEN_KEY, MAX_FILE_BYTES, MAX_VERSIONS, NUM_COLORS, addTombstone, clearTombstone, state };
+export { LS_COLLAPSE_KEY, LS_DRAFT_KEY, LS_ME_KEY, LS_NEW_SEEN_KEY, LS_UPDATE_SEEN_KEY, MAX_FILE_BYTES, MAX_NOTE_CHARS, MAX_VERSIONS, NUM_COLORS, addTombstone, clearTombstone, state };

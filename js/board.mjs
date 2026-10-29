@@ -1,10 +1,10 @@
 // DPC Hub — 啟動台板面:render、卡片、拖曳、篩選、本週上新
 import { allTools, ensureCategory, groupedTools, listAllBrands, sortToolsByOrder } from "./data.mjs?v=20260804e";
 import { downloadFile, isPageTool, pageUrl } from "./files.mjs?v=20260804e";
-import { $, $$, cssEscape, escapeAttr, escapeHTML, initial, loadJSON, queryTokens, saveJSON, toast, uniq } from "./helpers.mjs?v=20260804e";
-import { openTileContextMenu, openTileFileMenuUploadOnly } from "./menus.mjs?v=20260804e";
+import { $, $$, cssEscape, escapeAttr, escapeHTML, formatDate, initial, loadJSON, queryTokens, saveJSON, toast, uniq } from "./helpers.mjs?v=20260804e";
+import { openFilePopover, openTileContextMenu, openTileFileMenuUploadOnly } from "./menus.mjs?v=20260804e";
 import { deleteCategory, openCatPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
-import { LS_COLLAPSE_KEY, LS_NEW_SEEN_KEY, NUM_COLORS, state } from "./state.mjs?v=20260804e";
+import { LS_COLLAPSE_KEY, LS_NEW_SEEN_KEY, LS_UPDATE_SEEN_KEY, NUM_COLORS, state } from "./state.mjs?v=20260804e";
 import { favoriteTools, saveCats, saveTools, trackHit } from "./sync.mjs?v=20260804e";
 import { matchingTips, tipResultsHTML } from "./tips.mjs?v=20260804e";
 
@@ -39,12 +39,69 @@ function newToolsThisWeek() {
     .sort((a, b) => toolBirthTime(b) - toolBirthTime(a));
 }
 
-// A short signature of the current "new this week" set, so we only auto-show
-// the notice once per distinct batch. When a newer tool arrives the signature
-// changes and the notice pops again on next load.
+/* ===== 版本更新 (new versions of existing tools) ===== */
 
-function newToolsSignature(tools) {
-  return tools.map((t) => t.id).sort().join("|");
+const UPDATE_WINDOW_DAYS = 7;
+
+const UPDATE_WINDOW_MS = UPDATE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+
+function latestVersion(t) {
+  const f = Array.isArray(t?.files) ? t.files[0] : null;
+  return f && f.key ? f : null;
+}
+
+// True when the tool got a new version recently that this device hasn't
+// looked at yet. Your own uploads never count as "news" for you.
+
+function isUpdatedTool(t, seen = loadJSON(LS_UPDATE_SEEN_KEY, {})) {
+  const latest = latestVersion(t);
+  if (!latest) return false;
+  // `update` is stamped on new uploads; older data → more than one version.
+  if (!latest.update && !(t.files.length > 1)) return false;
+  const at = Date.parse(latest.uploadedAt || "");
+  if (!Number.isFinite(at)) return false;
+  const now = Date.now();
+  if (at > now + 60 * 1000 || now - at > UPDATE_WINDOW_MS) return false;
+  if (state.me && latest.uploadedBy === state.me) return false;
+  return (seen && seen[t.id]) !== latest.key;
+}
+
+
+function updatedToolsRecently() {
+  const seen = loadJSON(LS_UPDATE_SEEN_KEY, {});
+  return allTools()
+    .filter((t) => isUpdatedTool(t, seen))
+    .sort((a, b) => Date.parse(latestVersion(b).uploadedAt) - Date.parse(latestVersion(a).uploadedAt));
+}
+
+// Opening / downloading / viewing the history of a tool = "seen this update".
+// Drops the UPDATE badge in place without re-rendering the whole board.
+
+function markUpdateSeen(toolId) {
+  const t = allTools().find((x) => x.id === toolId);
+  const latest = latestVersion(t);
+  if (!latest) return;
+  const seen = loadJSON(LS_UPDATE_SEEN_KEY, {});
+  if (seen[toolId] === latest.key) return;
+  seen[toolId] = latest.key;
+  saveJSON(LS_UPDATE_SEEN_KEY, seen);
+  document.querySelectorAll(`#sections-area .card[data-id="${cssEscape(toolId)}"]`).forEach((card) => {
+    card.classList.remove("is-updated");
+    card.querySelectorAll(".update-badge").forEach((b) => b.remove());
+  });
+}
+
+// A short signature of the current notice contents, so we only auto-show it
+// once per distinct batch. A new tool or a new version changes the signature
+// and the notice pops again on next load. (New-tools-only signatures keep the
+// old format so people who dismissed a batch aren't asked again.)
+
+function newToolsSignature(tools, updates = []) {
+  return [
+    ...tools.map((t) => t.id),
+    ...updates.map((t) => "u:" + latestVersion(t).key),
+  ].sort().join("|");
 }
 
 // 本週上新通知 — a dismissable popover shown once on load. Pure text: groups
@@ -52,15 +109,51 @@ function newToolsSignature(tools) {
 // opens it; there's a "don't show again for this batch" affordance.
 
 function maybeShowNewArrivalsNotice() {
-  const fresh = newToolsThisWeek();
-  if (!fresh.length) return;
-  const sig = newToolsSignature(fresh);
+  const updates = updatedToolsRecently();
+  const upIds = new Set(updates.map((t) => t.id));
+  const fresh = newToolsThisWeek().filter((t) => !upIds.has(t.id));
+  if (!fresh.length && !updates.length) return;
+  const sig = newToolsSignature(fresh, updates);
   if (loadJSON(LS_NEW_SEEN_KEY, "") === sig) return;  // already dismissed this batch
-  renderNewArrivalsNotice(fresh, sig);
+  renderNewArrivalsNotice(fresh, sig, updates);
 }
 
 
-function renderNewArrivalsNotice(tools, sig) {
+function updatesGroupHTML(updates) {
+  if (!updates.length) return "";
+  const items = updates.map((t) => {
+    const latest = latestVersion(t);
+    const ver = t.type === "page" ? "" : `<span class="upd-ver">v${t.files.length}</span>`;
+    const who = latest.uploadedBy
+      ? `<span class="new-item-who"><span class="new-item-ava">${escapeHTML(initial(latest.uploadedBy))}</span>${escapeHTML(latest.uploadedBy)}</span>`
+      : "";
+    const when = `<span class="upd-when">${escapeHTML(formatDate(latest.uploadedAt))}</span>`;
+    const note = latest.note
+      ? `<span class="upd-note">${escapeHTML(latest.note)}</span>`
+      : `<span class="upd-note upd-note-empty">沒有填寫更新內容</span>`;
+    return `<button type="button" class="new-item upd-item" data-open-upd="${escapeAttr(t.id)}">
+        <span class="new-item-row">
+          <span class="new-item-name">${escapeHTML(t.name)}</span>
+          ${ver}
+          <svg class="new-item-go" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </span>
+        <span class="new-item-meta">${who}${when}</span>
+        ${note}
+      </button>`;
+  }).join("");
+  return `
+    <div class="new-group upd-group">
+      <div class="new-group-head">
+        <span class="new-group-dot"></span>
+        <span class="new-group-name">版本更新</span>
+        <span class="new-group-count">${updates.length}</span>
+      </div>
+      <div class="new-group-items">${items}</div>
+    </div>`;
+}
+
+
+function renderNewArrivalsNotice(tools, sig, updates = []) {
   const pop = document.getElementById("new-popover");
   if (!pop) return;
 
@@ -109,8 +202,23 @@ function renderNewArrivalsNotice(tools, sig) {
       </div>`;
   }).join("");
 
-  pop.querySelector("#new-popover-count").textContent = tools.length;
-  pop.querySelector("#new-popover-body").innerHTML = groupsHTML;
+  const heading = pop.querySelector("#new-popover-heading");
+  const sub = pop.querySelector("#new-popover-sub");
+  if (heading && sub) {
+    if (tools.length && updates.length) {
+      heading.textContent = "最新動態";
+      sub.textContent = `最近 ${NEW_WINDOW_DAYS} 天新增的工具 · 最近 ${UPDATE_WINDOW_DAYS} 天有新版本的工具`;
+    } else if (updates.length) {
+      heading.textContent = "版本更新";
+      sub.textContent = `最近 ${UPDATE_WINDOW_DAYS} 天有新版本的工具 · 點一下看完整版本歷史`;
+    } else {
+      heading.textContent = "本週上新";
+      sub.textContent = `最近 ${NEW_WINDOW_DAYS} 天新增的工具 · 點一下即可開啟`;
+    }
+  }
+  const body = pop.querySelector("#new-popover-body");
+  pop.querySelector("#new-popover-count").textContent = tools.length + updates.length;
+  body.innerHTML = updatesGroupHTML(updates) + groupsHTML;
   pop.hidden = false;
 
   const close = () => { pop.hidden = true; };
@@ -120,6 +228,17 @@ function renderNewArrivalsNotice(tools, sig) {
     el.addEventListener("click", close, { once: true })
   );
   pop.querySelector("#new-popover-dismiss").addEventListener("click", dismiss, { once: true });
+  pop.querySelectorAll("[data-open-upd]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const t = allTools().find((x) => x.id === btn.dataset.openUpd);
+      close();
+      if (!t) return;
+      // File tools → version history (shows every version's 更新內容);
+      // pages have no history, so just open the page.
+      if (t.type === "page") openTool(t, btn);
+      else openFilePopover(t.id);
+    })
+  );
   pop.querySelectorAll("[data-open-new]").forEach((btn) =>
     btn.addEventListener("click", () => {
       const t = allTools().find((x) => x.id === btn.dataset.openNew);
@@ -391,7 +510,7 @@ function sectionHTML(g, showHeader = true) {
 }
 
 
-function cardHTML(t, cv) {
+function cardHTML(t, cv, seenMap = loadJSON(LS_UPDATE_SEEN_KEY, {})) {
   const tType = t.type || "link";
   const type = TYPE_META[tType] || TYPE_META.link;
   const iconImg = t.icon
@@ -402,10 +521,17 @@ function cardHTML(t, cv) {
 
   const locked = isToolLocked(t);
   const lockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
-  const fresh = isNewTool(t);
+  // UPDATE wins over NEW: a fresh tool that already got a new version is news
+  // about the update.
+  const updated = isUpdatedTool(t, seenMap);
+  const fresh = !updated && isNewTool(t);
+  const latest = updated ? latestVersion(t) : null;
+  const updTitle = latest
+    ? (latest.note ? `有新版本:${latest.note}` : "有新版本")
+    : "";
 
   return `
-    <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}${fresh ? " is-new" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}"${noteAttr} draggable="true">
+    <article class="card${isPage ? " is-page" : ""}${locked ? " is-locked" : ""}${fresh ? " is-new" : ""}${updated ? " is-updated" : ""}" data-cv="${cv}" data-id="${escapeAttr(t.id)}"${noteAttr} draggable="true">
       <button type="button" class="card-tile" data-open="${escapeAttr(t.id)}" aria-label="${escapeAttr(t.name)}">
         <div class="card-top">
           <div class="card-icon">
@@ -415,6 +541,7 @@ function cardHTML(t, cv) {
           </div>
           ${locked ? `<span class="lock-badge" title="已鎖定 — 只有 ${escapeAttr(t.lockedBy)} 能編輯/刪除">${lockSvg}</span>` : ""}
           ${fresh ? `<span class="new-badge" title="本週上新">NEW</span>` : ""}
+          ${updated ? `<span class="new-badge update-badge" title="${escapeAttr(updTitle)}">UPDATE</span>` : ""}
         </div>
         <h3 class="card-title">${escapeHTML(t.name)}</h3>
       </button>
@@ -795,6 +922,7 @@ function openTool(t, anchor) {
       return;
     }
     trackHit(t.id, "open");
+    markUpdateSeen(t.id);
     window.open(pageUrl(t.id), "_blank", "noopener");
     return;
   }
@@ -852,4 +980,4 @@ function fallbackCopy(text) {
   document.body.removeChild(ta);
 }
 
-export { canEditTool, copyToolUrl, maybeShowNewArrivalsNotice, normalizeType, render, renderSections };
+export { canEditTool, copyToolUrl, markUpdateSeen, maybeShowNewArrivalsNotice, normalizeType, render, renderSections };
