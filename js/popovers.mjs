@@ -2,7 +2,7 @@
 import { canEditTool, normalizeType, render } from "./board.mjs?v=20260804e";
 import { allTools, ensureBrand, ensureCategory, ensureCreator, listAllBrands, listAllCreators, renderBrandSelect, renderCreatorSelect, uniqueSlug } from "./data.mjs?v=20260804e";
 import { copyFileEntry, isHtmlFile, renderFileList } from "./files.mjs?v=20260804e";
-import { $, $$, escapeAttr, escapeHTML, fileUrl, initial, loadJSON, saveJSON, toast, toastUndo } from "./helpers.mjs?v=20260804e";
+import { $, $$, escapeAttr, escapeHTML, fileUrl, folderPath, initial, loadJSON, saveJSON, shareFromHttp, toast, toastUndo } from "./helpers.mjs?v=20260804e";
 import { LS_DRAFT_KEY, LS_ME_KEY, NUM_COLORS, addTombstone, clearTombstone, state } from "./state.mjs?v=20260804e";
 import { saveBrands, saveCats, saveCreators, saveTools, scheduleSync } from "./sync.mjs?v=20260804e";
 
@@ -787,6 +787,15 @@ function saveTool() {
       toast("請填 URL");
       return;
     }
+    // A share typed as a web address ("https://192.168.x.x/資料夾 名稱") just
+    // hits the NAS web server and errors — offer the \\server\… form.
+    const share = shareFromHttp(d.url);
+    if (share && confirm(`這看起來是網路資料夾,用 https:// 會打不開。\n\n要改成:\n${share}\n\n(點工具時會複製路徑,用 Win+R 貼上開啟)`)) {
+      d.url = share;
+      $("#add-form").elements.url.value = share;
+    } else if (folderPath(d.url)) {
+      d.url = folderPath(d.url);
+    }
   }
 
   // Determine final id. For edits, always reuse the tool being edited so the
@@ -897,6 +906,18 @@ async function autoFetch() {
   if (!urlInput) return;
   const url = urlInput.value.trim();
   if (!url) { setAutoHint("請先在上面貼一個網址", "error"); return; }
+  // Network folder — nothing to fetch; name it after the last folder.
+  const folder = folderPath(url) || shareFromHttp(url);
+  if (folder) {
+    urlInput.value = folder;
+    const f = $("#add-form").elements;
+    if (!f.name.value) {
+      f.name.value = folder.split("\\").filter(Boolean).pop() || "";
+      updateIconPreview();
+    }
+    setAutoHint("這是網路資料夾:大家點工具時會複製路徑,用 Win+R 貼上開啟(瀏覽器不能直接開檔案總管)", "success");
+    return;
+  }
   const btn = $("#auto-fetch");
   btn.disabled = true;
   setAutoHint("讀取中…", null);

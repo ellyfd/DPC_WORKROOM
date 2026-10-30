@@ -2,7 +2,7 @@
 import { canEditTool, copyToolUrl, markUpdateSeen, removeFromFavorites, render } from "./board.mjs?v=20260804e";
 import { allTools, ensureCreator, listAllCreators } from "./data.mjs?v=20260804e";
 import { downloadFile, isHtmlFile, isPageTool, pageUrl, versionEntry } from "./files.mjs?v=20260804e";
-import { escapeHTML, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
+import { escapeHTML, folderPath, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
 import { openHistoryPopover } from "./history.mjs?v=20260804e";
 import { openMiniPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
 import { LS_ME_KEY, MAX_FILE_BYTES, MAX_NOTE_CHARS, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
@@ -194,6 +194,8 @@ function openTileContextMenu(toolId, x, y) {
   const verLabel = document.getElementById("tile-context-versions-label");
 
   if (copyItem) copyItem.hidden = !(tType === "link" && tool.url);
+  const copyLabel = document.getElementById("tile-context-copy-label");
+  if (copyLabel) copyLabel.textContent = folderPath(tool.url) ? "複製資料夾路徑" : "複製連結";
   if (dlItem) {
     // File-type tiles already download on click — only Page tools surface
     // a download action here (download the source HTML).

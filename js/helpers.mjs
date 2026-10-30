@@ -135,10 +135,100 @@ let toastTimer;
 
 function toast(msg) {
   const t = $("#toast");
+  t.classList.remove("toast-rich");
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
+}
+
+/* ===== network folders (\\server\share\…) =====
+   Browsers never let a web page open File Explorer, so folder "links" are
+   copied to the clipboard instead and the user pastes them into Win+R. */
+
+// Normalised Windows path when `url` points at a folder/file share,
+// otherwise "". Accepts \\host\x, //host/x, smb://host/x, file://host/x,
+// file:///C:/x and C:\x.
+
+function folderPath(url) {
+  const s = String(url || "").trim();
+  if (!s) return "";
+  let m;
+  if (/^\\\\[^\\/]/.test(s) || /^\/\/[^/]/.test(s)) {
+    return "\\\\" + s.replace(/^[\\/]{2}/, "").replace(/\//g, "\\");
+  }
+  if ((m = s.match(/^smb:\/\/(.+)$/i))) {
+    return "\\\\" + safeDecode(m[1]).replace(/\//g, "\\");
+  }
+  if ((m = s.match(/^file:\/\/\/([a-z]:.*)$/i))) {
+    return safeDecode(m[1]).replace(/\//g, "\\");
+  }
+  if ((m = s.match(/^file:\/\/([^/].*)$/i))) {
+    return "\\\\" + safeDecode(m[1]).replace(/\//g, "\\");
+  }
+  if (/^[a-z]:[\\/]/i.test(s)) return s.replace(/\//g, "\\");
+  return "";
+}
+
+// "https://192.168.1.220/3ddb/GAP Inc/Python" → "\\192.168.1.220\3ddb\GAP Inc\Python"
+// when it looks like someone typed a share path as a web address (private
+// IP + a path with spaces, which real web URLs basically never have).
+
+function shareFromHttp(url) {
+  const m = String(url || "").trim().match(/^https?:\/\/((?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))(?:\.\d{1,3}){2,3}|[a-z0-9-]+)(\/[^?#]*)$/i);
+  if (!m) return "";
+  const path = safeDecode(m[2]);
+  if (!/\s/.test(path)) return "";
+  return "\\\\" + m[1] + path.replace(/\/+$/, "").replace(/\//g, "\\");
+}
+
+
+function safeDecode(s) {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch {}
+  document.body.removeChild(ta);
+  return ok;
+}
+
+// Copy a folder path and explain how to open it — stays up long enough to
+// actually read the steps.
+
+async function copyFolderPath(path) {
+  const ok = await copyText(path);
+  const t = $("#toast");
+  t.textContent = "";
+  const head = document.createElement("div");
+  head.className = "toast-title";
+  head.textContent = ok ? "已複製資料夾路徑" : "請手動複製這個路徑";
+  const p = document.createElement("div");
+  p.className = "toast-path";
+  p.textContent = path;
+  const steps = document.createElement("div");
+  steps.className = "toast-steps";
+  steps.innerHTML = '按 <kbd>Win</kbd> + <kbd>R</kbd> → <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上 → <kbd>Enter</kbd> 即可開啟';
+  t.append(head, p, steps);
+  t.classList.add("toast-rich");
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; t.classList.remove("toast-rich"); }, 8000);
+  return ok;
 }
 
 /* Toast with an inline action button (e.g. 「已刪除 — 復原」). Stays up
@@ -146,6 +236,7 @@ function toast(msg) {
 
 function toastUndo(msg, label, fn) {
   const t = $("#toast");
+  t.classList.remove("toast-rich");
   t.textContent = "";
   const span = document.createElement("span");
   span.textContent = msg;
@@ -182,4 +273,4 @@ function escapeHTML(s) {
 
 function escapeAttr(s) { return escapeHTML(s); }
 
-export { $, $$, cssEscape, escapeAttr, escapeHTML, escapeRegex, fileExt, fileUrl, formatBytes, formatDate, imagesFromClipboard, initial, isImageFile, isThisWeek, loadJSON, queryTokens, saveJSON, slugify, toast, toastUndo, uniq };
+export { $, $$, copyFolderPath, copyText, cssEscape, escapeAttr, escapeHTML, escapeRegex, fileExt, fileUrl, folderPath, formatBytes, formatDate, imagesFromClipboard, initial, isImageFile, isThisWeek, loadJSON, queryTokens, saveJSON, shareFromHttp, slugify, toast, toastUndo, uniq };

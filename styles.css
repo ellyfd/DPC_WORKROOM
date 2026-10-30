@@ -613,6 +613,7 @@ h1, h2, h3 { margin: 0; }
   flex-shrink: 0;
 }
 .tile-type-link, .tile-type-url      { background: #2563eb; }
+.tile-type-folder                     { background: #0f766e; }
 .tile-type-page, .tile-type-iframe   { background: #7c3aed; }
 .tile-type-file, .tile-type-python   { background: #d97706; }
 
@@ -2699,6 +2700,36 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   animation: toast-in 0.22s ease;
 }
 .toast[hidden] { display: none; }
+/* Rich toast — folder path + how to open it */
+.toast.toast-rich {
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 14px 18px;
+  display: flex; flex-direction: column; gap: 6px;
+  text-align: left;
+}
+.toast-title { font-weight: 700; font-size: 14px; }
+.toast-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  word-break: break-all;
+  user-select: all;
+}
+.toast-steps { font-size: 13px; opacity: 0.92; }
+.toast-steps kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.18);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.25);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
 @keyframes toast-in {
   from { opacity: 0; transform: translate(-50%, 14px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
