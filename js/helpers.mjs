@@ -183,6 +183,15 @@ function shareFromHttp(url) {
 }
 
 
+// Folder path for a tool's address — also catches shares that were saved as
+// "https://192.168.x.x/資料夾 名稱" before this check existed, so old tools
+// work without being re-saved.
+
+function linkFolder(url) {
+  return folderPath(url) || shareFromHttp(url);
+}
+
+
 function safeDecode(s) {
   try { return decodeURIComponent(s); } catch { return s; }
 }
@@ -269,4 +278,4 @@ function escapeHTML(s) {
 
 function escapeAttr(s) { return escapeHTML(s); }
 
-export { $, $$, copyFolderPath, copyText, cssEscape, escapeAttr, escapeHTML, escapeRegex, fileExt, fileUrl, folderPath, formatBytes, formatDate, imagesFromClipboard, initial, isImageFile, isThisWeek, loadJSON, queryTokens, saveJSON, shareFromHttp, slugify, toast, toastUndo, uniq };
+export { $, $$, copyFolderPath, copyText, cssEscape, escapeAttr, escapeHTML, escapeRegex, fileExt, fileUrl, folderPath, formatBytes, linkFolder, formatDate, imagesFromClipboard, initial, isImageFile, isThisWeek, loadJSON, queryTokens, saveJSON, shareFromHttp, slugify, toast, toastUndo, uniq };
