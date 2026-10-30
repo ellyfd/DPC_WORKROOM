@@ -1,7 +1,7 @@
 // DPC Hub — 啟動台板面:render、卡片、拖曳、篩選、本週上新
 import { allTools, ensureCategory, groupedTools, listAllBrands, sortToolsByOrder } from "./data.mjs?v=20260804e";
 import { downloadFile, isPageTool, pageUrl } from "./files.mjs?v=20260804e";
-import { $, $$, cssEscape, escapeAttr, escapeHTML, formatDate, initial, loadJSON, queryTokens, saveJSON, toast, toastUndo, uniq } from "./helpers.mjs?v=20260804e";
+import { $, $$, copyFolderPath, cssEscape, escapeAttr, folderPath, escapeHTML, formatDate, initial, loadJSON, queryTokens, saveJSON, toast, toastUndo, uniq } from "./helpers.mjs?v=20260804e";
 import { openFilePopover, openTileContextMenu, openTileFileMenuUploadOnly } from "./menus.mjs?v=20260804e";
 import { deleteCategory, openCatPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
 import { LS_COLLAPSE_KEY, LS_NEW_SEEN_KEY, LS_UPDATE_SEEN_KEY, NUM_COLORS, state } from "./state.mjs?v=20260804e";
@@ -359,6 +359,7 @@ const TYPE_META = {
   link:   { label: "LINK",  icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>` },
   page:   { label: "PAGE",  icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16"/><path d="M12 4c2.5 3 2.5 13 0 16M12 4c-2.5 3-2.5 13 0 16"/></svg>` },
   file:   { label: "FILE",  icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>` },
+  folder: { label: "FOLDER", icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>` },
   // legacy fallbacks
   url:    { label: "URL",   icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>` },
   python: { label: "PY",    icon: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>` },
@@ -531,7 +532,8 @@ function sectionHTML(g, showHeader = true) {
 
 
 function cardHTML(t, cv, seenMap = loadJSON(LS_UPDATE_SEEN_KEY, {})) {
-  const tType = t.type || "link";
+  // A "link" whose address is a network folder shows a folder chip.
+  const tType = (t.type || "link") === "link" && folderPath(t.url) ? "folder" : (t.type || "link");
   const type = TYPE_META[tType] || TYPE_META.link;
   const iconImg = t.icon
     ? `<img src="${escapeAttr(t.icon)}" alt="" draggable="false" onerror="this.remove()" />`
@@ -1187,6 +1189,9 @@ function openTool(t, anchor) {
     return;
   }
   trackHit(t.id, "open");
+  // Network folder: browsers can't open File Explorer — copy + explain.
+  const folder = folderPath(t.url);
+  if (folder) { copyFolderPath(folder); return; }
   window.open(t.url, "_blank", "noopener");
 }
 
@@ -1194,6 +1199,7 @@ function openTool(t, anchor) {
 function copyToolUrl(t) {
   if (!t) return;
   let url = "";
+  if (t.type === "link" && folderPath(t.url)) { copyFolderPath(folderPath(t.url)); return; }
   if (t.type === "link") url = t.url || "";
   else if (t.type === "page") url = new URL(pageUrl(t.id), window.location.href).href;
   if (!url) { toast("沒有可複製的網址"); return; }
