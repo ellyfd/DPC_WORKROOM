@@ -192,6 +192,28 @@ function linkFolder(url) {
 }
 
 
+// First web link or folder path written in free text (e.g. a file tool's
+// description). A whole line that is a share path counts even with spaces
+// ("\\\\192.168.1.220\\3ddb\\GAP Inc\\Python"); inline links stop at whitespace.
+
+function textLink(text) {
+  const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const folder = linkFolder(line);
+    if (folder) return { kind: "folder", value: folder };
+  }
+  const all = lines.join("\n");
+  const unc = all.match(/\\\\[^\s\\]+\\[^\n]+/);
+  if (unc) return { kind: "folder", value: unc[0].trim() };
+  const web = all.match(/https?:\/\/[^\s<>"'）)]+/i);
+  if (web) {
+    const folder = linkFolder(web[0]);
+    return folder ? { kind: "folder", value: folder } : { kind: "url", value: web[0] };
+  }
+  return null;
+}
+
+
 function safeDecode(s) {
   try { return decodeURIComponent(s); } catch { return s; }
 }
@@ -278,4 +300,4 @@ function escapeHTML(s) {
 
 function escapeAttr(s) { return escapeHTML(s); }
 
-export { $, $$, copyFolderPath, copyText, cssEscape, escapeAttr, escapeHTML, escapeRegex, fileExt, fileUrl, folderPath, formatBytes, linkFolder, formatDate, imagesFromClipboard, initial, isImageFile, isThisWeek, loadJSON, queryTokens, saveJSON, shareFromHttp, slugify, toast, toastUndo, uniq };
+export { $, $$, copyFolderPath, copyText, cssEscape, escapeAttr, escapeHTML, escapeRegex, fileExt, fileUrl, folderPath, formatBytes, linkFolder, textLink, formatDate, imagesFromClipboard, initial, isImageFile, isThisWeek, loadJSON, queryTokens, saveJSON, shareFromHttp, slugify, toast, toastUndo, uniq };
