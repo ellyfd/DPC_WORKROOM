@@ -1,7 +1,7 @@
 // DPC Hub — 啟動台板面:render、卡片、拖曳、篩選、本週上新
 import { allTools, ensureCategory, groupedTools, listAllBrands, sortToolsByOrder } from "./data.mjs?v=20260804e";
 import { downloadFile, isPageTool, pageUrl } from "./files.mjs?v=20260804e";
-import { $, $$, copyFolderPath, cssEscape, escapeAttr, folderPath, escapeHTML, formatDate, initial, loadJSON, queryTokens, saveJSON, toast, toastUndo, uniq } from "./helpers.mjs?v=20260804e";
+import { $, $$, copyFolderPath, cssEscape, escapeAttr, linkFolder, escapeHTML, formatDate, initial, loadJSON, queryTokens, saveJSON, toast, toastUndo, uniq } from "./helpers.mjs?v=20260804e";
 import { openFilePopover, openTileContextMenu, openTileFileMenuUploadOnly } from "./menus.mjs?v=20260804e";
 import { deleteCategory, openCatPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
 import { LS_COLLAPSE_KEY, LS_NEW_SEEN_KEY, LS_UPDATE_SEEN_KEY, NUM_COLORS, state } from "./state.mjs?v=20260804e";
@@ -533,7 +533,7 @@ function sectionHTML(g, showHeader = true) {
 
 function cardHTML(t, cv, seenMap = loadJSON(LS_UPDATE_SEEN_KEY, {})) {
   // A "link" whose address is a network folder shows a folder chip.
-  const tType = (t.type || "link") === "link" && folderPath(t.url) ? "folder" : (t.type || "link");
+  const tType = (t.type || "link") === "link" && linkFolder(t.url) ? "folder" : (t.type || "link");
   const type = TYPE_META[tType] || TYPE_META.link;
   const iconImg = t.icon
     ? `<img src="${escapeAttr(t.icon)}" alt="" draggable="false" onerror="this.remove()" />`
@@ -1190,7 +1190,7 @@ function openTool(t, anchor) {
   }
   trackHit(t.id, "open");
   // Network folder: browsers can't open File Explorer — copy + explain.
-  const folder = folderPath(t.url);
+  const folder = linkFolder(t.url);
   if (folder) { copyFolderPath(folder); return; }
   window.open(t.url, "_blank", "noopener");
 }
@@ -1199,7 +1199,7 @@ function openTool(t, anchor) {
 function copyToolUrl(t) {
   if (!t) return;
   let url = "";
-  if (t.type === "link" && folderPath(t.url)) { copyFolderPath(folderPath(t.url)); return; }
+  if (t.type === "link" && linkFolder(t.url)) { copyFolderPath(linkFolder(t.url)); return; }
   if (t.type === "link") url = t.url || "";
   else if (t.type === "page") url = new URL(pageUrl(t.id), window.location.href).href;
   if (!url) { toast("沒有可複製的網址"); return; }
