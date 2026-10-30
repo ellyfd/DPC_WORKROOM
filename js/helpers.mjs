@@ -207,8 +207,7 @@ async function copyText(text) {
   return ok;
 }
 
-// Copy a folder path and explain how to open it — stays up long enough to
-// actually read the steps.
+// Copy a folder path and show which one was copied.
 
 async function copyFolderPath(path) {
   const ok = await copyText(path);
@@ -220,14 +219,11 @@ async function copyFolderPath(path) {
   const p = document.createElement("div");
   p.className = "toast-path";
   p.textContent = path;
-  const steps = document.createElement("div");
-  steps.className = "toast-steps";
-  steps.innerHTML = '按 <kbd>Win</kbd> + <kbd>R</kbd> → <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上 → <kbd>Enter</kbd> 即可開啟';
-  t.append(head, p, steps);
+  t.append(head, p);
   t.classList.add("toast-rich");
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; t.classList.remove("toast-rich"); }, 8000);
+  toastTimer = setTimeout(() => { t.hidden = true; t.classList.remove("toast-rich"); }, 4000);
   return ok;
 }
 
