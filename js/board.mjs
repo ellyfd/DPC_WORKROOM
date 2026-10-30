@@ -1,7 +1,7 @@
 // DPC Hub — 啟動台板面:render、卡片、拖曳、篩選、本週上新
 import { allTools, ensureCategory, groupedTools, listAllBrands, sortToolsByOrder } from "./data.mjs?v=20260804e";
 import { downloadFile, isPageTool, pageUrl } from "./files.mjs?v=20260804e";
-import { $, $$, copyFolderPath, cssEscape, escapeAttr, linkFolder, escapeHTML, formatDate, initial, loadJSON, queryTokens, saveJSON, toast, toastUndo, uniq } from "./helpers.mjs?v=20260804e";
+import { $, $$, copyFolderPath, copyText, cssEscape, escapeAttr, linkFolder, textLink, escapeHTML, formatDate, initial, loadJSON, queryTokens, saveJSON, toast, toastUndo, uniq } from "./helpers.mjs?v=20260804e";
 import { openFilePopover, openTileContextMenu, openTileFileMenuUploadOnly } from "./menus.mjs?v=20260804e";
 import { deleteCategory, openCatPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
 import { LS_COLLAPSE_KEY, LS_NEW_SEEN_KEY, LS_UPDATE_SEEN_KEY, NUM_COLORS, state } from "./state.mjs?v=20260804e";
@@ -1196,12 +1196,29 @@ function openTool(t, anchor) {
 }
 
 
+// What "複製連結" copies for a tool: its own address for link tools; for
+// file / page tools, a link or folder path written in the description.
+
+function toolCopyTarget(t) {
+  if (!t) return null;
+  if ((t.type || "link") === "link" && t.url && t.url !== "#") {
+    const folder = linkFolder(t.url);
+    return folder ? { kind: "folder", value: folder } : { kind: "url", value: t.url };
+  }
+  return textLink(t.description);
+}
+
+
 function copyToolUrl(t) {
   if (!t) return;
+  const target = toolCopyTarget(t);
+  if (target?.kind === "folder") { copyFolderPath(target.value); return; }
+  if (target?.kind === "url") {
+    copyText(target.value).then((ok) => toast(ok ? "已複製連結" : "複製失敗"));
+    return;
+  }
   let url = "";
-  if (t.type === "link" && linkFolder(t.url)) { copyFolderPath(linkFolder(t.url)); return; }
-  if (t.type === "link") url = t.url || "";
-  else if (t.type === "page") url = new URL(pageUrl(t.id), window.location.href).href;
+  if (t.type === "page") url = new URL(pageUrl(t.id), window.location.href).href;
   if (!url) { toast("沒有可複製的網址"); return; }
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(url).then(
@@ -1226,4 +1243,4 @@ function fallbackCopy(text) {
   document.body.removeChild(ta);
 }
 
-export { canEditTool, copyToolUrl, markUpdateSeen, removeFromFavorites, maybeShowNewArrivalsNotice, normalizeType, render, renderSections };
+export { canEditTool, copyToolUrl, toolCopyTarget, markUpdateSeen, removeFromFavorites, maybeShowNewArrivalsNotice, normalizeType, render, renderSections };
