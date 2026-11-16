@@ -33,7 +33,7 @@ export default {
         if (!writeOriginAllowed(request)) return jsonError("origin not allowed", 403);
         return await recordHit(request, env);
       }
-      if (url.pathname === "/admin/ledger" && request.method === "GET") {
+      if (url.pathname === "/admin/ledger" && (request.method === "GET" || request.method === "POST")) {
         return await adminLedger(request, env, url);
       }
       if (url.pathname === "/api/stats/monthly" && request.method === "GET") {
@@ -309,20 +309,89 @@ async function recordLedger(env, toolId, opens, downloads, uses) {
   ).bind(twDay(), toolId, info.name || toolId, info.creator || "", info.type || "link", uses, opens, downloads).run();
 }
 
-function adminAuthorized(request, env) {
-  const key = env.ADMIN_KEY;
-  if (!key) return false;
-  const h = request.headers.get("Authorization") || "";
-  const m = h.match(/^Basic\s+(.+)$/i);
-  if (!m) return false;
-  let pass = "";
-  try { pass = atob(m[1]).split(":").slice(1).join(":"); } catch { return false; }
-  // Constant-time compare.
-  const a = new TextEncoder().encode(pass);
-  const b = new TextEncoder().encode(String(key));
+// Ledger password. Normally set once from the page itself (first visit
+// shows a "設定密碼" form; stored as a salted PBKDF2 hash in kv 'admin_pw').
+// An ADMIN_KEY secret, if someone does configure one, takes precedence.
+// To reset a forgotten password: DELETE FROM kv WHERE k = 'admin_pw' in D1.
+
+const PW_ITER = 20000;
+
+function b64(bytes) {
+  let s = "";
+  for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b);
+  return btoa(s);
+}
+
+
+function unb64(str) {
+  return Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+}
+
+
+async function hashPassword(pw, saltB64, iter = PW_ITER) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt: unb64(saltB64), iterations: iter }, key, 256
+  );
+  return b64(bits);
+}
+
+
+function sameBytes(x, y) {
+  const a = new TextEncoder().encode(String(x));
+  const b = new TextEncoder().encode(String(y));
   let diff = a.length ^ b.length;
   for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] || 0) ^ (b[i] || 0);
   return diff === 0;
+}
+
+
+async function storedAdminPw(env) {
+  try {
+    const row = await env.DB.prepare("SELECT v FROM kv WHERE k = 'admin_pw'").first();
+    const v = row ? JSON.parse(row.v) : null;
+    return v && v.salt && v.hash ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+
+function basicPassword(request) {
+  const m = (request.headers.get("Authorization") || "").match(/^Basic\s+(.+)$/i);
+  if (!m) return null;
+  try { return atob(m[1]).split(":").slice(1).join(":"); } catch { return null; }
+}
+
+
+async function adminAuthorized(request, env, stored) {
+  const pass = basicPassword(request);
+  if (pass == null) return false;
+  if (env.ADMIN_KEY) return sameBytes(pass, env.ADMIN_KEY);
+  if (!stored) return false;
+  return sameBytes(await hashPassword(pass, stored.salt, stored.iter || PW_ITER), stored.hash);
+}
+
+
+function setupPage(message = "") {
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>設定台帳密碼</title>
+<style>body{font-family:"Noto Sans TC",system-ui,sans-serif;background:#f5f7fb;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;color:#0f172a}
+form{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;width:340px;display:flex;flex-direction:column;gap:12px}
+h1{font-size:18px;margin:0}p{margin:0;font-size:13px;color:#64748b;line-height:1.6}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#475569}
+input{font:inherit;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px}
+button{font:inherit;padding:9px;border:0;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer}
+.err{color:#dc2626;font-size:13px}</style></head><body>
+<form method="post" autocomplete="off">
+<h1>設定台帳密碼</h1>
+<p>第一次使用,請設定一組密碼。設定後只有知道密碼的人能看台帳,而且無法從這裡再改。</p>
+${message ? `<div class="err">${message}</div>` : ""}
+<label>密碼(至少 6 碼)<input type="password" name="password" minlength="6" required></label>
+<label>再輸入一次<input type="password" name="confirm" minlength="6" required></label>
+<button type="submit">設定並進入台帳</button>
+</form></body></html>`;
 }
 
 const ADMIN_HEADERS = {
@@ -332,9 +401,27 @@ const ADMIN_HEADERS = {
 };
 
 async function adminLedger(request, env, url) {
-  // No ADMIN_KEY configured → the page doesn't exist.
-  if (!env.ADMIN_KEY) return new Response("Not found", { status: 404 });
-  if (!adminAuthorized(request, env)) {
+  const stored = env.ADMIN_KEY ? null : await storedAdminPw(env);
+  const htmlHeaders = { ...ADMIN_HEADERS, "Content-Type": "text/html; charset=utf-8" };
+
+  // No password yet → first visit sets one (only possible while unset).
+  if (!env.ADMIN_KEY && !stored) {
+    if (request.method !== "POST") return new Response(setupPage(), { headers: htmlHeaders });
+    const form = await request.formData().catch(() => null);
+    const pw = String(form?.get("password") || "");
+    const confirm = String(form?.get("confirm") || "");
+    if (pw.length < 6) return new Response(setupPage("密碼至少要 6 碼"), { status: 400, headers: htmlHeaders });
+    if (pw !== confirm) return new Response(setupPage("兩次輸入的密碼不一樣"), { status: 400, headers: htmlHeaders });
+    const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+    const hash = await hashPassword(pw, salt);
+    // INSERT OR IGNORE: if someone else set it a moment ago, theirs stands.
+    await env.DB.prepare("INSERT OR IGNORE INTO kv (k, v, updated_at) VALUES ('admin_pw', ?, ?)")
+      .bind(JSON.stringify({ salt, hash, iter: PW_ITER }), Date.now()).run();
+    return new Response(null, { status: 303, headers: { ...ADMIN_HEADERS, Location: "/admin/ledger" } });
+  }
+  if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: ADMIN_HEADERS });
+
+  if (!(await adminAuthorized(request, env, stored))) {
     return new Response("需要登入", {
       status: 401,
       headers: { ...ADMIN_HEADERS, "WWW-Authenticate": 'Basic realm="DPC Hub ledger", charset="UTF-8"' },

@@ -112,11 +112,11 @@ Push 到 `main` 自動部署(`.github/workflows/deploy.yml`):
 每天每個工具記一筆:工具名稱、製作人、使用人次(同一台電腦同一天只算一次)、開啟、下載。
 **只記「哪個工具被用了」,不記錄是誰使用**;前台完全不顯示。
 
-- 開啟:Cloudflare 後台 → Workers & Pages → `dpcwork` → Settings → Variables and Secrets →
-  新增 **Secret**,名稱 `ADMIN_KEY`,值自訂一組密碼(部署不會蓋掉)
-- 查詢:打開 `https://dpcwork.ellyfd.workers.dev/admin/ledger`,帳號隨意、密碼填 `ADMIN_KEY`
+- 打開 `https://dpcwork.ellyfd.workers.dev/admin/ledger`:**第一次**會請你設定密碼(至少 6 碼),
+  之後瀏覽器會跳出登入框,帳號隨意、密碼填剛設的那組
+- 密碼只存加鹽雜湊(D1 `kv` 表的 `admin_pw`),設定後無法從網頁重設;
+  忘記時到 Cloudflare D1 主控台執行 `DELETE FROM kv WHERE k = 'admin_pw'`,再重新打開網址設定
 - 可選日期區間、篩選製作人,下載 CSV(彙總 / 每日明細)
-- 沒設 `ADMIN_KEY` 時這個網址不存在(404)
 - 台帳從功能上線當天開始累積;資料表為 D1 的 `ledger_daily`
 
 ### 從備份還原(最後手段)
