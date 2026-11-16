@@ -74,14 +74,34 @@ function adoptServerState(data) {
 /* Fire-and-forget usage counter — a click/download should never block or
    error the UI, and it deliberately bypasses the state-sync machinery. */
 
+// First use of a tool on this device today (Taiwan date)? Lets the admin
+// ledger count 使用人次 as "one per computer per day" without recording who.
+
+const LS_HIT_DAY_KEY = "dpcHub.hitDay.v1";
+
+
+function firstUseToday(toolId) {
+  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const seen = loadJSON(LS_HIT_DAY_KEY, {});
+  if (seen.day !== today) { seen.day = today; seen.ids = []; }
+  if (!Array.isArray(seen.ids)) seen.ids = [];
+  if (seen.ids.includes(toolId)) return false;
+  seen.ids.push(toolId);
+  saveJSON(LS_HIT_DAY_KEY, seen);
+  return true;
+}
+
+
 function trackHit(toolId, kind) {
   if (!toolId) return;
   bumpLocalUsage(toolId);
+  let first = false;
+  try { first = firstUseToday(toolId); } catch {}
   try {
     fetch("/api/hit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ toolId, kind }),
+      body: JSON.stringify({ toolId, kind, first }),
       keepalive: true,
     }).catch(() => {});
   } catch {}
