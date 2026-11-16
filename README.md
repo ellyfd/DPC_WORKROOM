@@ -107,6 +107,18 @@ Push 到 `main` 自動部署(`.github/workflows/deploy.yml`):
 - **回收桶**:刪掉的工具保留完整內容 30 天,前端「紀錄」按鈕一鍵還原
 - **檔案緩刪**:失去引用的 R2 檔案進回收暫存 30 天,重新引用自動救回
 
+### 使用台帳(只有管理者看得到)
+
+每天每個工具記一筆:工具名稱、製作人、使用人次(同一台電腦同一天只算一次)、開啟、下載。
+**只記「哪個工具被用了」,不記錄是誰使用**;前台完全不顯示。
+
+- 開啟:Cloudflare 後台 → Workers & Pages → `dpcwork` → Settings → Variables and Secrets →
+  新增 **Secret**,名稱 `ADMIN_KEY`,值自訂一組密碼(部署不會蓋掉)
+- 查詢:打開 `https://dpcwork.ellyfd.workers.dev/admin/ledger`,帳號隨意、密碼填 `ADMIN_KEY`
+- 可選日期區間、篩選製作人,下載 CSV(彙總 / 每日明細)
+- 沒設 `ADMIN_KEY` 時這個網址不存在(404)
+- 台帳從功能上線當天開始累積;資料表為 D1 的 `ledger_daily`
+
 ### 從備份還原(最後手段)
 
 ```bash

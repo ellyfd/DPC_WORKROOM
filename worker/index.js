@@ -33,6 +33,9 @@ export default {
         if (!writeOriginAllowed(request)) return jsonError("origin not allowed", 403);
         return await recordHit(request, env);
       }
+      if (url.pathname === "/admin/ledger" && request.method === "GET") {
+        return await adminLedger(request, env, url);
+      }
       if (url.pathname === "/api/stats/monthly" && request.method === "GET") {
         return await getMonthlyStats(env);
       }
@@ -246,6 +249,10 @@ async function recordHit(request, env) {
   await ensureHitsTable(env);
   const opens = kind === "open" ? 1 : 0;
   const downloads = kind === "download" ? 1 : 0;
+  // 台帳 (admin-only ledger) — never let it break the public counter.
+  try {
+    await recordLedger(env, toolId, opens, downloads, body.first === true ? 1 : 0);
+  } catch {}
   await env.DB.batch([
     env.DB.prepare(
       "INSERT INTO hits (tool_id, opens, downloads, last_at) VALUES (?, ?, ?, ?) " +
@@ -257,6 +264,192 @@ async function recordHit(request, env) {
     ).bind(toolId, monthKey(), opens, downloads),
   ]);
   return json({ ok: true });
+}
+
+/* ===== 使用台帳 (admin-only usage ledger) =====
+   One row per Taiwan-date per tool: the tool's name / creator / type as they
+   were that day (so renames and deletions don't rewrite history), plus
+   使用人次 (each device counted once a day — the client flags its first hit),
+   opens and downloads. No person is recorded — only which tool was used.
+   Read it at /admin/ledger (HTTP Basic, password = ADMIN_KEY secret). */
+
+let _ledgerReady = null;
+function ensureLedgerTable(env) {
+  if (!_ledgerReady) {
+    _ledgerReady = env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS ledger_daily (day TEXT, tool_id TEXT, tool_name TEXT, creator TEXT, tool_type TEXT, " +
+        "uses INTEGER DEFAULT 0, opens INTEGER DEFAULT 0, downloads INTEGER DEFAULT 0, PRIMARY KEY (day, tool_id))"
+    ).run().catch((e) => {
+      _ledgerReady = null;
+      throw e;
+    });
+  }
+  return _ledgerReady;
+}
+
+// "YYYY-MM-DD" in Taiwan time (UTC+8, no DST).
+function twDay(ts = Date.now()) {
+  return new Date(ts + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+async function recordLedger(env, toolId, opens, downloads, uses) {
+  await ensureLedgerTable(env);
+  // Pull just this tool's name / creator / type out of the stored state —
+  // server-side, so a client can't credit a tool to someone else.
+  const info = await env.DB.prepare(
+    "SELECT json_extract(t.value, '$.name') AS name, json_extract(t.value, '$.creator') AS creator, " +
+      "json_extract(t.value, '$.type') AS type FROM kv, json_each(kv.v, '$.tools') AS t " +
+      "WHERE kv.k = 'state' AND json_extract(t.value, '$.id') = ? LIMIT 1"
+  ).bind(toolId).first();
+  if (!info) return; // unknown tool id → don't pollute the ledger
+  await env.DB.prepare(
+    "INSERT INTO ledger_daily (day, tool_id, tool_name, creator, tool_type, uses, opens, downloads) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT(day, tool_id) DO UPDATE SET tool_name = excluded.tool_name, creator = excluded.creator, tool_type = excluded.tool_type, " +
+      "uses = uses + excluded.uses, opens = opens + excluded.opens, downloads = downloads + excluded.downloads"
+  ).bind(twDay(), toolId, info.name || toolId, info.creator || "", info.type || "link", uses, opens, downloads).run();
+}
+
+function adminAuthorized(request, env) {
+  const key = env.ADMIN_KEY;
+  if (!key) return false;
+  const h = request.headers.get("Authorization") || "";
+  const m = h.match(/^Basic\s+(.+)$/i);
+  if (!m) return false;
+  let pass = "";
+  try { pass = atob(m[1]).split(":").slice(1).join(":"); } catch { return false; }
+  // Constant-time compare.
+  const a = new TextEncoder().encode(pass);
+  const b = new TextEncoder().encode(String(key));
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] || 0) ^ (b[i] || 0);
+  return diff === 0;
+}
+
+const ADMIN_HEADERS = {
+  "Cache-Control": "no-store",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Referrer-Policy": "no-referrer",
+};
+
+async function adminLedger(request, env, url) {
+  // No ADMIN_KEY configured → the page doesn't exist.
+  if (!env.ADMIN_KEY) return new Response("Not found", { status: 404 });
+  if (!adminAuthorized(request, env)) {
+    return new Response("需要登入", {
+      status: 401,
+      headers: { ...ADMIN_HEADERS, "WWW-Authenticate": 'Basic realm="DPC Hub ledger", charset="UTF-8"' },
+    });
+  }
+  const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || "");
+  const today = twDay();
+  const from = isDay(url.searchParams.get("from")) ? url.searchParams.get("from") : today.slice(0, 8) + "01";
+  const to = isDay(url.searchParams.get("to")) ? url.searchParams.get("to") : today;
+  const creatorFilter = (url.searchParams.get("creator") || "").slice(0, 40);
+
+  let rows = [];
+  try {
+    await ensureLedgerTable(env);
+    const { results } = await env.DB.prepare(
+      "SELECT tool_id, MAX(tool_name) AS tool_name, MAX(creator) AS creator, MAX(tool_type) AS tool_type, " +
+        "SUM(uses) AS uses, SUM(opens) AS opens, SUM(downloads) AS downloads, COUNT(*) AS days, MAX(day) AS last_day " +
+        "FROM ledger_daily WHERE day BETWEEN ? AND ? " + (creatorFilter ? "AND creator = ? " : "") +
+        "GROUP BY tool_id ORDER BY uses DESC, opens + downloads DESC"
+    ).bind(...(creatorFilter ? [from, to, creatorFilter] : [from, to])).all();
+    rows = results || [];
+  } catch {}
+
+  const typeLabel = { link: "連結", file: "檔案", page: "頁面" };
+  const format = url.searchParams.get("format");
+  if (format === "csv" || format === "csv-daily") {
+    let csv;
+    if (format === "csv-daily") {
+      const { results } = await env.DB.prepare(
+        "SELECT day, creator, tool_name, tool_type, uses, opens, downloads, tool_id FROM ledger_daily " +
+          "WHERE day BETWEEN ? AND ? " + (creatorFilter ? "AND creator = ? " : "") + "ORDER BY day, creator, tool_name"
+      ).bind(...(creatorFilter ? [from, to, creatorFilter] : [from, to])).all();
+      csv = toCsv(["日期", "製作人", "工具", "類型", "使用人次", "開啟", "下載", "工具ID"],
+        (results || []).map((r) => [r.day, r.creator, r.tool_name, typeLabel[r.tool_type] || r.tool_type, r.uses, r.opens, r.downloads, r.tool_id]));
+    } else {
+      csv = toCsv(["製作人", "工具", "類型", "使用人次", "開啟", "下載", "有使用的天數", "最後使用日", "工具ID"],
+        rows.map((r) => [r.creator, r.tool_name, typeLabel[r.tool_type] || r.tool_type, r.uses, r.opens, r.downloads, r.days, r.last_day, r.tool_id]));
+    }
+    return new Response("\uFEFF" + csv, {
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="dpc-ledger-${from}_${to}${format === "csv-daily" ? "-daily" : ""}.csv"`,
+      },
+    });
+  }
+
+  // Per-creator rollup.
+  const byCreator = new Map();
+  for (const r of rows) {
+    const k = r.creator || "(未填)";
+    const c = byCreator.get(k) || { tools: 0, uses: 0, opens: 0, downloads: 0 };
+    c.tools++; c.uses += r.uses || 0; c.opens += r.opens || 0; c.downloads += r.downloads || 0;
+    byCreator.set(k, c);
+  }
+  const creators = [...byCreator.entries()].sort((a, b) => b[1].uses - a[1].uses);
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  const q = (extra) => {
+    const p = new URLSearchParams({ from, to, ...(creatorFilter ? { creator: creatorFilter } : {}), ...extra });
+    return "?" + p.toString();
+  };
+  const total = rows.reduce((a, r) => ({ uses: a.uses + (r.uses || 0), opens: a.opens + (r.opens || 0), downloads: a.downloads + (r.downloads || 0) }), { uses: 0, opens: 0, downloads: 0 });
+
+  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>DPC Hub 使用台帳</title>
+<style>
+body{font-family:"Noto Sans TC",system-ui,sans-serif;margin:0;padding:24px;background:#f5f7fb;color:#0f172a;font-size:14px}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:28px 0 8px}
+.muted{color:#64748b;font-size:12.5px}
+form{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:16px 0;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#475569}
+input,select{font:inherit;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px}
+button,.btn{font:inherit;padding:7px 14px;border-radius:6px;border:1px solid #2563eb;background:#2563eb;color:#fff;text-decoration:none;cursor:pointer}
+.btn.sec{background:#fff;color:#2563eb}
+table{border-collapse:collapse;width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
+th,td{padding:8px 10px;border-bottom:1px solid #eef2f7;text-align:left;white-space:nowrap}
+th{background:#f8fafc;font-size:12.5px;color:#475569}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.wrap{overflow-x:auto}
+a{color:#2563eb}
+</style></head><body>
+<h1>DPC Hub 使用台帳</h1>
+<div class="muted">只記錄「哪個工具被用了」,不記錄是誰使用。使用人次 = 同一台電腦同一天對同一個工具只算一次。日期以台灣時間計。</div>
+<form method="get">
+<label>開始日<input type="date" name="from" value="${esc(from)}"></label>
+<label>結束日<input type="date" name="to" value="${esc(to)}"></label>
+<label>製作人<select name="creator"><option value="">全部</option>${[...new Set([...creators.map(([k]) => k), creatorFilter].filter(Boolean))].map((k) => `<option${k === creatorFilter ? " selected" : ""}>${esc(k)}</option>`).join("")}</select></label>
+<button type="submit">查詢</button>
+<a class="btn sec" href="${esc(q({ format: "csv" }))}">下載 CSV(彙總)</a>
+<a class="btn sec" href="${esc(q({ format: "csv-daily" }))}">下載 CSV(每日明細)</a>
+</form>
+<div class="muted">${esc(from)} ~ ${esc(to)} · 共 ${rows.length} 個工具有使用 · 使用人次 ${total.uses} · 開啟 ${total.opens} · 下載 ${total.downloads}</div>
+
+<h2>依製作人</h2>
+<div class="wrap"><table><thead><tr><th>製作人</th><th class="n">有被使用的工具</th><th class="n">使用人次</th><th class="n">開啟</th><th class="n">下載</th></tr></thead><tbody>
+${creators.map(([k, c]) => `<tr><td><a href="${esc(q({ creator: k === "(未填)" ? "" : k }))}">${esc(k)}</a></td><td class="n">${c.tools}</td><td class="n">${c.uses}</td><td class="n">${c.opens}</td><td class="n">${c.downloads}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">這段期間沒有紀錄</td></tr>`}
+</tbody></table></div>
+
+<h2>工具明細</h2>
+<div class="wrap"><table><thead><tr><th>製作人</th><th>工具</th><th>類型</th><th class="n">使用人次</th><th class="n">開啟</th><th class="n">下載</th><th class="n">有使用的天數</th><th>最後使用日</th></tr></thead><tbody>
+${rows.map((r) => `<tr><td>${esc(r.creator || "(未填)")}</td><td>${esc(r.tool_name)}</td><td>${esc(typeLabel[r.tool_type] || r.tool_type)}</td><td class="n">${r.uses || 0}</td><td class="n">${r.opens || 0}</td><td class="n">${r.downloads || 0}</td><td class="n">${r.days || 0}</td><td>${esc(r.last_day)}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">這段期間沒有紀錄</td></tr>`}
+</tbody></table></div>
+</body></html>`;
+  return new Response(html, { headers: { ...ADMIN_HEADERS, "Content-Type": "text/html; charset=utf-8" } });
+}
+
+function toCsv(header, rows) {
+  const cell = (v) => {
+    let s = String(v ?? "");
+    if (/^[=+\-@]/.test(s)) s = "'" + s; // keep Excel from running it as a formula
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [header, ...rows].map((r) => r.map(cell).join(",")).join("\r\n");
 }
 
 /* GET /api/stats/monthly → { toolId: { "YYYY-MM": {opens, downloads} } }.
