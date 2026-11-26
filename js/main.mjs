@@ -2,7 +2,7 @@
 import { maybeShowNewArrivalsNotice, render, renderSections } from "./board.mjs?v=20260804e";
 import { ensureBrandsFromTools, ensureCategoriesFromTools, ensureCreatorsFromTools, groupedTools, maybeImportFromHash, migrateToolsSchema } from "./data.mjs?v=20260804e";
 import { initFileUpload } from "./files.mjs?v=20260804e";
-import { $, fileUrl, initial, loadJSON, saveJSON } from "./helpers.mjs?v=20260804e";
+import { $, enablePanelDrag, fileUrl, initial, loadJSON, saveJSON } from "./helpers.mjs?v=20260804e";
 import { initHistoryPopover, openHistoryPopover } from "./history.mjs?v=20260804e";
 import { initFilePopover, initTileContextMenu, initTileFileMenu, initTileTooltip } from "./menus.mjs?v=20260804e";
 import { autoFetch, initBrandPicker, initCatPopover, initCategoryPicker, initCreatorPicker, initIconPicker, initMiniPopover, initToolPopover, initTypeSelector, migrateIconsToR2, openCatPopover, openToolPopover, updateIconPreview } from "./popovers.mjs?v=20260804e";
@@ -149,6 +149,8 @@ async function init() {
   initTileContextMenu();
   initTileTooltip();
   initFilePopover();
+  // Every popover (版本, 編輯工具, 分類) can be dragged by its title bar.
+  document.querySelectorAll(".popover .popover-panel").forEach(enablePanelDrag);
   initTipsPopover();
   initHistoryPopover();
   initShortcuts();

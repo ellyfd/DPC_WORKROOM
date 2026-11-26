@@ -258,6 +258,59 @@ async function copyFolderPath(path) {
   return ok;
 }
 
+/* ===== draggable popovers =====
+   Grab a popover by its title bar and move it out of the way. Desktop only —
+   on phones the panels are full-width. Keeps the title bar on screen. */
+
+function enablePanelDrag(panel) {
+  const head = panel?.querySelector(".popover-head");
+  if (!head || head.dataset.dragWired) return;
+  head.dataset.dragWired = "1";
+  head.classList.add("is-drag-handle");
+  head.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    if (window.matchMedia("(max-width: 640px)").matches) return;
+    if (e.target.closest("button, a, input, select, textarea, label")) return;
+    const r = panel.getBoundingClientRect();
+    const dx = e.clientX - r.left;
+    const dy = e.clientY - r.top;
+    e.preventDefault();
+    try { head.setPointerCapture(e.pointerId); } catch {}
+    // Stop the open animation for good, or it replays when the drag ends.
+    panel.style.animation = "none";
+    panel.classList.add("is-dragging");
+    const move = (ev) => {
+      const w = panel.offsetWidth;
+      const left = Math.min(Math.max(ev.clientX - dx, 80 - w), window.innerWidth - 80);
+      const top = Math.min(Math.max(ev.clientY - dy, 8), window.innerHeight - 48);
+      panel.style.left = `${Math.round(left)}px`;
+      panel.style.top = `${Math.round(top)}px`;
+      panel.style.right = "auto";
+    };
+    const end = () => {
+      panel.classList.remove("is-dragging");
+      head.removeEventListener("pointermove", move);
+      head.removeEventListener("pointerup", end);
+      head.removeEventListener("pointercancel", end);
+    };
+    head.addEventListener("pointermove", move);
+    head.addEventListener("pointerup", end);
+    head.addEventListener("pointercancel", end);
+  });
+}
+
+// Centre a popover panel in the viewport (used when it opens).
+
+function centerPanel(panel) {
+  if (!panel) return;
+  const w = panel.offsetWidth || 380;
+  const h = panel.offsetHeight || 400;
+  panel.style.left = `${Math.max(12, Math.round((window.innerWidth - w) / 2))}px`;
+  panel.style.top = `${Math.max(12, Math.round((window.innerHeight - h) / 2))}px`;
+  panel.style.right = "auto";
+  panel.style.animation = "";
+}
+
 /* Toast with an inline action button (e.g. 「已刪除 — 復原」). Stays up
    longer than a plain toast so there's time to react. */
 
@@ -300,4 +353,4 @@ function escapeHTML(s) {
 
 function escapeAttr(s) { return escapeHTML(s); }
 
-export { $, $$, copyFolderPath, copyText, cssEscape, escapeAttr, escapeHTML, escapeRegex, fileExt, fileUrl, folderPath, formatBytes, linkFolder, textLink, formatDate, imagesFromClipboard, initial, isImageFile, isThisWeek, loadJSON, queryTokens, saveJSON, shareFromHttp, slugify, toast, toastUndo, uniq };
+export { $, $$, centerPanel, copyFolderPath, copyText, cssEscape, enablePanelDrag, escapeAttr, escapeHTML, escapeRegex, fileExt, fileUrl, folderPath, formatBytes, linkFolder, textLink, formatDate, imagesFromClipboard, initial, isImageFile, isThisWeek, loadJSON, queryTokens, saveJSON, shareFromHttp, slugify, toast, toastUndo, uniq };
