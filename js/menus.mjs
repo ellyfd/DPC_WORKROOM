@@ -2,7 +2,7 @@
 import { canEditTool, copyToolUrl, toolCopyTarget, markUpdateSeen, removeFromFavorites, render } from "./board.mjs?v=20260804e";
 import { allTools, ensureCreator, listAllCreators } from "./data.mjs?v=20260804e";
 import { downloadFile, isHtmlFile, isPageTool, pageUrl, versionEntry } from "./files.mjs?v=20260804e";
-import { escapeHTML, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
+import { centerPanel, escapeHTML, formatBytes, formatDate, toast } from "./helpers.mjs?v=20260804e";
 import { openHistoryPopover } from "./history.mjs?v=20260804e";
 import { openMiniPopover, openToolPopover } from "./popovers.mjs?v=20260804e";
 import { LS_ME_KEY, MAX_FILE_BYTES, MAX_NOTE_CHARS, MAX_VERSIONS, state } from "./state.mjs?v=20260804e";
@@ -573,7 +573,11 @@ function openFilePopover(toolId) {
     });
   });
 
+  const wasHidden = pop.hidden;
   pop.hidden = false;
+  // Open centred (it used to sit in the top-left corner); keep the spot the
+  // user dragged it to when we're only refreshing it after an upload.
+  if (wasHidden) centerPanel(pop.querySelector(".popover-panel"));
   markUpdateSeen(toolId);
 }
 

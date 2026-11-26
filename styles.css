@@ -1543,6 +1543,12 @@ body.overlay-open { overflow: hidden; padding-right: var(--scrollbar-comp, 0px);
   transform-origin: top left;
 }
 .popover-panel-sm { width: 380px; }
+/* Drag a popover by its title bar (desktop) */
+@media (min-width: 641px) {
+  .popover-head.is-drag-handle { cursor: move; user-select: none; }
+  .popover-head.is-drag-handle button { cursor: pointer; }
+}
+.popover-panel.is-dragging { user-select: none; box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.35); }
 @keyframes pop-in {
   from { transform: scale(0.96) translateY(-6px); opacity: 0; }
   to   { transform: none; opacity: 1; }
